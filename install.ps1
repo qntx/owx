@@ -7,8 +7,8 @@
 
 $ErrorActionPreference = "Stop"
 $InformationPreference = "Continue"
-$Repo = "qntx/kobe"
-$Bin = "kobe"
+$Repo = "qntx/owx"
+$Bin = "owx"
 
 $BinUpper = $Bin.ToUpper()
 $VerEnv = "${BinUpper}_VERSION"
