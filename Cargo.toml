@@ -1,5 +1,5 @@
 [workspace]
-members = ["owx", "owx-cli", "owx-guard", "owx-pay", "owx-policy", "owx-vault"]
+members = ["owx", "owx-cli", "owx-pay", "owx-policy", "owx-vault"]
 default-members = ["owx"]
 resolver = "3"
 
@@ -13,6 +13,56 @@ keywords = ["crypto", "wallet", "bitcoin", "ethereum", "solana"]
 categories = ["cryptography::cryptocurrencies"]
 
 [workspace.dependencies]
+# Internal crates
+owx = { version = "0.1", path = "owx" }
+owx-vault = { version = "0.1", path = "owx-vault" }
+owx-policy = { version = "0.1", path = "owx-policy" }
+owx-pay = { version = "0.1", path = "owx-pay" }
+
+# HD wallet (kobe)
+kobe = { version = "0.5.4", default-features = false, features = ["std", "rand"] }
+kobe-btc = { version = "0.5.4", default-features = false, features = ["std"] }
+kobe-evm = { version = "0.5.4", default-features = false, features = ["std"] }
+kobe-svm = { version = "0.5.4", default-features = false, features = ["std"] }
+
+# Signing (signer)
+signer = { version = "0.3.1", features = ["kobe"] }
+signer-btc = { version = "0.3.1", features = ["kobe"] }
+signer-evm = { version = "0.3.1", features = ["kobe"] }
+signer-svm = { version = "0.3.1", features = ["kobe"] }
+
+# x402 payment protocol
+r402 = "0.12.3"
+r402-evm = { version = "0.12.3", default-features = false, features = ["client"] }
+
+# Crypto
+aes-gcm = "0.10.3"
+hkdf = "0.12.4"
+scrypt = "0.11.0"
+sha2 = "0.11.0"
+zeroize = { version = "1.8.2", features = ["derive"] }
+rand = "0.10.0"
+
+# Serialization
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+
+# Encoding
+hex = "0.4.3"
+base64 = "0.22.1"
+bs58 = "0.5.1"
+
+# Async / HTTP
+reqwest = { version = "0.13.2", features = ["json", "rustls"], default-features = false }
+tokio = { version = "1.50.0", features = ["rt-multi-thread", "macros"] }
+
+# Utility
+chrono = { version = "0.4.44", features = ["serde"] }
+uuid = { version = "1.23.0", features = ["v4"] }
+thiserror = "2.0.18"
+clap = { version = "4.6.0", features = ["derive"] }
+tempfile = "3.27.0"
+getrandom = "0.4.2"
 
 [profile.release]
 codegen-units = 1

@@ -1,14 +1,13 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! x402 payment client for OWX agent wallets.
+//!
+//! Provides the [`WalletBridge`] trait that the main `owx` crate implements,
+//! and the x402 payment flow (detect 402 → parse requirements → sign → retry).
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod error;
+pub mod types;
+pub mod wallet;
+pub mod x402;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use error::PayError;
+pub use types::{PayResult, PaymentInfo};
+pub use wallet::WalletBridge;

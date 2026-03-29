@@ -4,11 +4,13 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description.workspace = true
-keywords.workspace = true
-categories.workspace = true
+description = "Policy system: rule types, declarative evaluation, and executable policies for OWX."
 
 [dependencies]
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

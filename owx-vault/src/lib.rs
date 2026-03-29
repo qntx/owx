@@ -1,14 +1,26 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Encrypted storage, crypto envelope, and file-system vault for OWX.
+//!
+//! This crate provides:
+//! - [`crypto`] — scrypt/HKDF + AES-256-GCM encryption envelopes
+//! - [`wallet_file`] — On-disk encrypted wallet format
+//! - [`api_key`] — API key file format, token generation and hashing
+//! - [`store`] — File-system vault CRUD operations
+//! - [`config`] — Application configuration
+//! - [`secret`] — Zeroize-on-drop secret bytes wrapper
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod api_key;
+pub mod config;
+pub mod crypto;
+pub mod error;
+mod permissions;
+pub mod secret;
+pub mod store;
+pub mod wallet_file;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use api_key::ApiKeyFile;
+pub use config::Config;
+pub use crypto::CryptoEnvelope;
+pub use error::VaultError;
+pub use secret::SecretBytes;
+pub use store::Vault;
+pub use wallet_file::EncryptedWallet;

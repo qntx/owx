@@ -1,14 +1,19 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Agent-native, self-custodial, policy-gated, multi-chain wallet toolkit.
+//!
+//! `owx` is the orchestration layer that combines:
+//! - [`kobe`] for HD key derivation
+//! - [`signer`] for chain-specific signing
+//! - [`owx_vault`] for encrypted storage
+//! - [`owx_policy`] for policy enforcement
+//! - [`owx_pay`] for x402 payments
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod agent;
+pub mod chain;
+pub mod derivation;
+pub mod error;
+pub mod key_ops;
+pub mod signing;
+pub mod wallet_ops;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use agent::AgentWallet;
+pub use error::OwxError;
