@@ -259,7 +259,7 @@ mod tests {
     #[test]
     fn policy_action_serde() {
         let action = PolicyAction::Deny;
-        let json = serde_json::to_value(&action).unwrap();
+        let json = serde_json::to_value(action).unwrap();
         assert_eq!(json, "deny");
     }
 }

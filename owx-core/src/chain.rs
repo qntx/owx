@@ -101,15 +101,15 @@ pub fn parse_chain(s: &str) -> Result<Chain, String> {
         return Ok(*chain);
     }
 
-    if let Some((namespace, _reference)) = s.split_once(':') {
-        if let Some(ct) = ChainType::from_namespace(namespace) {
-            let leaked: &'static str = Box::leak(s.to_string().into_boxed_str());
-            return Ok(Chain {
-                name: leaked,
-                chain_type: ct,
-                chain_id: leaked,
-            });
-        }
+    if let Some((namespace, _reference)) = s.split_once(':')
+        && let Some(ct) = ChainType::from_namespace(namespace)
+    {
+        let leaked: &'static str = Box::leak(s.to_string().into_boxed_str());
+        return Ok(Chain {
+            name: leaked,
+            chain_type: ct,
+            chain_id: leaked,
+        });
     }
 
     Err(format!(

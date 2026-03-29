@@ -3,11 +3,12 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::api_key::ApiKeyFile;
-use crate::config::Config;
+use owx_core::api_key::ApiKeyFile;
+use owx_core::config::Config;
+use owx_core::wallet_file::EncryptedWallet;
+
 use crate::error::VaultError;
 use crate::permissions;
-use crate::wallet_file::EncryptedWallet;
 
 /// A file-system vault rooted at a directory (e.g. `~/.owx`).
 #[derive(Debug, Clone)]
@@ -270,8 +271,9 @@ fn read_json_dir(dir: &Path) -> Result<Vec<JsonFileEntry>, VaultError> {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use owx_core::wallet_file::{KeyType, WalletAccount};
+
     use super::*;
-    use crate::wallet_file::{KeyType, WalletAccount};
 
     fn temp_vault() -> (tempfile::TempDir, Vault) {
         let dir = tempfile::tempdir().unwrap();
@@ -340,7 +342,7 @@ mod tests {
     fn api_key_crud() {
         use std::collections::HashMap;
 
-        use crate::api_key::{generate_token, hash_token};
+        use owx_core::api_key::{generate_token, hash_token};
 
         let (_dir, vault) = temp_vault();
         let token = generate_token();

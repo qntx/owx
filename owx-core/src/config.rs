@@ -63,16 +63,15 @@ impl Config {
     #[must_use]
     pub fn load_or_default_from(path: &std::path::Path) -> Self {
         let mut config = Self::default();
-        if path.exists() {
-            if let Ok(contents) = std::fs::read_to_string(path) {
-                if let Ok(user_config) = serde_json::from_str::<Self>(&contents) {
-                    for (k, v) in user_config.rpc {
-                        config.rpc.insert(k, v);
-                    }
-                    if !user_config.vault_path.as_os_str().is_empty() {
-                        config.vault_path = user_config.vault_path;
-                    }
-                }
+        if path.exists()
+            && let Ok(contents) = std::fs::read_to_string(path)
+            && let Ok(user_config) = serde_json::from_str::<Self>(&contents)
+        {
+            for (k, v) in user_config.rpc {
+                config.rpc.insert(k, v);
+            }
+            if !user_config.vault_path.as_os_str().is_empty() {
+                config.vault_path = user_config.vault_path;
             }
         }
         config

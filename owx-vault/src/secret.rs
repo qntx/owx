@@ -1,22 +1,30 @@
-//! Zeroize-on-drop secret bytes wrapper.
+//! Zeroize-on-drop secret bytes wrapper with mlock support.
 
 use zeroize::Zeroize;
 
+use crate::hardening::{mlock_slice, munlock_slice};
+
 /// A heap-allocated byte buffer that is zeroized when dropped.
+///
+/// On Unix, the buffer is mlocked to prevent swapping to disk.
+/// The inner key material is securely wiped from memory on [`Drop`].
 #[derive(Clone)]
 pub struct SecretBytes(Vec<u8>);
 
 impl SecretBytes {
-    /// Wrap raw bytes. The caller should zeroize their own copy after calling this.
+    /// Wrap raw bytes. On Unix, the buffer is mlocked immediately.
     #[must_use]
     pub const fn new(bytes: Vec<u8>) -> Self {
+        if !bytes.is_empty() {
+            mlock_slice(bytes.as_ptr(), bytes.len());
+        }
         Self(bytes)
     }
 
-    /// Create from a slice (copies into a new allocation).
+    /// Create from a slice (copies into a new allocation, mlocked on Unix).
     #[must_use]
     pub fn from_slice(s: &[u8]) -> Self {
-        Self(s.to_vec())
+        Self::new(s.to_vec())
     }
 
     /// Expose the secret bytes for reading.
@@ -40,7 +48,10 @@ impl SecretBytes {
 
 impl Drop for SecretBytes {
     fn drop(&mut self) {
+        let ptr = self.0.as_ptr();
+        let len = self.0.len();
         self.0.zeroize();
+        munlock_slice(ptr, len);
     }
 }
 
@@ -74,5 +85,13 @@ mod tests {
         let dbg = format!("{s:?}");
         assert!(!dbg.contains("super"));
         assert!(dbg.contains("REDACTED"));
+    }
+
+    #[test]
+    fn clone_independence() {
+        let original = SecretBytes::new(vec![1, 2, 3]);
+        let cloned = original.clone();
+        assert_eq!(original.expose(), cloned.expose());
+        assert_ne!(original.expose().as_ptr(), cloned.expose().as_ptr());
     }
 }
