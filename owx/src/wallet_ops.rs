@@ -160,8 +160,8 @@ pub fn import_private_key(
         .map_err(|e| OwxError::InvalidInput(format!("invalid hex private key: {e}")))?;
 
     let mut other_key = vec![0u8; 32];
-    #[allow(clippy::expect_used)]
-    getrandom::fill(&mut other_key).expect("system CSPRNG unavailable");
+    getrandom::fill(&mut other_key)
+        .map_err(|e| OwxError::InvalidInput(format!("CSPRNG failed: {e}")))?;
 
     let (secp256k1, ed25519) = match chain_info.family {
         crate::chain::ChainFamily::Evm | crate::chain::ChainFamily::Bitcoin => {
@@ -322,7 +322,11 @@ mod tests {
         assert_eq!(info.name, "pk-wallet");
         assert_eq!(info.accounts.len(), 3);
 
-        let evm = info.accounts.iter().find(|a| a.chain_id.starts_with("eip155:")).unwrap();
+        let evm = info
+            .accounts
+            .iter()
+            .find(|a| a.chain_id.starts_with("eip155:"))
+            .unwrap();
         assert!(evm.address.starts_with("0x"));
         assert!(evm.derivation_path.is_empty());
 

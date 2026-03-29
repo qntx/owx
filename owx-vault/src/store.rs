@@ -117,7 +117,7 @@ impl Vault {
         if self.wallet_name_exists(new_name)? {
             return Err(VaultError::WalletNameExists(new_name.to_owned()));
         }
-        wallet.name = new_name.to_owned();
+        new_name.clone_into(&mut wallet.name);
         self.save_wallet(&wallet)
     }
 
