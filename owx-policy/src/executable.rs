@@ -118,7 +118,7 @@ fn wait_with_timeout(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::types::TransactionContext;
+    use crate::types::{SpendingContext, TransactionContext};
 
     fn test_ctx() -> PolicyContext {
         PolicyContext {
@@ -129,6 +129,11 @@ mod tests {
                 to: None,
                 value: None,
                 raw_hex: "0x00".to_owned(),
+                data: None,
+            },
+            spending: SpendingContext {
+                daily_total: "0".to_owned(),
+                date: "2026-01-01".to_owned(),
             },
             timestamp: "2026-01-01T00:00:00Z".to_owned(),
         }

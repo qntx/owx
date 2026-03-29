@@ -13,7 +13,6 @@ pub enum PolicyAction {
 /// A declarative policy rule evaluated in-process.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[non_exhaustive]
 pub enum PolicyRule {
     /// Deny if `chain_id` is not in the allowlist.
     AllowedChains {
@@ -80,6 +79,18 @@ pub struct TransactionContext {
     pub value: Option<String>,
     /// Raw transaction hex.
     pub raw_hex: String,
+    /// Calldata / input data (EVM).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<String>,
+}
+
+/// Spending context for daily-limit policies.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpendingContext {
+    /// Cumulative daily spending so far (smallest unit).
+    pub daily_total: String,
+    /// Date string (YYYY-MM-DD).
+    pub date: String,
 }
 
 /// Context passed to policy evaluation.
@@ -93,6 +104,8 @@ pub struct PolicyContext {
     pub api_key_id: String,
     /// Transaction details.
     pub transaction: TransactionContext,
+    /// Spending context for daily-limit policies.
+    pub spending: SpendingContext,
     /// Current ISO-8601 timestamp.
     pub timestamp: String,
 }

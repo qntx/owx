@@ -95,6 +95,11 @@ pub(crate) fn resolve_mnemonic_from_token(
                 to: None,
                 value: None,
                 raw_hex: String::new(),
+                data: None,
+            },
+            spending: owx_policy::types::SpendingContext {
+                daily_total: "0".to_owned(),
+                date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
             },
             timestamp: chrono::Utc::now().to_rfc3339(),
         };

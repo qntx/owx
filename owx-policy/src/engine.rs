@@ -91,7 +91,7 @@ fn value_exceeds(value: &str, max: &str) -> bool {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::types::{PolicyAction, TransactionContext};
+    use crate::types::{PolicyAction, SpendingContext, TransactionContext};
 
     fn base_context() -> PolicyContext {
         PolicyContext {
@@ -102,6 +102,11 @@ mod tests {
                 to: Some("0xabc".to_owned()),
                 value: Some("100000000000000000".to_owned()),
                 raw_hex: "0x00".to_owned(),
+                data: None,
+            },
+            spending: SpendingContext {
+                daily_total: "0".to_owned(),
+                date: "2026-03-22".to_owned(),
             },
             timestamp: "2026-03-22T10:35:22Z".to_owned(),
         }
