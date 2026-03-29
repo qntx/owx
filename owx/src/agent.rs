@@ -15,6 +15,7 @@ use crate::wallet_ops::{self, WalletInfo};
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct AgentWallet {
+    /// Underlying vault for encrypted storage.
     vault: Vault,
 }
 

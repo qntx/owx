@@ -182,7 +182,7 @@ mod tests {
         let (token, key_file) = create_api_key(
             &vault,
             "agent",
-            &[wallet_id.clone()],
+            std::slice::from_ref(&wallet_id),
             &["test-policy".to_owned()],
             "pass",
             None,

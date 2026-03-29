@@ -77,6 +77,8 @@ pub fn sign_with_mnemonic(
     index: u32,
     message: &[u8],
 ) -> Result<Vec<u8>, OwxError> {
+    use signer::evm::SignerSync;
+    use signer::svm::ed25519_dalek::Signer as _;
     let wallet = kobe::Wallet::from_mnemonic(mnemonic_phrase, None)
         .map_err(|e| OwxError::Derivation(e.to_string()))?;
 
@@ -88,7 +90,6 @@ pub fn sign_with_mnemonic(
                 .map_err(|e| OwxError::Derivation(e.to_string()))?;
             let s = signer::evm::Signer::from_derived(&derived)
                 .map_err(|e| OwxError::Signing(e.to_string()))?;
-            use signer::evm::SignerSync;
             let sig = s
                 .sign_message_sync(message)
                 .map_err(|e| OwxError::Signing(e.to_string()))?;
@@ -115,7 +116,6 @@ pub fn sign_with_mnemonic(
                 .map_err(|e| OwxError::Derivation(e.to_string()))?;
             let s = signer::svm::Signer::from_derived(&derived)
                 .map_err(|e| OwxError::Signing(e.to_string()))?;
-            use signer::svm::ed25519_dalek::Signer as _;
             let sig = s.sign(message);
             Ok(sig.to_bytes().to_vec())
         }

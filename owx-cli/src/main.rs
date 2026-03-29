@@ -1,5 +1,7 @@
 //! CLI for OWX agent wallet toolkit.
 
+#![allow(clippy::missing_docs_in_private_items)]
+
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
@@ -128,12 +130,12 @@ enum SignAction {
 fn main() {
     let cli = Cli::parse();
 
-    let agent = match &cli.vault {
+    let agent_result = match &cli.vault {
         Some(path) => AgentWallet::open(path),
         None => AgentWallet::open_default(),
     };
 
-    let agent = match agent {
+    let agent = match agent_result {
         Ok(a) => a,
         Err(e) => {
             eprintln!("error: {e}");
@@ -157,7 +159,7 @@ fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
 }
 
 /// Execute wallet subcommands.
-#[allow(clippy::print_stdout, clippy::expect_used)]
+#[allow(clippy::print_stdout, clippy::expect_used, clippy::unwrap_in_result)]
 fn run_wallet(action: WalletAction, agent: &AgentWallet) -> Result<(), owx::OwxError> {
     match action {
         WalletAction::Create { name, words } => {

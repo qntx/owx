@@ -26,10 +26,10 @@ pub fn sign_message(
     index: Option<u32>,
 ) -> Result<SignResult, OwxError> {
     let chain_info = parse_chain(chain).map_err(OwxError::InvalidInput)?;
-    let index = index.unwrap_or(0);
+    let account_index = index.unwrap_or(0);
 
     let mnemonic = resolve_mnemonic(vault, wallet_name_or_id, credential, chain_info.chain_id)?;
-    let sig_bytes = derivation::sign_with_mnemonic(&mnemonic, chain_info.family, index, message)?;
+    let sig_bytes = derivation::sign_with_mnemonic(&mnemonic, chain_info.family, account_index, message)?;
 
     Ok(SignResult {
         signature: hex::encode(&sig_bytes),
