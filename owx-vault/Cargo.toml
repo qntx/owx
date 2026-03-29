@@ -17,6 +17,7 @@ fast-kdf = []
 aes-gcm.workspace = true
 chrono.workspace = true
 getrandom.workspace = true
+hkdf.workspace = true
 hex.workspace = true
 scrypt.workspace = true
 serde.workspace = true

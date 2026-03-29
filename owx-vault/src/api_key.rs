@@ -10,7 +10,6 @@ pub const TOKEN_PREFIX: &str = "owx_key_";
 
 /// An API key file stored at `<vault>/keys/<id>.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct ApiKeyFile {
     /// Unique key identifier (UUID v4).
     pub id: String,
@@ -30,33 +29,6 @@ pub struct ApiKeyFile {
     /// Per-wallet encrypted mnemonic copies, keyed by wallet ID.
     /// Each value is a [`CryptoEnvelope`](crate::CryptoEnvelope) encrypted with HKDF(token).
     pub wallet_secrets: HashMap<String, serde_json::Value>,
-}
-
-impl ApiKeyFile {
-    /// Create a new API key file.
-    #[must_use]
-    #[allow(clippy::too_many_arguments)]
-    pub const fn new(
-        id: String,
-        name: String,
-        token_hash: String,
-        created_at: String,
-        wallet_ids: Vec<String>,
-        policy_ids: Vec<String>,
-        expires_at: Option<String>,
-        wallet_secrets: HashMap<String, serde_json::Value>,
-    ) -> Self {
-        Self {
-            id,
-            name,
-            token_hash,
-            created_at,
-            wallet_ids,
-            policy_ids,
-            expires_at,
-            wallet_secrets,
-        }
-    }
 }
 
 /// Generate a random API token: `owx_key_<64 hex chars>` (256 bits of entropy).

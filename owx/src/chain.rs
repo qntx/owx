@@ -14,7 +14,6 @@ pub enum ChainFamily {
 
 /// A known chain with its CAIP-2 identifier.
 #[derive(Debug, Clone, Copy)]
-#[non_exhaustive]
 pub struct Chain {
     /// Human-readable name (e.g. "ethereum", "base").
     pub name: &'static str,

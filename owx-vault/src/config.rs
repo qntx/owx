@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 
 /// Application configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct Config {
     /// Path to the vault directory.
     pub vault_path: PathBuf,

@@ -276,12 +276,12 @@ mod tests {
         EncryptedWallet::new(
             id.to_owned(),
             name.to_owned(),
-            vec![WalletAccount::new(
-                "eip155:1:0xabc".to_owned(),
-                "0xabc".to_owned(),
-                "eip155:1".to_owned(),
-                "m/44'/60'/0'/0/0".to_owned(),
-            )],
+            vec![WalletAccount {
+                account_id: "eip155:1:0xabc".to_owned(),
+                address: "0xabc".to_owned(),
+                chain_id: "eip155:1".to_owned(),
+                derivation_path: "m/44'/60'/0'/0/0".to_owned(),
+            }],
             serde_json::json!({"cipher": "aes-256-gcm"}),
             KeyType::Mnemonic,
         )
@@ -337,16 +337,16 @@ mod tests {
 
         let (_dir, vault) = temp_vault();
         let token = generate_token();
-        let key = ApiKeyFile::new(
-            "k1".into(),
-            "agent".into(),
-            hash_token(&token),
-            "2026-01-01T00:00:00Z".into(),
-            vec!["w1".into()],
-            vec![],
-            None,
-            HashMap::new(),
-        );
+        let key = ApiKeyFile {
+            id: "k1".into(),
+            name: "agent".into(),
+            token_hash: hash_token(&token),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            wallet_ids: vec!["w1".into()],
+            policy_ids: vec![],
+            expires_at: None,
+            wallet_secrets: HashMap::new(),
+        };
 
         vault.save_api_key(&key).unwrap();
         let loaded = vault.load_api_key("k1").unwrap();

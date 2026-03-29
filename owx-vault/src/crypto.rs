@@ -1,23 +1,26 @@
 //! Encryption envelope: scrypt + AES-256-GCM, HKDF-SHA256 + AES-256-GCM.
-//!
-//! HKDF-SHA256 is implemented inline to avoid version conflicts between
-//! `hkdf 0.12` (which pins `sha2 0.10`) and the latest `sha2 0.11`.
 
 use aes_gcm::{
     Aes256Gcm, Key, Nonce,
     aead::{Aead, KeyInit},
 };
+use hkdf::Hkdf;
 use scrypt::{Params as ScryptParams, scrypt};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use zeroize::Zeroize;
+
+// Prevent fast-kdf from being used in release builds.
+#[cfg(all(feature = "fast-kdf", not(debug_assertions)))]
+compile_error!(
+    "The `fast-kdf` feature reduces scrypt to 2^10 iterations and must not be used in release builds."
+);
 
 use crate::error::VaultError;
 use crate::secret::SecretBytes;
 
 /// On-disk encrypted envelope (JSON-serializable).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct CryptoEnvelope {
     /// Cipher algorithm identifier.
     pub cipher: String,
@@ -35,7 +38,6 @@ pub struct CryptoEnvelope {
 
 /// Cipher parameters.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct CipherParams {
     /// Hex-encoded initialization vector.
     pub iv: String,
@@ -43,7 +45,6 @@ pub struct CipherParams {
 
 /// Scrypt KDF parameters.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct ScryptKdfParams {
     /// Derived key length in bytes.
     pub dklen: u32,
@@ -59,7 +60,6 @@ pub struct ScryptKdfParams {
 
 /// HKDF-SHA256 KDF parameters.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct HkdfKdfParams {
     /// Derived key length in bytes.
     pub dklen: u32,
@@ -71,7 +71,6 @@ pub struct HkdfKdfParams {
 
 /// Unified KDF parameters — deserializes to whichever variant matches.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 #[serde(untagged)]
 pub enum KdfParamsVariant {
     /// Scrypt parameters.
@@ -155,7 +154,9 @@ pub fn encrypt_hkdf(plaintext: &[u8], token: &str) -> Result<CryptoEnvelope, Vau
     fill_random(&mut iv);
 
     let mut derived_key = [0u8; 32];
-    hkdf_sha256(&salt, token.as_bytes(), HKDF_INFO, &mut derived_key);
+    let hk = Hkdf::<Sha256>::new(Some(&salt), token.as_bytes());
+    hk.expand(HKDF_INFO, &mut derived_key)
+        .map_err(|e| VaultError::Crypto(e.to_string()))?;
 
     let (ciphertext_hex, auth_tag_hex) = aes_gcm_encrypt(&derived_key, &iv, plaintext)?;
     derived_key.zeroize();
@@ -235,12 +236,9 @@ fn decrypt_hkdf(envelope: &CryptoEnvelope, token: &str) -> Result<SecretBytes, V
     let auth_tag = hex_decode(&envelope.auth_tag)?;
 
     let mut derived_key = [0u8; 32];
-    hkdf_sha256(
-        &salt,
-        token.as_bytes(),
-        kp.info.as_bytes(),
-        &mut derived_key,
-    );
+    let hk = Hkdf::<Sha256>::new(Some(&salt), token.as_bytes());
+    hk.expand(kp.info.as_bytes(), &mut derived_key)
+        .map_err(|e| VaultError::Crypto(e.to_string()))?;
 
     let result = aes_gcm_decrypt(&derived_key, &iv, &ciphertext, &auth_tag);
     derived_key.zeroize();
@@ -264,6 +262,12 @@ fn validate_scrypt_params(kp: &ScryptKdfParams) -> Result<(), VaultError> {
         return Err(VaultError::InvalidParams(format!(
             "scrypt r={} below minimum {KDF_R}",
             kp.r
+        )));
+    }
+    if kp.p < KDF_P {
+        return Err(VaultError::InvalidParams(format!(
+            "scrypt p={} below minimum {KDF_P}",
+            kp.p
         )));
     }
     if kp.dklen != KDF_DKLEN {
@@ -319,68 +323,6 @@ fn aes_gcm_decrypt(
 /// Decode a hex string into bytes.
 fn hex_decode(s: &str) -> Result<Vec<u8>, VaultError> {
     hex::decode(s).map_err(|e| VaultError::InvalidParams(e.to_string()))
-}
-
-/// HMAC-SHA256 (RFC 2104).
-fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
-    const BLOCK_SIZE: usize = 64;
-
-    let mut padded_key = [0u8; BLOCK_SIZE];
-    if key.len() > BLOCK_SIZE {
-        let h = Sha256::digest(key);
-        padded_key[..32].copy_from_slice(&h);
-    } else {
-        padded_key[..key.len()].copy_from_slice(key);
-    }
-
-    let mut ipad = [0x36u8; BLOCK_SIZE];
-    let mut opad = [0x5cu8; BLOCK_SIZE];
-    for i in 0..BLOCK_SIZE {
-        ipad[i] ^= padded_key[i];
-        opad[i] ^= padded_key[i];
-    }
-    padded_key.zeroize();
-
-    let inner = Sha256::new()
-        .chain_update(ipad)
-        .chain_update(data)
-        .finalize();
-    let outer = Sha256::new()
-        .chain_update(opad)
-        .chain_update(inner)
-        .finalize();
-
-    let mut out = [0u8; 32];
-    out.copy_from_slice(&outer);
-    out
-}
-
-/// HKDF-SHA256 extract-then-expand (RFC 5869).
-fn hkdf_sha256(salt: &[u8], ikm: &[u8], info: &[u8], okm: &mut [u8]) {
-    let effective_salt = if salt.is_empty() {
-        &[0u8; 32][..]
-    } else {
-        salt
-    };
-    let prk = hmac_sha256(effective_salt, ikm);
-
-    let hash_len = 32usize;
-    let n = okm.len().div_ceil(hash_len);
-    let mut t = Vec::new();
-    let mut offset = 0;
-
-    for i in 1..=n {
-        let mut buf = Vec::with_capacity(t.len() + info.len() + 1);
-        buf.extend_from_slice(&t);
-        buf.extend_from_slice(info);
-        #[allow(clippy::cast_possible_truncation)]
-        buf.push(i as u8);
-        let block = hmac_sha256(&prk, &buf);
-        t = block.to_vec();
-        let copy_len = std::cmp::min(hash_len, okm.len() - offset);
-        okm[offset..offset + copy_len].copy_from_slice(&t[..copy_len]);
-        offset += copy_len;
-    }
 }
 
 #[cfg(test)]
@@ -442,12 +384,13 @@ mod tests {
     }
 
     #[test]
-    fn hmac_sha256_test_vector() {
-        // RFC 4231 test case 2
-        let key = b"Jefe";
-        let data = b"what do ya want for nothing?";
-        let expected = "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843";
-        let result = hmac_sha256(key, data);
-        assert_eq!(hex::encode(result), expected);
+    fn hkdf_serde_roundtrip() {
+        let plaintext = b"serde hkdf test";
+        let token = "owx_key_test_token";
+        let envelope = encrypt_hkdf(plaintext, token).unwrap();
+        let json = serde_json::to_string(&envelope).unwrap();
+        let restored: CryptoEnvelope = serde_json::from_str(&json).unwrap();
+        let decrypted = decrypt(&restored, token).unwrap();
+        assert_eq!(decrypted.expose(), plaintext);
     }
 }

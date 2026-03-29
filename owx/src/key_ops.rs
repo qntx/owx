@@ -44,17 +44,16 @@ pub fn create_api_key(
         vault.load_policy_raw(pid)?;
     }
 
-    let id = uuid::Uuid::new_v4().to_string();
-    let key_file = ApiKeyFile::new(
-        id,
-        name.to_owned(),
-        api_key::hash_token(&token),
-        chrono::Utc::now().to_rfc3339(),
-        resolved_ids,
-        policy_ids.to_vec(),
-        expires_at.map(String::from),
+    let key_file = ApiKeyFile {
+        id: uuid::Uuid::new_v4().to_string(),
+        name: name.to_owned(),
+        token_hash: api_key::hash_token(&token),
+        created_at: chrono::Utc::now().to_rfc3339(),
+        wallet_ids: resolved_ids,
+        policy_ids: policy_ids.to_vec(),
+        expires_at: expires_at.map(String::from),
         wallet_secrets,
-    );
+    };
 
     vault.save_api_key(&key_file)?;
     Ok((token, key_file))
@@ -88,13 +87,17 @@ pub(crate) fn resolve_mnemonic_from_token(
 
     let policies = load_policies(vault, &key_file)?;
     if !policies.is_empty() {
-        let context = owx_policy::PolicyContext::new(
-            chain_id.to_owned(),
-            wallet.id.clone(),
-            key_file.id.clone(),
-            owx_policy::types::TransactionContext::new(None, None, String::new()),
-            chrono::Utc::now().to_rfc3339(),
-        );
+        let context = owx_policy::PolicyContext {
+            chain_id: chain_id.to_owned(),
+            wallet_id: wallet.id.clone(),
+            api_key_id: key_file.id.clone(),
+            transaction: owx_policy::types::TransactionContext {
+                to: None,
+                value: None,
+                raw_hex: String::new(),
+            },
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        };
         let result = owx_policy::evaluate(&policies, &context);
         if !result.allow {
             return Err(OwxError::PolicyDenied {

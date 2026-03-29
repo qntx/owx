@@ -10,7 +10,6 @@ use crate::wallet_ops;
 
 /// Signature result.
 #[derive(Debug, Clone, serde::Serialize)]
-#[non_exhaustive]
 pub struct SignResult {
     /// Hex-encoded signature bytes.
     pub signature: String,

@@ -38,9 +38,11 @@ r402-evm = { version = "0.12.3", default-features = false, features = ["client"]
 
 # Crypto
 aes-gcm = "0.10.3"
+digest = "0.10.7"
 hkdf = "0.12.4"
+hmac = "0.12.1"
 scrypt = "0.11.0"
-sha2 = "0.11.0"
+sha2 = "0.10.9"
 zeroize = { version = "1.8.2", features = ["derive"] }
 rand = "0.10.0"
 

@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 
 /// The full on-disk wallet file (JSON).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct EncryptedWallet {
     /// Format version.
     pub version: u32,
@@ -27,7 +26,6 @@ pub struct EncryptedWallet {
 
 /// An account entry within an encrypted wallet file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct WalletAccount {
     /// CAIP-10 account identifier (e.g. `eip155:1:0xabc...`).
     pub account_id: String,
@@ -42,30 +40,11 @@ pub struct WalletAccount {
 /// Type of key material stored in the ciphertext.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-#[non_exhaustive]
 pub enum KeyType {
     /// BIP-39 mnemonic phrase.
     Mnemonic,
     /// Raw private key(s) as JSON `{"secp256k1":"hex","ed25519":"hex"}`.
     PrivateKey,
-}
-
-impl WalletAccount {
-    /// Create a new account entry.
-    #[must_use]
-    pub const fn new(
-        account_id: String,
-        address: String,
-        chain_id: String,
-        derivation_path: String,
-    ) -> Self {
-        Self {
-            account_id,
-            address,
-            chain_id,
-            derivation_path,
-        }
-    }
 }
 
 impl EncryptedWallet {
@@ -100,12 +79,12 @@ mod tests {
         EncryptedWallet::new(
             "test-id".to_owned(),
             "test-wallet".to_owned(),
-            vec![WalletAccount::new(
-                "eip155:1:0xabc".to_owned(),
-                "0xabc".to_owned(),
-                "eip155:1".to_owned(),
-                "m/44'/60'/0'/0/0".to_owned(),
-            )],
+            vec![WalletAccount {
+                account_id: "eip155:1:0xabc".to_owned(),
+                address: "0xabc".to_owned(),
+                chain_id: "eip155:1".to_owned(),
+                derivation_path: "m/44'/60'/0'/0/0".to_owned(),
+            }],
             serde_json::json!({"cipher": "aes-256-gcm"}),
             KeyType::Mnemonic,
         )
