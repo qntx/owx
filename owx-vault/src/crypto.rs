@@ -71,6 +71,7 @@ pub struct HkdfKdfParams {
 
 /// Unified KDF parameters — deserializes to whichever variant matches.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 #[serde(untagged)]
 pub enum KdfParamsVariant {
     /// Scrypt parameters.
@@ -186,6 +187,7 @@ pub fn decrypt(envelope: &CryptoEnvelope, credential: &str) -> Result<SecretByte
     }
 }
 
+/// Decrypt using scrypt-derived key.
 fn decrypt_scrypt(envelope: &CryptoEnvelope, passphrase: &str) -> Result<SecretBytes, VaultError> {
     let KdfParamsVariant::Scrypt(kp) = &envelope.kdfparams else {
         return Err(VaultError::InvalidParams(
@@ -214,6 +216,7 @@ fn decrypt_scrypt(envelope: &CryptoEnvelope, passphrase: &str) -> Result<SecretB
     result
 }
 
+/// Decrypt using HKDF-SHA256-derived key.
 fn decrypt_hkdf(envelope: &CryptoEnvelope, token: &str) -> Result<SecretBytes, VaultError> {
     let KdfParamsVariant::Hkdf(kp) = &envelope.kdfparams else {
         return Err(VaultError::InvalidParams("expected HKDF kdfparams".into()));
@@ -244,6 +247,7 @@ fn decrypt_hkdf(envelope: &CryptoEnvelope, token: &str) -> Result<SecretBytes, V
     result
 }
 
+/// Validate scrypt parameters for safety bounds.
 fn validate_scrypt_params(kp: &ScryptKdfParams) -> Result<(), VaultError> {
     let n = kp.n;
     if n == 0 || (n & (n - 1)) != 0 {
@@ -271,9 +275,10 @@ fn validate_scrypt_params(kp: &ScryptKdfParams) -> Result<(), VaultError> {
     Ok(())
 }
 
+/// AES-256-GCM encrypt, returning `(ciphertext, tag)`.
 fn aes_gcm_encrypt(
-    key: &[u8; 32],
-    iv: &[u8; 12],
+    key: &[u8],
+    iv: &[u8],
     plaintext: &[u8],
 ) -> Result<(String, String), VaultError> {
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
@@ -288,17 +293,21 @@ fn aes_gcm_encrypt(
     Ok((hex::encode(ct), hex::encode(tag)))
 }
 
+/// AES-256-GCM decrypt with tag verification.
+///
+/// Decrypts the given ciphertext with the provided key, IV, and authentication
+/// tag, returning the decrypted plaintext as a `SecretBytes` instance.
 fn aes_gcm_decrypt(
     key: &[u8],
     iv: &[u8],
     ciphertext: &[u8],
-    auth_tag: &[u8],
+    tag: &[u8],
 ) -> Result<SecretBytes, VaultError> {
     let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
     let nonce = Nonce::from_slice(iv);
 
     let mut combined = ciphertext.to_vec();
-    combined.extend_from_slice(auth_tag);
+    combined.extend_from_slice(tag);
 
     let plaintext = cipher
         .decrypt(nonce, combined.as_ref())
@@ -307,6 +316,7 @@ fn aes_gcm_decrypt(
     Ok(SecretBytes::new(plaintext))
 }
 
+/// Decode a hex string into bytes.
 fn hex_decode(s: &str) -> Result<Vec<u8>, VaultError> {
     hex::decode(s).map_err(|e| VaultError::InvalidParams(e.to_string()))
 }

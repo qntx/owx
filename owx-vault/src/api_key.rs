@@ -35,6 +35,7 @@ pub struct ApiKeyFile {
 impl ApiKeyFile {
     /// Create a new API key file.
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub const fn new(
         id: String,
         name: String,

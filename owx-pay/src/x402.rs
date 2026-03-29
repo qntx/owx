@@ -267,11 +267,11 @@ fn format_usdc(amount_str: &str) -> String {
     let whole = amount / 1_000_000;
     let frac = amount % 1_000_000;
     let frac_str = format!("{frac:06}");
-    let frac_display = frac_str.trim_end_matches('0');
-    let frac_display = if frac_display.is_empty() {
+    let frac_trimmed = frac_str.trim_end_matches('0');
+    let frac_display = if frac_trimmed.is_empty() {
         "00"
     } else {
-        frac_display
+        frac_trimmed
     };
     format!("${whole}.{frac_display}")
 }

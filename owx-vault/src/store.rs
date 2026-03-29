@@ -18,8 +18,8 @@ pub struct Vault {
 
 impl Vault {
     /// Open (or create) a vault at the given path.
-    pub fn open(root: impl Into<PathBuf>) -> Result<Self, VaultError> {
-        let root = root.into();
+    pub fn open(path: impl Into<PathBuf>) -> Result<Self, VaultError> {
+        let root = path.into();
         fs::create_dir_all(&root).map_err(|e| VaultError::io(&root, e))?;
         permissions::set_dir_permissions(&root);
         Ok(Self { root })
@@ -64,9 +64,10 @@ impl Vault {
         for file_entry in read_json_dir(&dir)? {
             match serde_json::from_str::<EncryptedWallet>(&file_entry.contents) {
                 Ok(w) => wallets.push(w),
-                Err(_e) => {
+                Err(e) => {
                     #[cfg(debug_assertions)]
-                    eprintln!("warning: skipping {}: {_e}", file_entry.path.display());
+                    eprintln!("warning: skipping {}: {e}", file_entry.path.display());
+                    let _ = e;
                 }
             }
         }
@@ -156,9 +157,10 @@ impl Vault {
         for file_entry in read_json_dir(&dir)? {
             match serde_json::from_str::<ApiKeyFile>(&file_entry.contents) {
                 Ok(k) => keys.push(k),
-                Err(_e) => {
+                Err(e) => {
                     #[cfg(debug_assertions)]
-                    eprintln!("warning: skipping {}: {_e}", file_entry.path.display());
+                    eprintln!("warning: skipping {}: {e}", file_entry.path.display());
+                    let _ = e;
                 }
             }
         }
@@ -240,17 +242,18 @@ fn read_json_dir(dir: &Path) -> Result<Vec<JsonFileEntry>, VaultError> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(entries),
         Err(e) => return Err(VaultError::io(dir, e)),
     };
-    for dir_entry in rd {
-        let dir_entry = dir_entry.map_err(|e| VaultError::io(dir, e))?;
-        let path = dir_entry.path();
+    for entry_result in rd {
+        let entry = entry_result.map_err(|e| VaultError::io(dir, e))?;
+        let path = entry.path();
         if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
             continue;
         }
         match fs::read_to_string(&path) {
             Ok(contents) => entries.push(JsonFileEntry { path, contents }),
-            Err(_e) => {
+            Err(e) => {
                 #[cfg(debug_assertions)]
-                eprintln!("warning: skipping {}: {_e}", path.display());
+                eprintln!("warning: skipping {}: {e}", path.display());
+                let _ = e;
             }
         }
     }
