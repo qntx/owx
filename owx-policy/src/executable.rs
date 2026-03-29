@@ -4,7 +4,7 @@ use std::io::Write as _;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use crate::types::{PolicyContext, PolicyResult};
+use owx_core::policy::{PolicyContext, PolicyResult};
 
 /// Evaluate an executable policy by spawning a subprocess.
 ///
@@ -117,8 +117,9 @@ fn wait_with_timeout(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use owx_core::policy::{SpendingContext, TransactionContext};
+
     use super::*;
-    use crate::types::{SpendingContext, TransactionContext};
 
     fn test_ctx() -> PolicyContext {
         PolicyContext {

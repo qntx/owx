@@ -1,6 +1,6 @@
 //! Declarative policy evaluation engine.
 
-use crate::types::{Policy, PolicyContext, PolicyResult, PolicyRule};
+use owx_core::policy::{Policy, PolicyContext, PolicyResult, PolicyRule};
 
 /// Evaluate all policies against a context (AND semantics).
 ///
@@ -90,8 +90,9 @@ fn value_exceeds(value: &str, max: &str) -> bool {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
+    use owx_core::policy::{PolicyAction, SpendingContext, TransactionContext};
+
     use super::*;
-    use crate::types::{PolicyAction, SpendingContext, TransactionContext};
 
     fn base_context() -> PolicyContext {
         PolicyContext {

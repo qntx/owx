@@ -30,11 +30,12 @@ pub fn register_cleanup(f: impl Fn() + Send + 'static) {
 /// Run all registered cleanup hooks.
 fn run_cleanup_hooks() {
     if let Some(hooks_mutex) = CLEANUP_HOOKS.get()
-        && let Ok(hooks_vec) = hooks_mutex.lock() {
-            for hook in hooks_vec.iter() {
-                hook();
-            }
+        && let Ok(hooks_vec) = hooks_mutex.lock()
+    {
+        for hook in hooks_vec.iter() {
+            hook();
         }
+    }
 }
 
 /// Report of which hardening measures succeeded.
