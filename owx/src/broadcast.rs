@@ -32,8 +32,14 @@ pub async fn sign_and_send(
     let tx_bytes = hex::decode(tx_hex_clean)
         .map_err(|e| OwxError::InvalidInput(format!("invalid hex transaction: {e}")))?;
 
-    let sign_result =
-        signing::sign_message(vault, wallet_name_or_id, chain, &tx_bytes, credential, index)?;
+    let sign_result = signing::sign_message(
+        vault,
+        wallet_name_or_id,
+        chain,
+        &tx_bytes,
+        credential,
+        index,
+    )?;
 
     let rpc = resolve_rpc_url(chain_info.chain_id, chain_info.family, rpc_url)?;
     let tx_hash = broadcast(chain_info.family, &rpc, &tx_bytes, &sign_result.signature).await?;
@@ -167,6 +173,6 @@ fn extract_json_result(json_str: &str) -> Result<String, OwxError> {
     }
     parsed["result"]
         .as_str()
-        .map(|s| s.to_owned())
+        .map(ToOwned::to_owned)
         .ok_or_else(|| OwxError::InvalidInput(format!("no 'result' in RPC response: {json_str}")))
 }

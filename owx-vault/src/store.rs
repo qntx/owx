@@ -36,7 +36,6 @@ impl Vault {
         &self.root
     }
 
-
     /// Ensure and return the wallets subdirectory.
     fn wallets_dir(&self) -> Result<PathBuf, VaultError> {
         let dir = self.root.join("wallets");
@@ -122,7 +121,6 @@ impl Vault {
         self.save_wallet(&wallet)
     }
 
-
     /// Ensure and return the keys subdirectory.
     fn keys_dir(&self) -> Result<PathBuf, VaultError> {
         let dir = self.root.join("keys");
@@ -188,7 +186,6 @@ impl Vault {
         }
         fs::remove_file(&path).map_err(|e| VaultError::io(&path, e))
     }
-
 
     /// Ensure and return the policies subdirectory.
     fn policies_dir(&self) -> Result<PathBuf, VaultError> {

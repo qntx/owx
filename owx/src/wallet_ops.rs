@@ -153,7 +153,9 @@ pub fn import_private_key(
     }
 
     let chain_info = crate::chain::parse_chain(chain).map_err(OwxError::InvalidInput)?;
-    let trimmed = private_key_hex.strip_prefix("0x").unwrap_or(private_key_hex);
+    let trimmed = private_key_hex
+        .strip_prefix("0x")
+        .unwrap_or(private_key_hex);
     let key_bytes = hex::decode(trimmed)
         .map_err(|e| OwxError::InvalidInput(format!("invalid hex private key: {e}")))?;
 
@@ -207,11 +209,7 @@ pub fn import_private_key(
 }
 
 /// Rename a wallet.
-pub fn rename_wallet(
-    vault: &Vault,
-    name_or_id: &str,
-    new_name: &str,
-) -> Result<(), OwxError> {
+pub fn rename_wallet(vault: &Vault, name_or_id: &str, new_name: &str) -> Result<(), OwxError> {
     vault.rename_wallet(name_or_id, new_name)?;
     Ok(())
 }
@@ -314,5 +312,47 @@ mod tests {
         create_wallet(&vault, "del", "p", 12).unwrap();
         delete_wallet(&vault, "del").unwrap();
         assert!(list_wallets(&vault).unwrap().is_empty());
+    }
+
+    #[test]
+    fn import_private_key_evm() {
+        let (_dir, vault) = temp_vault();
+        let key_hex = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+        let info = import_private_key(&vault, "pk-wallet", key_hex, "ethereum", "pass").unwrap();
+        assert_eq!(info.name, "pk-wallet");
+        assert_eq!(info.accounts.len(), 3);
+
+        let evm = info.accounts.iter().find(|a| a.chain_id.starts_with("eip155:")).unwrap();
+        assert!(evm.address.starts_with("0x"));
+        assert!(evm.derivation_path.is_empty());
+
+        let exported = export_wallet(&vault, "pk-wallet", "pass").unwrap();
+        assert!(exported.contains("secp256k1"));
+        assert!(exported.contains("ed25519"));
+    }
+
+    #[test]
+    fn rename_wallet_works() {
+        let (_dir, vault) = temp_vault();
+        create_wallet(&vault, "old-name", "p", 12).unwrap();
+        rename_wallet(&vault, "old-name", "new-name").unwrap();
+
+        assert!(get_wallet(&vault, "new-name").is_ok());
+        assert!(get_wallet(&vault, "old-name").is_err());
+    }
+
+    #[test]
+    fn rename_to_existing_name_fails() {
+        let (_dir, vault) = temp_vault();
+        create_wallet(&vault, "a", "p", 12).unwrap();
+        create_wallet(&vault, "b", "p", 12).unwrap();
+        assert!(rename_wallet(&vault, "a", "b").is_err());
+    }
+
+    #[test]
+    fn derive_address_works() {
+        let addr = derive_address(TEST_MNEMONIC, "ethereum", Some(0)).unwrap();
+        assert!(addr.starts_with("0x"));
+        assert_eq!(addr.len(), 42);
     }
 }
