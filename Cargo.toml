@@ -1,10 +1,10 @@
 [workspace]
-members = ["owx", "owx-cli", "owx-pay", "owx-policy", "owx-vault"]
+members = ["owx", "owx-cli", "owx-core", "owx-pay", "owx-policy", "owx-vault"]
 default-members = ["owx"]
 resolver = "3"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/qntx/owx"
@@ -15,10 +15,11 @@ readme = "README.md"
 
 [workspace.dependencies]
 # Internal crates
-owx = { version = "0.1", path = "owx" }
-owx-vault = { version = "0.1", path = "owx-vault" }
-owx-policy = { version = "0.1", path = "owx-policy" }
-owx-pay = { version = "0.1", path = "owx-pay" }
+owx = { version = "0.2", path = "owx" }
+owx-core = { version = "0.2", path = "owx-core" }
+owx-vault = { version = "0.2", path = "owx-vault" }
+owx-policy = { version = "0.2", path = "owx-policy" }
+owx-pay = { version = "0.2", path = "owx-pay" }
 
 # HD wallet (kobe)
 kobe = { version = "0.5.4", default-features = false, features = ["std", "rand"] }
@@ -65,7 +66,7 @@ uuid = { version = "1.23.0", features = ["v4"] }
 thiserror = "2.0.18"
 clap = { version = "4.6.0", features = ["derive"] }
 tempfile = "3.27.0"
-getrandom = "0.4.2"
+getrandom = { version = "0.4.2", features = ["std"] }
 
 [profile.release]
 codegen-units = 1

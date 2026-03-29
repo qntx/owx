@@ -2472,7 +2472,7 @@ checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 
 [[package]]
 name = "owx"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -2502,7 +2502,7 @@ dependencies = [
 
 [[package]]
 name = "owx-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "hex",
@@ -2514,8 +2514,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "owx-core"
+version = "0.2.0"
+dependencies = [
+ "chrono",
+ "getrandom 0.4.2",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "owx-pay"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "getrandom 0.4.2",
@@ -2529,7 +2544,7 @@ dependencies = [
 
 [[package]]
 name = "owx-policy"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "serde",
@@ -2539,7 +2554,7 @@ dependencies = [
 
 [[package]]
 name = "owx-vault"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "aes-gcm",
  "chrono",
