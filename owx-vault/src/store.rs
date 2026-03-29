@@ -36,7 +36,6 @@ impl Vault {
         &self.root
     }
 
-    // ── Wallets ──
 
     /// Ensure and return the wallets subdirectory.
     fn wallets_dir(&self) -> Result<PathBuf, VaultError> {
@@ -110,7 +109,6 @@ impl Vault {
         Ok(self.list_wallets()?.iter().any(|w| w.name == name))
     }
 
-    // ── API Keys ──
 
     /// Ensure and return the keys subdirectory.
     fn keys_dir(&self) -> Result<PathBuf, VaultError> {
@@ -178,7 +176,6 @@ impl Vault {
         fs::remove_file(&path).map_err(|e| VaultError::io(&path, e))
     }
 
-    // ── Policies ──
 
     /// Ensure and return the policies subdirectory.
     fn policies_dir(&self) -> Result<PathBuf, VaultError> {

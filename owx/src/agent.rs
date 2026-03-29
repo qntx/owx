@@ -37,7 +37,6 @@ impl AgentWallet {
         &self.vault
     }
 
-    // ── Wallet Management ──
 
     /// Create a new wallet with a randomly generated mnemonic.
     pub fn create_wallet(
@@ -80,7 +79,6 @@ impl AgentWallet {
         wallet_ops::export_wallet(&self.vault, name_or_id, passphrase)
     }
 
-    // ── API Key Management ──
 
     /// Create an API key for agent access to wallets.
     ///
@@ -115,7 +113,6 @@ impl AgentWallet {
         Ok(keys)
     }
 
-    // ── Signing ──
 
     /// Sign a message. `credential` is either a passphrase or an API token.
     pub fn sign_message(
