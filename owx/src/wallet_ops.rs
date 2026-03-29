@@ -132,7 +132,110 @@ pub fn delete_wallet(vault: &Vault, name_or_id: &str) -> Result<(), OwxError> {
     Ok(())
 }
 
-/// Export a wallet's mnemonic phrase (requires passphrase).
+/// Import a wallet from a hex-encoded private key.
+///
+/// Stores a dual-curve key pair: the provided key for its curve, plus a random
+/// key for the other curve so all chain families are addressable.
+pub fn import_private_key(
+    vault: &Vault,
+    name: &str,
+    private_key_hex: &str,
+    chain: &str,
+    passphrase: &str,
+) -> Result<WalletInfo, OwxError> {
+    use owx_vault::wallet_file::WalletAccount;
+    use zeroize::Zeroize;
+
+    if vault.wallet_name_exists(name)? {
+        return Err(OwxError::Vault(owx_vault::VaultError::WalletNameExists(
+            name.to_owned(),
+        )));
+    }
+
+    let chain_info = crate::chain::parse_chain(chain).map_err(OwxError::InvalidInput)?;
+    let trimmed = private_key_hex.strip_prefix("0x").unwrap_or(private_key_hex);
+    let key_bytes = hex::decode(trimmed)
+        .map_err(|e| OwxError::InvalidInput(format!("invalid hex private key: {e}")))?;
+
+    let mut other_key = vec![0u8; 32];
+    #[allow(clippy::expect_used)]
+    getrandom::fill(&mut other_key).expect("system CSPRNG unavailable");
+
+    let (secp256k1, ed25519) = match chain_info.family {
+        crate::chain::ChainFamily::Evm | crate::chain::ChainFamily::Bitcoin => {
+            (key_bytes, other_key)
+        }
+        crate::chain::ChainFamily::Solana => (other_key, key_bytes),
+    };
+
+    let payload = serde_json::json!({
+        "secp256k1": hex::encode(&secp256k1),
+        "ed25519": hex::encode(&ed25519),
+    });
+    let mut payload_bytes = payload.to_string().into_bytes();
+
+    let mut accounts = Vec::new();
+    for family in &crate::chain::ALL_FAMILIES {
+        let default = crate::chain::default_chain(*family);
+        let key_for_chain = match family {
+            crate::chain::ChainFamily::Evm | crate::chain::ChainFamily::Bitcoin => &secp256k1,
+            crate::chain::ChainFamily::Solana => &ed25519,
+        };
+        let address = derivation::derive_address_from_key(*family, key_for_chain)?;
+        accounts.push(WalletAccount {
+            account_id: format!("{}:{address}", default.chain_id),
+            address,
+            chain_id: default.chain_id.to_owned(),
+            derivation_path: String::new(),
+        });
+    }
+
+    let envelope = crypto::encrypt(&payload_bytes, passphrase)?;
+    payload_bytes.zeroize();
+    let crypto_json = serde_json::to_value(&envelope)?;
+
+    let wallet = EncryptedWallet::new(
+        uuid::Uuid::new_v4().to_string(),
+        name.to_owned(),
+        accounts,
+        crypto_json,
+        KeyType::PrivateKey,
+    );
+
+    vault.save_wallet(&wallet)?;
+    Ok(wallet_to_info(&wallet))
+}
+
+/// Rename a wallet.
+pub fn rename_wallet(
+    vault: &Vault,
+    name_or_id: &str,
+    new_name: &str,
+) -> Result<(), OwxError> {
+    vault.rename_wallet(name_or_id, new_name)?;
+    Ok(())
+}
+
+/// Derive an address from a mnemonic for a specific chain.
+pub fn derive_address(
+    mnemonic_phrase: &str,
+    chain: &str,
+    index: Option<u32>,
+) -> Result<String, OwxError> {
+    let chain_info = crate::chain::parse_chain(chain).map_err(OwxError::InvalidInput)?;
+    let accounts = derivation::derive_all_accounts(mnemonic_phrase, index.unwrap_or(0))?;
+    accounts
+        .iter()
+        .find(|a| a.chain_id == chain_info.chain_id)
+        .map(|a| a.address.clone())
+        .ok_or_else(|| {
+            OwxError::InvalidInput(format!("no account for chain {}", chain_info.chain_id))
+        })
+}
+
+/// Export a wallet's secret.
+///
+/// Mnemonic wallets return the phrase. Private key wallets return JSON with both keys.
 pub fn export_wallet(
     vault: &Vault,
     name_or_id: &str,

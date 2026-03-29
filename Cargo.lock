@@ -2474,7 +2474,9 @@ checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 name = "owx"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
+ "getrandom 0.4.2",
  "hex",
  "kobe",
  "kobe-btc",
@@ -2483,6 +2485,7 @@ dependencies = [
  "owx-pay",
  "owx-policy",
  "owx-vault",
+ "reqwest",
  "serde",
  "serde_json",
  "sha2",
@@ -2492,6 +2495,7 @@ dependencies = [
  "signer-svm",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
  "uuid",
  "zeroize",
 ]

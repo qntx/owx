@@ -2,6 +2,7 @@
 
 use owx_vault::store::Vault;
 
+use crate::broadcast::{self, SendResult};
 use crate::error::OwxError;
 use crate::key_ops;
 use crate::signing::{self, SignResult};
@@ -136,6 +137,53 @@ impl AgentWallet {
         index: Option<u32>,
     ) -> Result<SignResult, OwxError> {
         signing::sign_transaction(&self.vault, wallet, chain, tx_hex, credential, index)
+    }
+
+    /// Import a wallet from a hex-encoded private key.
+    pub fn import_private_key(
+        &self,
+        name: &str,
+        private_key_hex: &str,
+        chain: &str,
+        passphrase: &str,
+    ) -> Result<WalletInfo, OwxError> {
+        wallet_ops::import_private_key(&self.vault, name, private_key_hex, chain, passphrase)
+    }
+
+    /// Rename a wallet.
+    pub fn rename_wallet(&self, name_or_id: &str, new_name: &str) -> Result<(), OwxError> {
+        wallet_ops::rename_wallet(&self.vault, name_or_id, new_name)
+    }
+
+    /// Derive an address from a mnemonic for a specific chain.
+    pub fn derive_address(
+        mnemonic_phrase: &str,
+        chain: &str,
+        index: Option<u32>,
+    ) -> Result<String, OwxError> {
+        wallet_ops::derive_address(mnemonic_phrase, chain, index)
+    }
+
+    /// Sign a transaction and broadcast it to the chain RPC.
+    pub async fn sign_and_send(
+        &self,
+        wallet: &str,
+        chain: &str,
+        tx_hex: &str,
+        credential: &str,
+        index: Option<u32>,
+        rpc_url: Option<&str>,
+    ) -> Result<SendResult, OwxError> {
+        broadcast::sign_and_send(
+            &self.vault,
+            wallet,
+            chain,
+            tx_hex,
+            credential,
+            index,
+            rpc_url,
+        )
+        .await
     }
 }
 

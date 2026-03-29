@@ -70,6 +70,36 @@ fn derive_account_for_family(
     }
 }
 
+/// Derive an address from a raw private key for a given chain family.
+pub fn derive_address_from_key(
+    family: ChainFamily,
+    private_key: &[u8],
+) -> Result<String, OwxError> {
+    let key32: [u8; 32] = private_key.try_into().map_err(|_| {
+        OwxError::InvalidInput(format!(
+            "private key must be 32 bytes, got {}",
+            private_key.len()
+        ))
+    })?;
+
+    match family {
+        ChainFamily::Evm => {
+            let s = signer::evm::Signer::from_bytes(&key32.into())
+                .map_err(|e| OwxError::Derivation(e.to_string()))?;
+            Ok(format!("{}", s.address()))
+        }
+        ChainFamily::Bitcoin => {
+            let s = signer::btc::Signer::from_bytes(&key32, signer::btc::Network::Bitcoin)
+                .map_err(|e| OwxError::Derivation(e.to_string()))?;
+            Ok(s.p2wpkh_address(signer::btc::Network::Bitcoin).to_string())
+        }
+        ChainFamily::Solana => {
+            let s = signer::svm::Signer::from_bytes(&key32);
+            Ok(s.address())
+        }
+    }
+}
+
 /// Sign a message with a mnemonic-derived key for the given chain family.
 pub fn sign_with_mnemonic(
     mnemonic_phrase: &str,

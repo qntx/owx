@@ -8,6 +8,7 @@
 //! - [`owx_pay`] for x402 payments
 
 pub mod agent;
+pub mod broadcast;
 pub mod chain;
 pub mod derivation;
 pub mod error;

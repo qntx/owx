@@ -24,12 +24,16 @@ signer-evm.workspace = true
 signer-btc.workspace = true
 signer-svm.workspace = true
 
+base64.workspace = true
 chrono.workspace = true
+getrandom.workspace = true
 hex.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
+tokio.workspace = true
 uuid.workspace = true
 zeroize.workspace = true
 

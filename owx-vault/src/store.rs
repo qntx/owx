@@ -109,6 +109,19 @@ impl Vault {
         Ok(self.list_wallets()?.iter().any(|w| w.name == name))
     }
 
+    /// Rename a wallet. Loads, mutates, and re-saves the wallet file.
+    pub fn rename_wallet(&self, name_or_id: &str, new_name: &str) -> Result<(), VaultError> {
+        let mut wallet = self.load_wallet(name_or_id)?;
+        if wallet.name == new_name {
+            return Ok(());
+        }
+        if self.wallet_name_exists(new_name)? {
+            return Err(VaultError::WalletNameExists(new_name.to_owned()));
+        }
+        wallet.name = new_name.to_owned();
+        self.save_wallet(&wallet)
+    }
+
 
     /// Ensure and return the keys subdirectory.
     fn keys_dir(&self) -> Result<PathBuf, VaultError> {
