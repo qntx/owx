@@ -24,22 +24,22 @@ pub async fn discover(
     limit: Option<u64>,
     offset: Option<u64>,
 ) -> Result<DiscoverResult, PayError> {
-    let limit = limit.unwrap_or(100);
-    let offset = offset.unwrap_or(0);
+    let page_limit = limit.unwrap_or(100);
+    let page_offset = offset.unwrap_or(0);
 
     if let Some(q) = query {
-        return discover_with_query(q, limit, offset).await;
+        return discover_with_query(q, page_limit, page_offset).await;
     }
 
-    let resp = fetch_page(limit, offset).await?;
+    let resp = fetch_page(page_limit, page_offset).await?;
     let total = resp.total;
     let services = filter_services(resp.items, None);
 
     Ok(DiscoverResult {
         services,
         total,
-        limit,
-        offset,
+        limit: page_limit,
+        offset: page_offset,
     })
 }
 
@@ -129,20 +129,19 @@ fn filter_services(
     items: Vec<crate::types::DiscoveredService>,
     query: Option<&str>,
 ) -> Vec<Service> {
-    let q = query.map(str::to_lowercase);
+    let query_lower = query.map(str::to_lowercase);
     let mut services = Vec::new();
 
     for svc in items {
-        let accept = match svc.accepts.first() {
-            Some(a) => a,
-            None => continue,
+        let Some(accept) = svc.accepts.first() else {
+            continue;
         };
 
         if TESTNETS.iter().any(|t| accept.network.contains(t)) {
             continue;
         }
 
-        if let Some(ref q) = q {
+        if let Some(ref q) = query_lower {
             let url_match = svc.resource.to_lowercase().contains(q);
             let desc_match = accept
                 .description

@@ -13,14 +13,14 @@ pub async fn fund(
     token: Option<&str>,
 ) -> Result<FundResult, PayError> {
     let chain_name = resolve_chain(chain);
-    let token = token.unwrap_or("USDC");
+    let token_name = token.unwrap_or("USDC");
 
     let client = reqwest::Client::new();
     let req_body = serde_json::json!({
-        "name": format!("OWX deposit ({token} on {chain_name})"),
+        "name": format!("OWX deposit ({token_name} on {chain_name})"),
         "wallet": wallet_address,
         "chain": chain_name,
-        "token": token,
+        "token": token_name,
     });
 
     let resp = client
@@ -54,18 +54,17 @@ pub async fn fund(
 }
 
 /// Resolve a chain name to MoonPay's format.
-fn resolve_chain(chain: Option<&str>) -> &str {
-    match chain {
-        Some(c) => match c.to_lowercase().as_str() {
-            "base" | "eip155:8453" => "base",
-            "ethereum" | "eip155:1" => "ethereum",
-            "polygon" | "eip155:137" => "polygon",
-            "arbitrum" | "eip155:42161" => "arbitrum",
-            "optimism" | "eip155:10" => "optimism",
-            "solana" => "solana",
-            _ => "base",
-        },
-        None => "base",
+fn resolve_chain(chain: Option<&str>) -> &'static str {
+    let Some(name) = chain else {
+        return "base";
+    };
+    match name.to_lowercase().as_str() {
+        "ethereum" | "eip155:1" => "ethereum",
+        "polygon" | "eip155:137" => "polygon",
+        "arbitrum" | "eip155:42161" => "arbitrum",
+        "optimism" | "eip155:10" => "optimism",
+        "solana" => "solana",
+        _ => "base",
     }
 }
 
