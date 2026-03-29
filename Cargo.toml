@@ -109,8 +109,8 @@ complexity = { level = "warn", priority = -1 }
 correctness = { level = "deny", priority = -1 }
 dbg_macro = "warn"
 doc_markdown = "allow"
-exhaustive_enums = "warn"
-exhaustive_structs = "warn"
+exhaustive_enums = "allow"
+exhaustive_structs = "allow"
 expect_used = "warn"
 fn_params_excessive_bools = "allow"
 future_not_send = "allow"
