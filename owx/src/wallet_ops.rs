@@ -156,7 +156,6 @@ pub(crate) fn decrypt_mnemonic(
         .map_err(|_| OwxError::InvalidInput("wallet contains invalid UTF-8 mnemonic".into()))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

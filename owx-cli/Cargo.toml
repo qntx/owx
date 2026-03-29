@@ -4,11 +4,19 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description.workspace = true
-keywords.workspace = true
-categories.workspace = true
+description = "CLI for OWX agent wallet toolkit."
+
+[[bin]]
+name = "owx"
+path = "src/main.rs"
 
 [dependencies]
+owx.workspace = true
+owx-vault.workspace = true
+clap.workspace = true
+hex.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
 
 [lints]
 workspace = true
