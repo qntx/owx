@@ -2,6 +2,7 @@
 
 /// Supported chain families.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum ChainFamily {
     /// EVM-compatible chains (Ethereum, Base, Arbitrum, …).
     Evm,
@@ -13,6 +14,7 @@ pub enum ChainFamily {
 
 /// A known chain with its CAIP-2 identifier.
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub struct Chain {
     /// Human-readable name (e.g. "ethereum", "base").
     pub name: &'static str,
@@ -97,15 +99,20 @@ pub fn parse_chain(s: &str) -> Result<Chain, String> {
 }
 
 /// Default chain for a family.
+///
+/// # Panics
+///
+/// Panics if no known chain exists for the given family.
 #[must_use]
 pub fn default_chain(family: ChainFamily) -> Chain {
+    #[allow(clippy::expect_used)]
     *KNOWN_CHAINS
         .iter()
         .find(|c| c.family == family)
         .expect("all families have a default")
 }
 
-/// Extract the CAIP-2 namespace from a chain ID and map to a family.
+/// Extract the CAIP-2 namespace from a chain ID and map to a [`ChainFamily`].
 fn family_from_namespace(s: &str) -> Option<ChainFamily> {
     let (ns, _) = s.split_once(':')?;
     match ns {
@@ -117,6 +124,7 @@ fn family_from_namespace(s: &str) -> Option<ChainFamily> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

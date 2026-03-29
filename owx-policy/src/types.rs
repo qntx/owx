@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 /// Action taken when a policy rule matches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum PolicyAction {
     /// Deny the request.
     Deny,
@@ -13,6 +14,7 @@ pub enum PolicyAction {
 /// A declarative policy rule evaluated in-process.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum PolicyRule {
     /// Deny if `chain_id` is not in the allowlist.
     AllowedChains {
@@ -47,6 +49,7 @@ pub enum PolicyRule {
 
 /// A stored policy definition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Policy {
     /// Unique policy identifier.
     pub id: String,
@@ -68,8 +71,31 @@ pub struct Policy {
     pub action: PolicyAction,
 }
 
+/// Transaction fields available for policy evaluation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct TransactionContext {
+    /// Destination address (if applicable).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+    /// Native value in smallest unit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    /// Raw transaction hex.
+    pub raw_hex: String,
+}
+
+impl TransactionContext {
+    /// Create a new transaction context.
+    #[must_use]
+    pub const fn new(to: Option<String>, value: Option<String>, raw_hex: String) -> Self {
+        Self { to, value, raw_hex }
+    }
+}
+
 /// Context passed to policy evaluation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PolicyContext {
     /// CAIP-2 chain ID.
     pub chain_id: String,
@@ -83,21 +109,29 @@ pub struct PolicyContext {
     pub timestamp: String,
 }
 
-/// Transaction fields available for policy evaluation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TransactionContext {
-    /// Destination address (if applicable).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub to: Option<String>,
-    /// Native value in smallest unit.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub value: Option<String>,
-    /// Raw transaction hex.
-    pub raw_hex: String,
+impl PolicyContext {
+    /// Create a new policy context.
+    #[must_use]
+    pub const fn new(
+        chain_id: String,
+        wallet_id: String,
+        api_key_id: String,
+        transaction: TransactionContext,
+        timestamp: String,
+    ) -> Self {
+        Self {
+            chain_id,
+            wallet_id,
+            api_key_id,
+            transaction,
+            timestamp,
+        }
+    }
 }
 
 /// Result of policy evaluation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PolicyResult {
     /// Whether the request is allowed.
     pub allow: bool,
@@ -132,6 +166,7 @@ impl PolicyResult {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

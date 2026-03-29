@@ -124,6 +124,7 @@ enum SignAction {
     },
 }
 
+#[allow(clippy::print_stderr)]
 fn main() {
     let cli = Cli::parse();
 
@@ -146,6 +147,7 @@ fn main() {
     }
 }
 
+/// Dispatch CLI commands.
 fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
     match cmd {
         Commands::Wallet { action } => run_wallet(action, agent),
@@ -154,6 +156,8 @@ fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
     }
 }
 
+/// Execute wallet subcommands.
+#[allow(clippy::print_stdout, clippy::expect_used)]
 fn run_wallet(action: WalletAction, agent: &AgentWallet) -> Result<(), owx::OwxError> {
     match action {
         WalletAction::Create { name, words } => {
@@ -187,6 +191,8 @@ fn run_wallet(action: WalletAction, agent: &AgentWallet) -> Result<(), owx::OwxE
     Ok(())
 }
 
+/// Execute API key subcommands.
+#[allow(clippy::print_stdout)]
 fn run_key(action: KeyAction, agent: &AgentWallet) -> Result<(), owx::OwxError> {
     match action {
         KeyAction::Create {
@@ -215,6 +221,8 @@ fn run_key(action: KeyAction, agent: &AgentWallet) -> Result<(), owx::OwxError> 
     Ok(())
 }
 
+/// Execute signing subcommands.
+#[allow(clippy::print_stdout)]
 fn run_sign(action: SignAction, agent: &AgentWallet) -> Result<(), owx::OwxError> {
     let cred = read_passphrase("Passphrase or API token: ");
     match action {
@@ -238,6 +246,8 @@ fn run_sign(action: SignAction, agent: &AgentWallet) -> Result<(), owx::OwxError
     Ok(())
 }
 
+/// Read a passphrase from stdin (with a prompt on stderr).
+#[allow(clippy::print_stderr, clippy::expect_used)]
 fn read_passphrase(prompt: &str) -> String {
     eprint!("{prompt}");
     let mut input = String::new();

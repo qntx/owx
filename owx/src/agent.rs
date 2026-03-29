@@ -13,6 +13,7 @@ use crate::wallet_ops::{self, WalletInfo};
 /// and provides high-level operations for wallet management, signing, and
 /// API key delegation.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct AgentWallet {
     vault: Vault,
 }
@@ -142,6 +143,7 @@ impl AgentWallet {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

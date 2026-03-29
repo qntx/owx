@@ -9,9 +9,13 @@ use crate::error::PayError;
 use crate::types::{PayResult, PaymentInfo, PaymentRequirements, X402Response};
 use crate::wallet::WalletBridge;
 
+/// Legacy payment header name.
 const HEADER_PAYMENT: &str = "X-PAYMENT";
+/// V2 payment header name.
 const HEADER_PAYMENT_V2: &str = "payment-signature";
+/// Legacy payment-required header.
 const HEADER_PAYMENT_REQUIRED: &str = "x-payment-required";
+/// V2 payment-required header.
 const HEADER_PAYMENT_REQUIRED_V2: &str = "payment-required";
 
 /// Make an HTTP request with automatic x402 payment handling.
@@ -47,6 +51,7 @@ pub async fn pay(
     handle_402(wallet, url, method, body, &headers, &body_402).await
 }
 
+/// Process a 402 response: parse requirements, sign, retry.
 async fn handle_402(
     wallet: &dyn WalletBridge,
     url: &str,
@@ -95,6 +100,7 @@ async fn handle_402(
     })
 }
 
+/// Parse payment requirements from response headers or body.
 fn parse_requirements(
     headers: &reqwest::header::HeaderMap,
     body_text: &str,
@@ -120,6 +126,7 @@ fn parse_requirements(
     Ok(parsed.accepts)
 }
 
+/// Select the first compatible payment option from requirements.
 fn pick_option<'a>(
     wallet: &dyn WalletBridge,
     requirements: &'a [PaymentRequirements],
@@ -141,6 +148,7 @@ fn pick_option<'a>(
     )))
 }
 
+/// Build EIP-3009 `TransferWithAuthorization` typed data JSON.
 fn build_eip3009_typed_data(
     wallet: &dyn WalletBridge,
     req: &PaymentRequirements,
@@ -211,11 +219,13 @@ fn build_eip3009_typed_data(
     Ok(typed_data.to_string())
 }
 
+/// Extract the numeric EVM chain ID from a CAIP-2 string (e.g. `eip155:8453` → `8453`).
 fn extract_evm_chain_id(caip2: &str) -> Option<u64> {
     let reference = caip2.strip_prefix("eip155:")?;
     reference.parse().ok()
 }
 
+/// Build an HTTP request with optional payment header.
 fn build_request(
     client: &reqwest::Client,
     url: &str,
@@ -251,17 +261,23 @@ fn build_request(
     Ok(req)
 }
 
+/// Format a USDC amount (6-decimal smallest unit) as a human-readable dollar string.
 fn format_usdc(amount_str: &str) -> String {
     let amount: u128 = amount_str.parse().unwrap_or(0);
     let whole = amount / 1_000_000;
     let frac = amount % 1_000_000;
     let frac_str = format!("{frac:06}");
-    let trimmed = frac_str.trim_end_matches('0');
-    let trimmed = if trimmed.is_empty() { "00" } else { trimmed };
-    format!("${whole}.{trimmed}")
+    let frac_display = frac_str.trim_end_matches('0');
+    let frac_display = if frac_display.is_empty() {
+        "00"
+    } else {
+        frac_display
+    };
+    format!("${whole}.{frac_display}")
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

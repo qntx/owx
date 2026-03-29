@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Application configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Config {
     /// Path to the vault directory.
     pub vault_path: PathBuf,
@@ -57,7 +58,7 @@ impl Default for Config {
     }
 }
 
-/// Best-effort home directory resolution.
+/// Best-effort home directory resolution (HOME on Unix, USERPROFILE on Windows).
 fn dirs_home() -> String {
     std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
@@ -65,6 +66,7 @@ fn dirs_home() -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

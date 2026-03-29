@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "x402 payment client for OWX agent wallets."
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 base64.workspace = true

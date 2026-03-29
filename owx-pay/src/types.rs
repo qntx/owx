@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Result of a payment flow.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct PayResult {
     /// HTTP status code of the final response.
     pub status: u16,
@@ -15,6 +16,7 @@ pub struct PayResult {
 
 /// Information about a completed payment.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct PaymentInfo {
     /// Human-readable amount (e.g. "$0.01").
     pub amount: String,
@@ -26,6 +28,7 @@ pub struct PaymentInfo {
 
 /// x402 payment requirements from the server's 402 response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PaymentRequirements {
     /// Payment scheme (e.g. "exact").
     pub scheme: String,
@@ -49,12 +52,14 @@ pub struct PaymentRequirements {
     pub description: Option<String>,
 }
 
+/// Default timeout in seconds for payment requirements.
 const fn default_timeout() -> u64 {
     30
 }
 
 /// x402 server response envelope.
 #[derive(Debug, Deserialize)]
+#[non_exhaustive]
 pub struct X402Response {
     /// Payment options the server accepts.
     pub accepts: Vec<PaymentRequirements>,

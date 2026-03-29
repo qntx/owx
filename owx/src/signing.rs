@@ -10,6 +10,7 @@ use crate::wallet_ops;
 
 /// Signature result.
 #[derive(Debug, Clone, serde::Serialize)]
+#[non_exhaustive]
 pub struct SignResult {
     /// Hex-encoded signature bytes.
     pub signature: String,
@@ -58,7 +59,7 @@ pub fn sign_transaction(
     )
 }
 
-/// Resolve the mnemonic from either a passphrase or an API token.
+/// Resolve the mnemonic from either a passphrase or an API token credential.
 fn resolve_mnemonic(
     vault: &Vault,
     wallet_name_or_id: &str,
@@ -74,6 +75,7 @@ fn resolve_mnemonic(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

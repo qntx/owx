@@ -16,6 +16,7 @@ pub fn evaluate(policies: &[Policy], context: &PolicyContext) -> PolicyResult {
     PolicyResult::allowed()
 }
 
+/// Evaluate a single policy against the context.
 fn evaluate_one(policy: &Policy, context: &PolicyContext) -> PolicyResult {
     for rule in &policy.rules {
         let result = evaluate_rule(rule, &policy.id, context);
@@ -36,6 +37,7 @@ fn evaluate_one(policy: &Policy, context: &PolicyContext) -> PolicyResult {
     PolicyResult::allowed()
 }
 
+/// Evaluate a single rule within a policy.
 fn evaluate_rule(rule: &PolicyRule, policy_id: &str, ctx: &PolicyContext) -> PolicyResult {
     match rule {
         PolicyRule::AllowedChains { chain_ids } => {
@@ -78,7 +80,7 @@ fn evaluate_rule(rule: &PolicyRule, policy_id: &str, ctx: &PolicyContext) -> Pol
     }
 }
 
-/// Compare two decimal strings as u128. Returns true if `value > max`.
+/// Compare two decimal strings as `u128`. Returns true if `value > max`.
 fn value_exceeds(value: &str, max: &str) -> bool {
     let v: u128 = value.parse().unwrap_or(0);
     let m: u128 = max.parse().unwrap_or(u128::MAX);
@@ -86,6 +88,7 @@ fn value_exceeds(value: &str, max: &str) -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::types::{PolicyAction, TransactionContext};

@@ -75,6 +75,7 @@ pub fn evaluate_executable(
     }
 }
 
+/// Wait for a child process with a timeout, returning its output or an error message.
 fn wait_with_timeout(
     child: &mut std::process::Child,
     timeout: Duration,
@@ -114,6 +115,7 @@ fn wait_with_timeout(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::types::TransactionContext;

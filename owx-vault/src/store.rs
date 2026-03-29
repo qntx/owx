@@ -38,6 +38,7 @@ impl Vault {
 
     // ── Wallets ──
 
+    /// Ensure and return the wallets subdirectory.
     fn wallets_dir(&self) -> Result<PathBuf, VaultError> {
         let dir = self.root.join("wallets");
         fs::create_dir_all(&dir).map_err(|e| VaultError::io(&dir, e))?;
@@ -56,16 +57,16 @@ impl Vault {
     }
 
     /// List all encrypted wallets, sorted by `created_at` descending (newest first).
+    #[allow(clippy::print_stderr)]
     pub fn list_wallets(&self) -> Result<Vec<EncryptedWallet>, VaultError> {
         let dir = self.wallets_dir()?;
         let mut wallets = Vec::new();
-        for entry in read_json_dir(&dir)? {
-            match serde_json::from_str::<EncryptedWallet>(&entry.contents) {
+        for file_entry in read_json_dir(&dir)? {
+            match serde_json::from_str::<EncryptedWallet>(&file_entry.contents) {
                 Ok(w) => wallets.push(w),
-                Err(e) => {
+                Err(_e) => {
                     #[cfg(debug_assertions)]
-                    eprintln!("warning: skipping {}: {e}", entry.path.display());
-                    let _ = e;
+                    eprintln!("warning: skipping {}: {_e}", file_entry.path.display());
                 }
             }
         }
@@ -110,6 +111,7 @@ impl Vault {
 
     // ── API Keys ──
 
+    /// Ensure and return the keys subdirectory.
     fn keys_dir(&self) -> Result<PathBuf, VaultError> {
         let dir = self.root.join("keys");
         fs::create_dir_all(&dir).map_err(|e| VaultError::io(&dir, e))?;
@@ -147,16 +149,16 @@ impl Vault {
     }
 
     /// List all API keys, sorted by creation time (newest first).
+    #[allow(clippy::print_stderr)]
     pub fn list_api_keys(&self) -> Result<Vec<ApiKeyFile>, VaultError> {
         let dir = self.keys_dir()?;
         let mut keys = Vec::new();
-        for entry in read_json_dir(&dir)? {
-            match serde_json::from_str::<ApiKeyFile>(&entry.contents) {
+        for file_entry in read_json_dir(&dir)? {
+            match serde_json::from_str::<ApiKeyFile>(&file_entry.contents) {
                 Ok(k) => keys.push(k),
-                Err(e) => {
+                Err(_e) => {
                     #[cfg(debug_assertions)]
-                    eprintln!("warning: skipping {}: {e}", entry.path.display());
-                    let _ = e;
+                    eprintln!("warning: skipping {}: {_e}", file_entry.path.display());
                 }
             }
         }
@@ -176,6 +178,7 @@ impl Vault {
 
     // ── Policies ──
 
+    /// Ensure and return the policies subdirectory.
     fn policies_dir(&self) -> Result<PathBuf, VaultError> {
         let dir = self.root.join("policies");
         fs::create_dir_all(&dir).map_err(|e| VaultError::io(&dir, e))?;
@@ -220,11 +223,16 @@ impl Vault {
     }
 }
 
+/// A JSON file read from disk.
 struct JsonFileEntry {
+    /// Path to the file.
     path: PathBuf,
+    /// File contents.
     contents: String,
 }
 
+/// Read all `.json` files from a directory.
+#[allow(clippy::print_stderr)]
 fn read_json_dir(dir: &Path) -> Result<Vec<JsonFileEntry>, VaultError> {
     let mut entries = Vec::new();
     let rd = match fs::read_dir(dir) {
@@ -232,18 +240,17 @@ fn read_json_dir(dir: &Path) -> Result<Vec<JsonFileEntry>, VaultError> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(entries),
         Err(e) => return Err(VaultError::io(dir, e)),
     };
-    for entry in rd {
-        let entry = entry.map_err(|e| VaultError::io(dir, e))?;
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+    for dir_entry in rd {
+        let dir_entry = dir_entry.map_err(|e| VaultError::io(dir, e))?;
+        let path = dir_entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
             continue;
         }
         match fs::read_to_string(&path) {
             Ok(contents) => entries.push(JsonFileEntry { path, contents }),
-            Err(e) => {
+            Err(_e) => {
                 #[cfg(debug_assertions)]
-                eprintln!("warning: skipping {}: {e}", path.display());
-                let _ = e;
+                eprintln!("warning: skipping {}: {_e}", path.display());
             }
         }
     }
@@ -251,6 +258,7 @@ fn read_json_dir(dir: &Path) -> Result<Vec<JsonFileEntry>, VaultError> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::wallet_file::{KeyType, WalletAccount};
@@ -265,12 +273,12 @@ mod tests {
         EncryptedWallet::new(
             id.to_owned(),
             name.to_owned(),
-            vec![WalletAccount {
-                account_id: "eip155:1:0xabc".to_owned(),
-                address: "0xabc".to_owned(),
-                chain_id: "eip155:1".to_owned(),
-                derivation_path: "m/44'/60'/0'/0/0".to_owned(),
-            }],
+            vec![WalletAccount::new(
+                "eip155:1:0xabc".to_owned(),
+                "0xabc".to_owned(),
+                "eip155:1".to_owned(),
+                "m/44'/60'/0'/0/0".to_owned(),
+            )],
             serde_json::json!({"cipher": "aes-256-gcm"}),
             KeyType::Mnemonic,
         )
@@ -326,16 +334,16 @@ mod tests {
 
         let (_dir, vault) = temp_vault();
         let token = generate_token();
-        let key = ApiKeyFile {
-            id: "k1".into(),
-            name: "agent".into(),
-            token_hash: hash_token(&token),
-            created_at: "2026-01-01T00:00:00Z".into(),
-            wallet_ids: vec!["w1".into()],
-            policy_ids: vec![],
-            expires_at: None,
-            wallet_secrets: HashMap::new(),
-        };
+        let key = ApiKeyFile::new(
+            "k1".into(),
+            "agent".into(),
+            hash_token(&token),
+            "2026-01-01T00:00:00Z".into(),
+            vec!["w1".into()],
+            vec![],
+            None,
+            HashMap::new(),
+        );
 
         vault.save_api_key(&key).unwrap();
         let loaded = vault.load_api_key("k1").unwrap();

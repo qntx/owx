@@ -9,6 +9,7 @@ use crate::error::OwxError;
 
 /// Public wallet info (no secrets).
 #[derive(Debug, Clone, serde::Serialize)]
+#[non_exhaustive]
 pub struct WalletInfo {
     /// Wallet ID.
     pub id: String,
@@ -22,6 +23,7 @@ pub struct WalletInfo {
 
 /// Public account info.
 #[derive(Debug, Clone, serde::Serialize)]
+#[non_exhaustive]
 pub struct AccountInfo {
     /// CAIP-2 chain ID.
     pub chain_id: String,
@@ -31,6 +33,7 @@ pub struct AccountInfo {
     pub derivation_path: String,
 }
 
+/// Convert an encrypted wallet to a public-facing info struct.
 fn wallet_to_info(w: &EncryptedWallet) -> WalletInfo {
     WalletInfo {
         id: w.id.clone(),
@@ -157,6 +160,7 @@ pub(crate) fn decrypt_mnemonic(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

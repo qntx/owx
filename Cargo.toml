@@ -11,6 +11,7 @@ repository = "https://github.com/qntx/owx"
 description = "Agent-native, self-custodial, policy-gated, multi-chain wallet toolkit."
 keywords = ["crypto", "wallet", "bitcoin", "ethereum", "solana"]
 categories = ["cryptography::cryptocurrencies"]
+readme = "README.md"
 
 [workspace.dependencies]
 # Internal crates

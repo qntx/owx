@@ -22,6 +22,7 @@ pub fn derive_all_accounts(
     Ok(accounts)
 }
 
+/// Derive a single account for a specific chain family.
 fn derive_account_for_family(
     wallet: &kobe::Wallet,
     family: ChainFamily,
@@ -34,12 +35,12 @@ fn derive_account_for_family(
             let d = deriver
                 .derive(index)
                 .map_err(|e| OwxError::Derivation(e.to_string()))?;
-            Ok(WalletAccount {
-                account_id: format!("{chain_id}:{}", d.address),
-                address: d.address.clone(),
-                chain_id: chain_id.to_owned(),
-                derivation_path: d.path,
-            })
+            Ok(WalletAccount::new(
+                format!("{chain_id}:{}", d.address),
+                d.address.clone(),
+                chain_id.to_owned(),
+                d.path,
+            ))
         }
         ChainFamily::Bitcoin => {
             let deriver = kobe_btc::Deriver::new(wallet, kobe_btc::Network::Mainnet)
@@ -47,24 +48,24 @@ fn derive_account_for_family(
             let d = deriver
                 .derive(index)
                 .map_err(|e| OwxError::Derivation(e.to_string()))?;
-            Ok(WalletAccount {
-                account_id: format!("{chain_id}:{}", d.address),
-                address: d.address.clone(),
-                chain_id: chain_id.to_owned(),
-                derivation_path: d.path.to_string(),
-            })
+            Ok(WalletAccount::new(
+                format!("{chain_id}:{}", d.address),
+                d.address.clone(),
+                chain_id.to_owned(),
+                d.path.to_string(),
+            ))
         }
         ChainFamily::Solana => {
             let deriver = kobe_svm::Deriver::new(wallet);
             let d = deriver
                 .derive(index)
                 .map_err(|e| OwxError::Derivation(e.to_string()))?;
-            Ok(WalletAccount {
-                account_id: format!("{chain_id}:{}", d.address),
-                address: d.address.clone(),
-                chain_id: chain_id.to_owned(),
-                derivation_path: d.path,
-            })
+            Ok(WalletAccount::new(
+                format!("{chain_id}:{}", d.address),
+                d.address.clone(),
+                chain_id.to_owned(),
+                d.path,
+            ))
         }
     }
 }
@@ -122,6 +123,7 @@ pub fn sign_with_mnemonic(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

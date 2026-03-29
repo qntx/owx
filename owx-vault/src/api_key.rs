@@ -10,6 +10,7 @@ pub const TOKEN_PREFIX: &str = "owx_key_";
 
 /// An API key file stored at `<vault>/keys/<id>.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ApiKeyFile {
     /// Unique key identifier (UUID v4).
     pub id: String,
@@ -31,9 +32,36 @@ pub struct ApiKeyFile {
     pub wallet_secrets: HashMap<String, serde_json::Value>,
 }
 
+impl ApiKeyFile {
+    /// Create a new API key file.
+    #[must_use]
+    pub const fn new(
+        id: String,
+        name: String,
+        token_hash: String,
+        created_at: String,
+        wallet_ids: Vec<String>,
+        policy_ids: Vec<String>,
+        expires_at: Option<String>,
+        wallet_secrets: HashMap<String, serde_json::Value>,
+    ) -> Self {
+        Self {
+            id,
+            name,
+            token_hash,
+            created_at,
+            wallet_ids,
+            policy_ids,
+            expires_at,
+            wallet_secrets,
+        }
+    }
+}
+
 /// Generate a random API token: `owx_key_<64 hex chars>` (256 bits of entropy).
 pub fn generate_token() -> String {
     let mut bytes = [0u8; 32];
+    #[allow(clippy::expect_used)]
     getrandom::fill(&mut bytes).expect("system CSPRNG unavailable");
     format!("{TOKEN_PREFIX}{}", hex::encode(bytes))
 }
@@ -52,6 +80,7 @@ pub fn is_api_token(credential: &str) -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

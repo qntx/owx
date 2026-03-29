@@ -17,6 +17,7 @@ use crate::secret::SecretBytes;
 
 /// On-disk encrypted envelope (JSON-serializable).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CryptoEnvelope {
     /// Cipher algorithm identifier.
     pub cipher: String,
@@ -34,6 +35,7 @@ pub struct CryptoEnvelope {
 
 /// Cipher parameters.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CipherParams {
     /// Hex-encoded initialization vector.
     pub iv: String,
@@ -41,6 +43,7 @@ pub struct CipherParams {
 
 /// Scrypt KDF parameters.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ScryptKdfParams {
     /// Derived key length in bytes.
     pub dklen: u32,
@@ -56,6 +59,7 @@ pub struct ScryptKdfParams {
 
 /// HKDF-SHA256 KDF parameters.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct HkdfKdfParams {
     /// Derived key length in bytes.
     pub dklen: u32,
@@ -75,21 +79,34 @@ pub enum KdfParamsVariant {
     Hkdf(HkdfKdfParams),
 }
 
+/// Scrypt log2(N) for tests / fast-kdf.
 #[cfg(any(test, feature = "fast-kdf"))]
 const KDF_LOG_N: u8 = 10;
+/// Scrypt log2(N) for production.
 #[cfg(not(any(test, feature = "fast-kdf")))]
 const KDF_LOG_N: u8 = 16;
 
+/// Scrypt N = 2^log_n.
 const KDF_N: u32 = 1 << (KDF_LOG_N as u32);
+/// Scrypt block size.
 const KDF_R: u32 = 8;
+/// Scrypt parallelism.
 const KDF_P: u32 = 1;
+/// Derived key length for scrypt.
 const KDF_DKLEN: u32 = 32;
 
+/// HKDF info string.
 const HKDF_INFO: &[u8] = b"owx-api-key-v1";
+/// Derived key length for HKDF.
 const HKDF_DKLEN: u32 = 32;
 
 /// Fill a buffer with cryptographically secure random bytes.
+///
+/// # Panics
+///
+/// Panics if the system CSPRNG is unavailable.
 fn fill_random(buf: &mut [u8]) {
+    #[allow(clippy::expect_used)]
     getrandom::fill(buf).expect("system CSPRNG unavailable");
 }
 
@@ -170,13 +187,10 @@ pub fn decrypt(envelope: &CryptoEnvelope, credential: &str) -> Result<SecretByte
 }
 
 fn decrypt_scrypt(envelope: &CryptoEnvelope, passphrase: &str) -> Result<SecretBytes, VaultError> {
-    let kp = match &envelope.kdfparams {
-        KdfParamsVariant::Scrypt(p) => p,
-        _ => {
-            return Err(VaultError::InvalidParams(
-                "expected scrypt kdfparams".into(),
-            ));
-        }
+    let KdfParamsVariant::Scrypt(kp) = &envelope.kdfparams else {
+        return Err(VaultError::InvalidParams(
+            "expected scrypt kdfparams".into(),
+        ));
     };
 
     validate_scrypt_params(kp)?;
@@ -186,6 +200,7 @@ fn decrypt_scrypt(envelope: &CryptoEnvelope, passphrase: &str) -> Result<SecretB
     let ciphertext = hex_decode(&envelope.ciphertext)?;
     let auth_tag = hex_decode(&envelope.auth_tag)?;
 
+    #[allow(clippy::cast_possible_truncation)]
     let log_n = kp.n.trailing_zeros() as u8;
     let params = ScryptParams::new(log_n, kp.r, kp.p, kp.dklen as usize)
         .map_err(|e| VaultError::InvalidParams(e.to_string()))?;
@@ -200,9 +215,8 @@ fn decrypt_scrypt(envelope: &CryptoEnvelope, passphrase: &str) -> Result<SecretB
 }
 
 fn decrypt_hkdf(envelope: &CryptoEnvelope, token: &str) -> Result<SecretBytes, VaultError> {
-    let kp = match &envelope.kdfparams {
-        KdfParamsVariant::Hkdf(p) => p,
-        _ => return Err(VaultError::InvalidParams("expected HKDF kdfparams".into())),
+    let KdfParamsVariant::Hkdf(kp) = &envelope.kdfparams else {
+        return Err(VaultError::InvalidParams("expected HKDF kdfparams".into()));
     };
 
     if kp.dklen != HKDF_DKLEN {
@@ -360,6 +374,7 @@ fn hkdf_sha256(salt: &[u8], ikm: &[u8], info: &[u8], okm: &mut [u8]) {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
