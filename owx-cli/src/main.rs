@@ -38,6 +38,55 @@ enum Commands {
         #[command(subcommand)]
         action: SignAction,
     },
+    /// Send a signed transaction to the chain RPC.
+    Send {
+        /// Wallet name or ID.
+        wallet: String,
+        /// Chain name or CAIP-2 ID.
+        chain: String,
+        /// Hex-encoded transaction.
+        tx_hex: String,
+        /// RPC URL override.
+        #[arg(long)]
+        rpc: Option<String>,
+    },
+    /// Make an HTTP request with automatic x402 payment.
+    Pay {
+        /// URL to request.
+        url: String,
+        /// HTTP method.
+        #[arg(long, default_value = "GET")]
+        method: String,
+        /// Request body (JSON).
+        #[arg(long)]
+        body: Option<String>,
+    },
+    /// Discover payable services.
+    Discover {
+        /// Search query.
+        #[arg(long)]
+        query: Option<String>,
+        /// Max results.
+        #[arg(long, default_value = "20")]
+        limit: u64,
+    },
+    /// Fund a wallet via MoonPay.
+    Fund {
+        /// Chain name (default: base).
+        #[arg(long, default_value = "base")]
+        chain: String,
+        /// Token (default: USDC).
+        #[arg(long, default_value = "USDC")]
+        token: String,
+    },
+    /// Derive an address from a mnemonic.
+    Derive {
+        /// Chain name or CAIP-2 ID.
+        chain: String,
+        /// Account index.
+        #[arg(long, default_value = "0")]
+        index: u32,
+    },
 }
 
 #[derive(Subcommand)]
@@ -58,6 +107,17 @@ enum WalletAction {
         #[arg(long)]
         mnemonic: String,
     },
+    /// Import a wallet from a hex private key.
+    ImportKey {
+        /// Wallet name.
+        name: String,
+        /// Hex-encoded private key.
+        #[arg(long)]
+        key: String,
+        /// Source chain (evm, bitcoin, solana).
+        #[arg(long, default_value = "ethereum")]
+        chain: String,
+    },
     /// List all wallets.
     List,
     /// Show wallet details.
@@ -65,10 +125,18 @@ enum WalletAction {
         /// Wallet name or ID.
         name: String,
     },
-    /// Export wallet mnemonic.
+    /// Export wallet secret.
     Export {
         /// Wallet name or ID.
         name: String,
+    },
+    /// Rename a wallet.
+    Rename {
+        /// Current wallet name or ID.
+        name: String,
+        /// New name.
+        #[arg(long)]
+        new_name: String,
     },
     /// Delete a wallet.
     Delete {
@@ -150,11 +218,87 @@ fn main() {
 }
 
 /// Dispatch CLI commands.
+#[allow(clippy::print_stdout, clippy::expect_used, clippy::unwrap_in_result)]
 fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
     match cmd {
         Commands::Wallet { action } => run_wallet(action, agent),
         Commands::Key { action } => run_key(action, agent),
         Commands::Sign { action } => run_sign(action, agent),
+        Commands::Send {
+            wallet,
+            chain,
+            tx_hex,
+            rpc,
+        } => {
+            let cred = read_passphrase("Passphrase or API token: ");
+            let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+            let result = rt.block_on(agent.sign_and_send(
+                &wallet,
+                &chain,
+                &tx_hex,
+                &cred,
+                None,
+                rpc.as_deref(),
+            ))?;
+            println!("{}", result.tx_hash);
+            Ok(())
+        }
+        Commands::Pay { url, method, body } => {
+            println!("x402 pay: {method} {url}");
+            println!("(WalletBridge implementation required — use as library)");
+            if let Some(b) = &body {
+                println!("body: {b}");
+            }
+            Ok(())
+        }
+        Commands::Discover { query, limit } => {
+            let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+            let result = rt.block_on(owx_pay::discovery::discover(
+                query.as_deref(),
+                Some(limit),
+                None,
+            ))?;
+            println!(
+                "Found {} services (total: {})",
+                result.services.len(),
+                result.total
+            );
+            for svc in &result.services {
+                println!("  {} {} — {}", svc.price, svc.network, svc.url);
+            }
+            Ok(())
+        }
+        Commands::Fund { chain, token } => {
+            let wallets = agent.list_wallets()?;
+            let wallet_info = wallets.first().ok_or_else(|| {
+                owx::OwxError::InvalidInput("no wallets found; create one first".into())
+            })?;
+            let evm_account = wallet_info
+                .accounts
+                .iter()
+                .find(|a| a.chain_id.starts_with("eip155:"))
+                .ok_or_else(|| owx::OwxError::InvalidInput("no EVM account found".into()))?;
+
+            let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+            let result = rt.block_on(owx_pay::fund::fund(
+                &evm_account.address,
+                Some(&chain),
+                Some(&token),
+            ))?;
+            println!("Deposit URL: {}", result.deposit_url);
+            println!("Deposit ID: {}", result.deposit_id);
+            for (wchain, addr) in &result.wallets {
+                println!("  {wchain}: {addr}");
+            }
+            println!("{}", result.instructions);
+            Ok(())
+        }
+        Commands::Derive { chain, index } => {
+            let mnemonic = read_passphrase("Mnemonic: ");
+            let addr = owx::wallet_ops::derive_address(&mnemonic, &chain, Some(index))?;
+            println!("{addr}");
+            Ok(())
+        }
     }
 }
 
@@ -172,6 +316,11 @@ fn run_wallet(action: WalletAction, agent: &AgentWallet) -> Result<(), owx::OwxE
             let info = agent.import_mnemonic(&name, &mnemonic, &pass, 0)?;
             println!("{}", serde_json::to_string_pretty(&info).expect("json"));
         }
+        WalletAction::ImportKey { name, key, chain } => {
+            let pass = read_passphrase("Passphrase: ");
+            let info = agent.import_private_key(&name, &key, &chain, &pass)?;
+            println!("{}", serde_json::to_string_pretty(&info).expect("json"));
+        }
         WalletAction::List => {
             let wallets = agent.list_wallets()?;
             println!("{}", serde_json::to_string_pretty(&wallets).expect("json"));
@@ -182,8 +331,12 @@ fn run_wallet(action: WalletAction, agent: &AgentWallet) -> Result<(), owx::OwxE
         }
         WalletAction::Export { name } => {
             let pass = read_passphrase("Passphrase: ");
-            let mnemonic = agent.export_wallet(&name, &pass)?;
-            println!("{mnemonic}");
+            let secret = agent.export_wallet(&name, &pass)?;
+            println!("{secret}");
+        }
+        WalletAction::Rename { name, new_name } => {
+            agent.rename_wallet(&name, &new_name)?;
+            println!("renamed to {new_name}");
         }
         WalletAction::Delete { name } => {
             agent.delete_wallet(&name)?;

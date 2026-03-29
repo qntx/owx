@@ -2507,6 +2507,7 @@ dependencies = [
  "clap",
  "hex",
  "owx",
+ "owx-pay",
  "owx-vault",
  "serde_json",
  "tokio",

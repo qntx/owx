@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 owx.workspace = true
+owx-pay.workspace = true
 owx-vault.workspace = true
 clap.workspace = true
 hex.workspace = true
