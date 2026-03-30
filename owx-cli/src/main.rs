@@ -332,7 +332,7 @@ fn run(cmd: Commands, vault: &Vault) -> Result<(), owx::OwxError> {
             let phrase = owx::generate_mnemonic(words)?;
             print_json(&serde_json::json!({ "mnemonic": phrase }))
         }
-        Commands::Policy { action } => run_policy(action, &vault),
+        Commands::Policy { action } => run_policy(action, vault),
     }
 }
 
