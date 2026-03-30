@@ -22,17 +22,17 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Wallet management.
+    /// Wallet management commands.
     Wallet {
         #[command(subcommand)]
         action: WalletAction,
     },
-    /// API key management.
+    /// API key management commands.
     Key {
         #[command(subcommand)]
         action: KeyAction,
     },
-    /// Signing operations.
+    /// Signing operation commands.
     Sign {
         #[command(subcommand)]
         action: SignAction,
@@ -197,12 +197,12 @@ enum SignAction {
 fn main() {
     let cli = Cli::parse();
 
-    let vault = match &cli.vault {
+    let vault_result = match &cli.vault {
         Some(path) => Vault::open(path),
         None => Vault::open_default(),
     };
 
-    let vault = match vault {
+    let vault = match vault_result {
         Ok(v) => v,
         Err(e) => exit_with_error(&owx::OwxError::from(e)),
     };
@@ -388,6 +388,7 @@ fn run_sign(action: SignAction, vault: &Vault) -> Result<(), owx::OwxError> {
     Ok(())
 }
 
+/// Block on an async future using a one-shot tokio runtime.
 fn block_on<T, E, F>(future: F) -> Result<T, owx::OwxError>
 where
     F: Future<Output = Result<T, E>>,
@@ -400,18 +401,23 @@ where
 }
 
 #[allow(clippy::print_stdout)]
+/// Pretty-print a value as JSON to stdout.
 fn print_json<T: serde::Serialize>(value: &T) -> Result<(), owx::OwxError> {
     println!("{}", serde_json::to_string_pretty(value)?);
     Ok(())
 }
 
+/// JSON envelope for structured CLI error output.
 #[derive(serde::Serialize)]
 struct ErrorEnvelope<'a> {
+    /// Always `false` for error responses.
     success: bool,
+    /// The serialized error.
     error: &'a owx::OwxError,
 }
 
 #[allow(clippy::print_stderr)]
+/// Print a structured JSON error to stderr and exit with code 1.
 fn exit_with_error(error: &owx::OwxError) -> ! {
     let payload = ErrorEnvelope {
         success: false,
@@ -426,7 +432,7 @@ fn exit_with_error(error: &owx::OwxError) -> ! {
     std::process::exit(1)
 }
 
-/// Read a passphrase from stdin (with a prompt on stderr).
+/// Read a line from stdin with a prompt on stderr.
 #[allow(clippy::print_stderr, clippy::expect_used)]
 fn read_passphrase(prompt: &str) -> String {
     eprint!("{prompt}");
