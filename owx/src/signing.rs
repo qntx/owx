@@ -104,6 +104,7 @@ pub fn sign_typed_data(
     })
 }
 
+/// Dispatch typed-data signing based on secret type.
 fn sign_typed_data_with_secret(
     secret: &WalletSecret,
     index: u32,
@@ -122,6 +123,7 @@ fn sign_typed_data_with_secret(
     }
 }
 
+/// Resolve a wallet secret from either a passphrase or API token.
 fn resolve_wallet_secret(
     vault: &Vault,
     wallet_name_or_id: &str,
@@ -136,6 +138,7 @@ fn resolve_wallet_secret(
     }
 }
 
+/// Decode an unsigned EVM transaction into a [`TransactionContext`] for policy evaluation.
 fn evm_transaction_context(tx_bytes: &[u8], raw_hex: &str) -> Result<TransactionContext, OwxError> {
     use signer_evm::alloy_consensus::{Transaction as _, TypedTransaction};
 
@@ -151,6 +154,7 @@ fn evm_transaction_context(tx_bytes: &[u8], raw_hex: &str) -> Result<Transaction
     })
 }
 
+/// Dispatch message signing based on secret type.
 fn sign_message_with_secret(
     secret: &WalletSecret,
     chain_type: ChainType,
@@ -172,6 +176,7 @@ fn sign_message_with_secret(
     }
 }
 
+/// Dispatch EVM transaction signing based on secret type.
 fn sign_evm_transaction_with_secret(
     secret: &WalletSecret,
     index: u32,

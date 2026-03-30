@@ -29,6 +29,7 @@ fn wallet_to_info(w: &EncryptedWallet) -> WalletInfo {
     }
 }
 
+/// Encrypt a wallet secret with a passphrase and return the JSON envelope.
 fn encrypt_wallet_secret(
     secret: WalletSecret,
     passphrase: &str,

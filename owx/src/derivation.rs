@@ -154,6 +154,7 @@ pub fn sign_with_mnemonic(
     }
 }
 
+/// Sign a message with a raw private key for the given chain type.
 pub fn sign_with_private_key(
     chain_type: ChainType,
     private_key_hex: &str,
@@ -192,6 +193,7 @@ pub fn sign_with_private_key(
     }
 }
 
+/// Sign an EVM transaction with a mnemonic-derived key.
 pub fn sign_evm_transaction_with_mnemonic(
     mnemonic_phrase: &str,
     index: u32,
@@ -208,6 +210,7 @@ pub fn sign_evm_transaction_with_mnemonic(
     sign_evm_transaction_with_signer(&signer, tx_bytes)
 }
 
+/// Sign an EVM transaction with a raw private key.
 pub fn sign_evm_transaction_with_private_key(
     private_key_hex: &str,
     tx_bytes: &[u8],
@@ -217,6 +220,7 @@ pub fn sign_evm_transaction_with_private_key(
     sign_evm_transaction_with_signer(&signer, tx_bytes)
 }
 
+/// Sign an EVM transaction using an already-constructed signer.
 pub fn sign_evm_transaction_with_signer(
     signer: &signer::evm::Signer,
     tx_bytes: &[u8],
@@ -283,6 +287,7 @@ pub fn sign_typed_data_with_private_key(
     sign_typed_data_with_signer(&signer, typed_data_json)
 }
 
+/// Sign EIP-712 typed data using an already-constructed EVM signer.
 fn sign_typed_data_with_signer(
     signer: &signer::evm::Signer,
     typed_data_json: &str,

@@ -12,13 +12,17 @@ use zeroize::Zeroize;
 use crate::error::OwxError;
 use crate::secret::{WalletSecret, decrypt_wallet_secret, decrypt_wallet_secret_from_envelope};
 
+/// Context for an API-key-gated access request (used in policy evaluation).
 #[derive(Debug, Clone)]
 pub struct AccessRequest {
+    /// CAIP-2 chain ID.
     pub chain_id: String,
+    /// Transaction details for policy evaluation.
     pub transaction: TransactionContext,
 }
 
 impl AccessRequest {
+    /// Create a request context for message signing (no transaction details).
     pub fn message(chain_id: &str) -> Self {
         Self {
             chain_id: chain_id.to_owned(),
@@ -31,6 +35,7 @@ impl AccessRequest {
         }
     }
 
+    /// Create a request context for transaction signing.
     pub fn for_transaction(chain_id: &str, tx_context: TransactionContext) -> Self {
         Self {
             chain_id: chain_id.to_owned(),
@@ -39,6 +44,7 @@ impl AccessRequest {
     }
 }
 
+/// Convert an internal `ApiKeyFile` to the public `ApiKeyInfo` DTO.
 fn api_key_to_info(key_file: &ApiKeyFile) -> ApiKeyInfo {
     ApiKeyInfo {
         id: key_file.id.clone(),
