@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 
 use owx_core::policy::{PolicyContext, SpendingContext, TransactionContext};
+use owx_core::{ApiKeyCreateResult, ApiKeyInfo};
 use owx_vault::api_key::{self, ApiKeyFile};
 use owx_vault::crypto;
 use owx_vault::store::Vault;
@@ -40,23 +41,6 @@ impl AccessRequest {
             transaction: tx_context,
         }
     }
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct ApiKeyInfo {
-    pub id: String,
-    pub name: String,
-    pub created_at: String,
-    pub wallet_ids: Vec<String>,
-    pub policy_ids: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub expires_at: Option<String>,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct ApiKeyCreateResult {
-    pub token: String,
-    pub key: ApiKeyInfo,
 }
 
 fn api_key_to_info(key_file: &ApiKeyFile) -> ApiKeyInfo {

@@ -4,6 +4,7 @@
 
 use owx_core::chain::{ALL_CHAIN_TYPES, default_chain_for_type};
 use owx_core::wallet_file::{EncryptedWallet, WalletAccount};
+use owx_core::{AccountInfo, WalletInfo};
 use owx_vault::crypto;
 use owx_vault::store::Vault;
 use zeroize::Zeroize;
@@ -11,30 +12,6 @@ use zeroize::Zeroize;
 use crate::derivation;
 use crate::error::OwxError;
 use crate::wallet_secret::{WalletSecret, decrypt_wallet_secret};
-
-/// Public wallet info (no secrets).
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct WalletInfo {
-    /// Wallet ID.
-    pub id: String,
-    /// Human-readable name.
-    pub name: String,
-    /// Derived accounts.
-    pub accounts: Vec<AccountInfo>,
-    /// Creation timestamp.
-    pub created_at: String,
-}
-
-/// Public account info.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct AccountInfo {
-    /// CAIP-2 chain ID.
-    pub chain_id: String,
-    /// On-chain address.
-    pub address: String,
-    /// Derivation path used.
-    pub derivation_path: String,
-}
 
 /// Convert an encrypted wallet to a public-facing info struct.
 fn wallet_to_info(w: &EncryptedWallet) -> WalletInfo {
@@ -180,11 +157,12 @@ pub fn import_private_key(
     for ct in &ALL_CHAIN_TYPES {
         if secret.supports_chain(*ct) {
             let default = default_chain_for_type(*ct);
+            let chain_id = default.chain_id.into_owned();
             let address = derivation::derive_address_from_key(*ct, &key_bytes)?;
             accounts.push(WalletAccount {
-                account_id: format!("{}:{address}", default.chain_id),
+                account_id: format!("{chain_id}:{address}"),
                 address,
-                chain_id: default.chain_id.to_owned(),
+                chain_id,
                 derivation_path: String::new(),
             });
         }

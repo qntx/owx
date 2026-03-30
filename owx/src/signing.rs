@@ -5,27 +5,13 @@
 use owx_core::chain::ChainType;
 use owx_core::parse_chain;
 use owx_core::policy::TransactionContext;
+use owx_core::{SignResult, TransactionSignResult};
 use owx_vault::store::Vault;
 
 use crate::derivation;
 use crate::error::OwxError;
 use crate::key_ops::{self, AccessRequest};
 use crate::wallet_secret::{WalletSecret, decrypt_wallet_secret};
-
-/// Signature result.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct SignResult {
-    /// Hex-encoded signature bytes.
-    pub signature: String,
-}
-
-#[allow(missing_docs)]
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct TransactionSignResult {
-    pub signature: String,
-    pub signed_tx: String,
-    pub tx_hash: String,
-}
 
 /// Sign a message. The `credential` is either a passphrase or an API token (`owx_key_...`).
 pub fn sign_message(
@@ -38,7 +24,8 @@ pub fn sign_message(
 ) -> Result<SignResult, OwxError> {
     let chain_info = parse_chain(chain).map_err(OwxError::InvalidInput)?;
     let account_index = index.unwrap_or(0);
-    let request = AccessRequest::message(chain_info.chain_id);
+    let chain_id = chain_info.chain_id.to_string();
+    let request = AccessRequest::message(&chain_id);
 
     let secret = resolve_wallet_secret(vault, wallet_name_or_id, credential, &request)?;
     let sig_bytes =
@@ -69,8 +56,9 @@ pub fn sign_transaction(
     let tx_bytes = hex::decode(tx_hex_clean)
         .map_err(|e| OwxError::InvalidInput(format!("invalid hex transaction: {e}")))?;
     let account_index = index.unwrap_or(0);
+    let chain_id = chain_info.chain_id.to_string();
     let request = AccessRequest::for_transaction(
-        chain_info.chain_id,
+        &chain_id,
         evm_transaction_context(&tx_bytes, tx_hex_clean)?,
     );
     let secret = resolve_wallet_secret(vault, wallet_name_or_id, credential, &request)?;

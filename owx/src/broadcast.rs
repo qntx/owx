@@ -1,17 +1,10 @@
 //! Sign and broadcast transactions to chain RPCs.
 
-use owx_core::parse_chain;
+use owx_core::{SendResult, parse_chain};
 use owx_vault::store::Vault;
 
 use crate::error::OwxError;
 use crate::signing;
-
-/// Result of a sign-and-send operation.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct SendResult {
-    /// Transaction hash returned by the RPC.
-    pub tx_hash: String,
-}
 
 /// Sign a transaction and broadcast it to the chain's RPC endpoint.
 ///
@@ -37,7 +30,7 @@ pub async fn sign_and_send(
     let sign_result =
         signing::sign_transaction(vault, wallet_name_or_id, chain, tx_hex, credential, index)?;
 
-    let rpc = resolve_rpc_url(vault, chain_info.chain_id, rpc_url)?;
+    let rpc = resolve_rpc_url(vault, chain_info.chain_id.as_ref(), rpc_url)?;
     let tx_hash = broadcast_evm(&rpc, &sign_result.signed_tx).await?;
 
     Ok(SendResult { tx_hash })

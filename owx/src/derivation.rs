@@ -18,7 +18,7 @@ pub fn derive_all_accounts(
     let mut accounts = Vec::with_capacity(ALL_CHAIN_TYPES.len());
     for ct in &ALL_CHAIN_TYPES {
         let chain = default_chain_for_type(*ct);
-        let acct = derive_account_for_chain(&wallet, *ct, chain.chain_id, index)?;
+        let acct = derive_account_for_chain(&wallet, *ct, chain.chain_id.as_ref(), index)?;
         accounts.push(acct);
     }
     Ok(accounts)

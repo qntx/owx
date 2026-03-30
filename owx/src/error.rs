@@ -111,9 +111,7 @@ impl OwxError {
             },
             Self::Pay(inner) => match inner {
                 owx_pay::PayError::NotPaymentRequired(_) => OwxErrorCode::PaymentNotRequired,
-                owx_pay::PayError::ProtocolMalformed(_) => {
-                    OwxErrorCode::PaymentProtocolMalformed
-                }
+                owx_pay::PayError::ProtocolMalformed(_) => OwxErrorCode::PaymentProtocolMalformed,
                 owx_pay::PayError::Unsupported(_) => OwxErrorCode::PaymentUnsupported,
                 owx_pay::PayError::SigningFailed(_) => OwxErrorCode::PaymentSigningFailed,
                 owx_pay::PayError::Http(_) => OwxErrorCode::Http,
@@ -193,9 +191,9 @@ impl OwxError {
                 serde_json::json!({ "policy_id": policy_id, "reason": reason })
             }
             Self::ApiKeyExpired { id } => serde_json::json!({ "id": id }),
-            Self::InvalidInput(reason)
-            | Self::Derivation(reason)
-            | Self::Signing(reason) => serde_json::json!({ "reason": reason }),
+            Self::InvalidInput(reason) | Self::Derivation(reason) | Self::Signing(reason) => {
+                serde_json::json!({ "reason": reason })
+            }
             Self::Json(json_error) => serde_json::json!({ "reason": json_error.to_string() }),
         }
     }
@@ -249,10 +247,12 @@ mod tests {
         });
         let json = serde_json::to_value(&err).unwrap();
         assert_eq!(json["code"], "AMBIGUOUS_WALLET");
-        assert!(json["message"]
-            .as_str()
-            .unwrap()
-            .contains("ambiguous wallet name"));
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("ambiguous wallet name")
+        );
         assert_eq!(json["details"]["name"], "agent");
         assert_eq!(json["details"]["count"], 2);
     }

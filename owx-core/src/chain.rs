@@ -1,9 +1,12 @@
 //! Chain registry and CAIP-2 helpers.
 
+use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
+
+use crate::caip::ChainId;
 
 /// Supported chain families.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -21,68 +24,55 @@ pub enum ChainType {
 pub const ALL_CHAIN_TYPES: [ChainType; 3] = [ChainType::Evm, ChainType::Bitcoin, ChainType::Solana];
 
 /// A specific chain with its family type and CAIP-2 identifier.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chain {
     /// Human-readable name (e.g. "ethereum", "base").
-    pub name: &'static str,
+    pub name: Cow<'static, str>,
     /// Chain family.
     pub chain_type: ChainType,
     /// CAIP-2 chain ID (e.g. "eip155:1").
-    pub chain_id: &'static str,
+    pub chain_id: Cow<'static, str>,
+}
+
+impl Chain {
+    const fn known(name: &'static str, chain_type: ChainType, chain_id: &'static str) -> Self {
+        Self {
+            name: Cow::Borrowed(name),
+            chain_type,
+            chain_id: Cow::Borrowed(chain_id),
+        }
+    }
+
+    fn custom(chain_type: ChainType, chain_id: ChainId) -> Self {
+        let chain_id = chain_id.to_string();
+        Self {
+            name: Cow::Owned(chain_id.clone()),
+            chain_type,
+            chain_id: Cow::Owned(chain_id),
+        }
+    }
 }
 
 /// Known chains registry.
 pub const KNOWN_CHAINS: &[Chain] = &[
-    Chain {
-        name: "ethereum",
-        chain_type: ChainType::Evm,
-        chain_id: "eip155:1",
-    },
-    Chain {
-        name: "polygon",
-        chain_type: ChainType::Evm,
-        chain_id: "eip155:137",
-    },
-    Chain {
-        name: "arbitrum",
-        chain_type: ChainType::Evm,
-        chain_id: "eip155:42161",
-    },
-    Chain {
-        name: "optimism",
-        chain_type: ChainType::Evm,
-        chain_id: "eip155:10",
-    },
-    Chain {
-        name: "base",
-        chain_type: ChainType::Evm,
-        chain_id: "eip155:8453",
-    },
-    Chain {
-        name: "bsc",
-        chain_type: ChainType::Evm,
-        chain_id: "eip155:56",
-    },
-    Chain {
-        name: "plasma",
-        chain_type: ChainType::Evm,
-        chain_id: "eip155:9745",
-    },
-    Chain {
-        name: "avalanche",
-        chain_type: ChainType::Evm,
-        chain_id: "eip155:43114",
-    },
-    Chain {
-        name: "solana",
-        chain_type: ChainType::Solana,
-        chain_id: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
-    },
-    Chain {
-        name: "bitcoin",
-        chain_type: ChainType::Bitcoin,
-        chain_id: "bip122:000000000019d6689c085ae165831e93",
-    },
+    Chain::known("ethereum", ChainType::Evm, "eip155:1"),
+    Chain::known("polygon", ChainType::Evm, "eip155:137"),
+    Chain::known("arbitrum", ChainType::Evm, "eip155:42161"),
+    Chain::known("optimism", ChainType::Evm, "eip155:10"),
+    Chain::known("base", ChainType::Evm, "eip155:8453"),
+    Chain::known("bsc", ChainType::Evm, "eip155:56"),
+    Chain::known("plasma", ChainType::Evm, "eip155:9745"),
+    Chain::known("avalanche", ChainType::Evm, "eip155:43114"),
+    Chain::known(
+        "solana",
+        ChainType::Solana,
+        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+    ),
+    Chain::known(
+        "bitcoin",
+        ChainType::Bitcoin,
+        "bip122:000000000019d6689c085ae165831e93",
+    ),
 ];
 
 /// Parse a chain string into a [`Chain`].
@@ -91,7 +81,7 @@ pub const KNOWN_CHAINS: &[Chain] = &[
 /// or CAIP-2 IDs ("eip155:1"). Unknown CAIP-2 IDs with a recognized namespace
 /// are accepted and mapped to the appropriate chain type.
 pub fn parse_chain(s: &str) -> Result<Chain, String> {
-    let lower = s.to_lowercase();
+    let lower = s.to_ascii_lowercase();
 
     let lookup = match lower.as_str() {
         "evm" => "ethereum",
@@ -99,22 +89,16 @@ pub fn parse_chain(s: &str) -> Result<Chain, String> {
     };
 
     if let Some(chain) = KNOWN_CHAINS.iter().find(|c| c.name == lookup) {
-        return Ok(*chain);
+        return Ok(chain.clone());
     }
 
     if let Some(chain) = KNOWN_CHAINS.iter().find(|c| c.chain_id == s) {
-        return Ok(*chain);
+        return Ok(chain.clone());
     }
 
-    if let Some((namespace, _reference)) = s.split_once(':')
-        && let Some(ct) = ChainType::from_namespace(namespace)
-    {
-        let leaked: &'static str = Box::leak(s.to_string().into_boxed_str());
-        return Ok(Chain {
-            name: leaked,
-            chain_type: ct,
-            chain_id: leaked,
-        });
+    let chain_id = ChainId::from_str(s).map_err(|error| error.to_string())?;
+    if let Some(chain_type) = ChainType::from_namespace(&chain_id.namespace) {
+        return Ok(Chain::custom(chain_type, chain_id));
     }
 
     Err(format!(
@@ -130,9 +114,10 @@ pub fn parse_chain(s: &str) -> Result<Chain, String> {
 #[must_use]
 pub fn default_chain_for_type(ct: ChainType) -> Chain {
     #[allow(clippy::expect_used)]
-    *KNOWN_CHAINS
+    KNOWN_CHAINS
         .iter()
         .find(|c| c.chain_type == ct)
+        .cloned()
         .expect("all chain types have a default chain")
 }
 

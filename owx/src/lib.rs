@@ -18,9 +18,9 @@ mod wallet_ops;
 mod wallet_secret;
 
 pub use agent::AgentWallet;
-pub use broadcast::SendResult;
 pub use error::{OwxError, OwxErrorCode};
-pub use key_ops::{ApiKeyCreateResult, ApiKeyInfo};
-pub use signing::{SignResult, TransactionSignResult};
-pub use wallet_ops::{AccountInfo, WalletInfo};
+pub use owx_core::{
+    AccountInfo, ApiKeyCreateResult, ApiKeyInfo, SendResult, SignResult, TransactionSignResult,
+    WalletInfo,
+};
 pub use wallet_secret::WalletSecret;

@@ -26,5 +26,8 @@ pub use chain::{
 pub use config::Config;
 pub use error::{OwxError, OwxErrorCode};
 pub use policy::{Policy, PolicyAction, PolicyContext, PolicyResult, PolicyRule};
-pub use types::WalletId;
+pub use types::{
+    AccountInfo, ApiKeyCreateResult, ApiKeyInfo, SendResult, SignResult, TransactionSignResult,
+    WalletId, WalletInfo,
+};
 pub use wallet_file::{EncryptedWallet, KeyType, WalletAccount};

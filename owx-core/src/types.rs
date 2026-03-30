@@ -1,11 +1,62 @@
 //! Core shared types.
 
+#![allow(missing_docs)]
+
 use serde::{Deserialize, Serialize};
 
 /// Unique wallet identifier (UUID v4).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct WalletId(pub String);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountInfo {
+    pub chain_id: String,
+    pub address: String,
+    pub derivation_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletInfo {
+    pub id: String,
+    pub name: String,
+    pub accounts: Vec<AccountInfo>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeyInfo {
+    pub id: String,
+    pub name: String,
+    pub created_at: String,
+    pub wallet_ids: Vec<String>,
+    pub policy_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeyCreateResult {
+    pub token: String,
+    pub key: ApiKeyInfo,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignResult {
+    pub signature: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransactionSignResult {
+    pub signature: String,
+    pub signed_tx: String,
+    pub tx_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SendResult {
+    pub tx_hash: String,
+}
 
 impl Default for WalletId {
     fn default() -> Self {

@@ -1,13 +1,16 @@
 //! The main [`AgentWallet`] orchestration type.
 
+use owx_core::{
+    ApiKeyCreateResult, ApiKeyInfo, SendResult, SignResult, TransactionSignResult, WalletInfo,
+};
 use owx_vault::store::Vault;
 
 use crate::WalletSecret;
-use crate::broadcast::{self, SendResult};
+use crate::broadcast;
 use crate::error::OwxError;
-use crate::key_ops::{self, ApiKeyCreateResult, ApiKeyInfo};
-use crate::signing::{self, SignResult, TransactionSignResult};
-use crate::wallet_ops::{self, WalletInfo};
+use crate::key_ops;
+use crate::signing;
+use crate::wallet_ops;
 
 /// Agent-native, self-custodial, policy-gated, multi-chain wallet.
 ///
