@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 use owx_core::api_key::ApiKeyFile;
 use owx_core::config::Config;
+use owx_core::policy::Policy;
 use owx_core::wallet_file::EncryptedWallet;
 
 use crate::error::VaultError;
@@ -15,6 +16,18 @@ use crate::permissions;
 pub struct Vault {
     /// Root path of the vault.
     root: PathBuf,
+}
+
+/// Validate that an ID is safe for use as a filename component.
+///
+/// Rejects path traversal sequences (`..`, `/`, `\`) and empty strings.
+fn sanitize_id(id: &str) -> Result<&str, VaultError> {
+    if id.is_empty() || id.contains('/') || id.contains('\\') || id.contains("..") || id == "." {
+        return Err(VaultError::InvalidInput(format!(
+            "invalid identifier (path traversal rejected): '{id}'"
+        )));
+    }
+    Ok(id)
 }
 
 impl Vault {
@@ -47,6 +60,7 @@ impl Vault {
 
     /// Save an encrypted wallet file.
     pub fn save_wallet(&self, wallet: &EncryptedWallet) -> Result<(), VaultError> {
+        sanitize_id(&wallet.id)?;
         let dir = self.wallets_dir()?;
         let path = dir.join(format!("{}.json", wallet.id));
         let json = serde_json::to_string_pretty(wallet)?;
@@ -96,6 +110,7 @@ impl Vault {
 
     /// Delete a wallet file by ID.
     pub fn delete_wallet(&self, id: &str) -> Result<(), VaultError> {
+        sanitize_id(id)?;
         let dir = self.wallets_dir()?;
         let path = dir.join(format!("{id}.json"));
         if !path.exists() {
@@ -132,6 +147,7 @@ impl Vault {
 
     /// Save an API key file.
     pub fn save_api_key(&self, key: &ApiKeyFile) -> Result<(), VaultError> {
+        sanitize_id(&key.id)?;
         let dir = self.keys_dir()?;
         let path = dir.join(format!("{}.json", key.id));
         let json = serde_json::to_string_pretty(key)?;
@@ -142,6 +158,7 @@ impl Vault {
 
     /// Load an API key by ID.
     pub fn load_api_key(&self, id: &str) -> Result<ApiKeyFile, VaultError> {
+        sanitize_id(id)?;
         let dir = self.keys_dir()?;
         let path = dir.join(format!("{id}.json"));
         if !path.exists() {
@@ -180,6 +197,7 @@ impl Vault {
 
     /// Delete an API key by ID.
     pub fn delete_api_key(&self, id: &str) -> Result<(), VaultError> {
+        sanitize_id(id)?;
         let dir = self.keys_dir()?;
         let path = dir.join(format!("{id}.json"));
         if !path.exists() {
@@ -195,8 +213,49 @@ impl Vault {
         Ok(dir)
     }
 
+    /// Save a policy.
+    pub fn save_policy(&self, policy: &Policy) -> Result<(), VaultError> {
+        sanitize_id(&policy.id)?;
+        let dir = self.policies_dir()?;
+        let path = dir.join(format!("{}.json", policy.id));
+        let json = serde_json::to_string_pretty(policy)?;
+        fs::write(&path, json).map_err(|e| VaultError::io(&path, e))
+    }
+
+    /// Load a policy by ID.
+    pub fn load_policy(&self, id: &str) -> Result<Policy, VaultError> {
+        sanitize_id(id)?;
+        let dir = self.policies_dir()?;
+        let path = dir.join(format!("{id}.json"));
+        if !path.exists() {
+            return Err(VaultError::PolicyNotFound(id.to_owned()));
+        }
+        let contents = fs::read_to_string(&path).map_err(|e| VaultError::io(&path, e))?;
+        Ok(serde_json::from_str(&contents)?)
+    }
+
+    /// List all policies, sorted alphabetically by name.
+    #[allow(clippy::print_stderr)]
+    pub fn list_policies(&self) -> Result<Vec<Policy>, VaultError> {
+        let dir = self.policies_dir()?;
+        let mut policies = Vec::new();
+        for entry in read_json_dir(&dir)? {
+            match serde_json::from_str::<Policy>(&entry.contents) {
+                Ok(p) => policies.push(p),
+                Err(e) => {
+                    #[cfg(debug_assertions)]
+                    eprintln!("warning: skipping {}: {e}", entry.path.display());
+                    let _ = e;
+                }
+            }
+        }
+        policies.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(policies)
+    }
+
     /// Save a raw policy JSON value by ID.
     pub fn save_policy_raw(&self, id: &str, json: &str) -> Result<(), VaultError> {
+        sanitize_id(id)?;
         let dir = self.policies_dir()?;
         let path = dir.join(format!("{id}.json"));
         fs::write(&path, json).map_err(|e| VaultError::io(&path, e))
@@ -204,6 +263,7 @@ impl Vault {
 
     /// Load a raw policy JSON string by ID.
     pub fn load_policy_raw(&self, id: &str) -> Result<String, VaultError> {
+        sanitize_id(id)?;
         let dir = self.policies_dir()?;
         let path = dir.join(format!("{id}.json"));
         if !path.exists() {
@@ -224,6 +284,7 @@ impl Vault {
 
     /// Delete a policy by ID.
     pub fn delete_policy(&self, id: &str) -> Result<(), VaultError> {
+        sanitize_id(id)?;
         let dir = self.policies_dir()?;
         let path = dir.join(format!("{id}.json"));
         if !path.exists() {
@@ -368,6 +429,43 @@ mod tests {
 
         vault.delete_api_key("k1").unwrap();
         assert!(vault.load_api_key("k1").is_err());
+    }
+
+    #[test]
+    fn path_traversal_in_save_rejected() {
+        let (_dir, vault) = temp_vault();
+        let wallet = dummy_wallet("../../../etc/passwd", "evil");
+        assert!(vault.save_wallet(&wallet).is_err());
+    }
+
+    #[test]
+    fn path_traversal_in_delete_rejected() {
+        let (_dir, vault) = temp_vault();
+        vault.save_wallet(&dummy_wallet("legit", "legit")).unwrap();
+        assert!(vault.delete_wallet("../../../etc/passwd").is_err());
+        assert_eq!(vault.list_wallets().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn path_traversal_in_api_key_rejected() {
+        let (_dir, vault) = temp_vault();
+        assert!(vault.load_api_key("../secret").is_err());
+        assert!(vault.delete_api_key("../secret").is_err());
+    }
+
+    #[test]
+    fn path_traversal_in_policy_rejected() {
+        let (_dir, vault) = temp_vault();
+        assert!(vault.save_policy_raw("../evil", "{}").is_err());
+        assert!(vault.load_policy_raw("../evil").is_err());
+        assert!(vault.delete_policy("../evil").is_err());
+    }
+
+    #[test]
+    fn empty_id_rejected() {
+        let (_dir, vault) = temp_vault();
+        assert!(vault.delete_wallet("").is_err());
+        assert!(vault.load_api_key("").is_err());
     }
 
     #[test]

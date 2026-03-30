@@ -64,6 +64,11 @@ pub const KNOWN_CHAINS: &[Chain] = &[
         chain_id: "eip155:56",
     },
     Chain {
+        name: "plasma",
+        chain_type: ChainType::Evm,
+        chain_id: "eip155:9745",
+    },
+    Chain {
         name: "avalanche",
         chain_type: ChainType::Evm,
         chain_id: "eip155:43114",

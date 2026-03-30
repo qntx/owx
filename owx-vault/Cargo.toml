@@ -27,6 +27,10 @@ sha2.workspace = true
 thiserror.workspace = true
 zeroize.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+signal-hook.workspace = true
+
 [dev-dependencies]
 tempfile.workspace = true
 

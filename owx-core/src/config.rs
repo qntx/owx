@@ -5,6 +5,19 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+/// Backup configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupConfig {
+    /// Directory to store backups.
+    pub path: PathBuf,
+    /// Whether to create backups automatically on wallet mutation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_backup: Option<bool>,
+    /// Maximum number of backup snapshots to retain.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_backups: Option<u32>,
+}
+
 /// Application configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -13,6 +26,9 @@ pub struct Config {
     /// RPC endpoints keyed by CAIP-2 chain ID.
     #[serde(default)]
     pub rpc: HashMap<String, String>,
+    /// Optional backup configuration.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backup: Option<BackupConfig>,
 }
 
 impl Config {
@@ -29,6 +45,7 @@ impl Config {
                 "eip155:56".into(),
                 "https://bsc-dataseed.binance.org".into(),
             ),
+            ("eip155:9745".into(), "https://rpc.plasma.to".into()),
             (
                 "eip155:43114".into(),
                 "https://api.avax.network/ext/bc/C/rpc".into(),
@@ -73,6 +90,9 @@ impl Config {
             if !user_config.vault_path.as_os_str().is_empty() {
                 config.vault_path = user_config.vault_path;
             }
+            if user_config.backup.is_some() {
+                config.backup = user_config.backup;
+            }
         }
         config
     }
@@ -83,6 +103,7 @@ impl Default for Config {
         Self {
             vault_path: PathBuf::from(dirs_home()).join(".owx"),
             rpc: Self::default_rpc(),
+            backup: None,
         }
     }
 }

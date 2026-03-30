@@ -63,13 +63,16 @@ fn evaluate_rule(rule: &PolicyRule, policy_id: &str, ctx: &PolicyContext) -> Pol
             }
             _ => PolicyResult::allowed(),
         },
-        PolicyRule::DailyLimit {
-            amount: _,
-            asset: _,
-        } => {
-            // Daily limit requires external state (spending tracker). For now, pass-through.
-            // The orchestration layer can inject spending totals into the context.
-            PolicyResult::allowed()
+        PolicyRule::DailyLimit { amount, asset: _ } => {
+            let total = &ctx.spending.daily_total;
+            if value_exceeds(total, amount) {
+                PolicyResult::denied(
+                    policy_id,
+                    format!("daily spending {total} exceeds limit {amount}"),
+                )
+            } else {
+                PolicyResult::allowed()
+            }
         }
         PolicyRule::AllowedRecipients { addresses } => match &ctx.transaction.to {
             Some(to) if !addresses.iter().any(|a| a.eq_ignore_ascii_case(to)) => {
@@ -224,6 +227,36 @@ mod tests {
             }],
         );
         assert!(!evaluate(&[p], &ctx).allow);
+    }
+
+    #[test]
+    fn daily_limit_pass() {
+        let mut ctx = base_context();
+        ctx.spending.daily_total = "500".to_owned();
+        let p = policy_with_rules(
+            "d",
+            vec![PolicyRule::DailyLimit {
+                amount: "1000".into(),
+                asset: "native".into(),
+            }],
+        );
+        assert!(evaluate(&[p], &ctx).allow);
+    }
+
+    #[test]
+    fn daily_limit_deny() {
+        let mut ctx = base_context();
+        ctx.spending.daily_total = "2000".to_owned();
+        let p = policy_with_rules(
+            "d",
+            vec![PolicyRule::DailyLimit {
+                amount: "1000".into(),
+                asset: "native".into(),
+            }],
+        );
+        let r = evaluate(&[p], &ctx);
+        assert!(!r.allow);
+        assert!(r.reason.unwrap().contains("daily spending"));
     }
 
     #[test]
