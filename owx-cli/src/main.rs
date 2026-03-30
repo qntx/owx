@@ -11,29 +11,35 @@ use owx::Vault;
     name = "owx",
     about = "Agent-native, self-custodial, policy-gated, multi-chain wallet toolkit."
 )]
+/// Top-level CLI arguments.
 struct Cli {
     /// Path to the vault directory (default: ~/.owx).
     #[arg(long, global = true)]
     vault: Option<PathBuf>,
 
+    /// Subcommand to execute.
     #[command(subcommand)]
     command: Commands,
 }
 
+/// Top-level CLI subcommands.
 #[derive(Subcommand)]
 enum Commands {
     /// Wallet management commands.
     Wallet {
+        /// Wallet subcommand.
         #[command(subcommand)]
         action: WalletAction,
     },
     /// API key management commands.
     Key {
+        /// Key subcommand.
         #[command(subcommand)]
         action: KeyAction,
     },
     /// Signing operation commands.
     Sign {
+        /// Sign subcommand.
         #[command(subcommand)]
         action: SignAction,
     },
@@ -88,6 +94,7 @@ enum Commands {
     },
 }
 
+/// Wallet subcommands.
 #[derive(Subcommand)]
 enum WalletAction {
     /// Create a new wallet.
@@ -144,6 +151,7 @@ enum WalletAction {
     },
 }
 
+/// API key subcommands.
 #[derive(Subcommand)]
 enum KeyAction {
     /// Create an API key.
@@ -169,6 +177,7 @@ enum KeyAction {
     },
 }
 
+/// Signing subcommands.
 #[derive(Subcommand)]
 enum SignAction {
     /// Sign a message.
