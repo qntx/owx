@@ -14,7 +14,8 @@ pub struct SecretBytes(Vec<u8>);
 impl SecretBytes {
     /// Wrap raw bytes. On Unix, the buffer is mlocked immediately.
     #[must_use]
-    pub const fn new(bytes: Vec<u8>) -> Self {
+    #[allow(clippy::missing_const_for_fn)] // calls mlock on unix
+    pub fn new(bytes: Vec<u8>) -> Self {
         if !bytes.is_empty() {
             mlock_slice(bytes.as_ptr(), bytes.len());
         }

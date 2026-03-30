@@ -54,7 +54,8 @@ pub struct HardeningReport {
 /// On Unix: disables core dumps and ptrace attachment.
 /// On other platforms: no-op (returns false for both).
 #[must_use]
-pub const fn harden_process() -> HardeningReport {
+#[allow(clippy::missing_const_for_fn)] // calls FFI on unix
+pub fn harden_process() -> HardeningReport {
     #[cfg(unix)]
     {
         let core_dumps_disabled = disable_core_dumps();
