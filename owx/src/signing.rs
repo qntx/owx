@@ -4,11 +4,12 @@
 
 use owx_core::chain::ChainType;
 use owx_core::parse_chain;
+use owx_core::policy::TransactionContext;
 use owx_vault::store::Vault;
 
 use crate::derivation;
 use crate::error::OwxError;
-use crate::key_ops;
+use crate::key_ops::{self, AccessRequest};
 use crate::wallet_secret::{WalletSecret, decrypt_wallet_secret};
 
 /// Signature result.
@@ -37,8 +38,9 @@ pub fn sign_message(
 ) -> Result<SignResult, OwxError> {
     let chain_info = parse_chain(chain).map_err(OwxError::InvalidInput)?;
     let account_index = index.unwrap_or(0);
+    let request = AccessRequest::message(chain_info.chain_id);
 
-    let secret = resolve_wallet_secret(vault, wallet_name_or_id, credential, chain_info.chain_id)?;
+    let secret = resolve_wallet_secret(vault, wallet_name_or_id, credential, &request)?;
     let sig_bytes =
         sign_message_with_secret(&secret, chain_info.chain_type, account_index, message)?;
 
@@ -67,7 +69,11 @@ pub fn sign_transaction(
     let tx_bytes = hex::decode(tx_hex_clean)
         .map_err(|e| OwxError::InvalidInput(format!("invalid hex transaction: {e}")))?;
     let account_index = index.unwrap_or(0);
-    let secret = resolve_wallet_secret(vault, wallet_name_or_id, credential, chain_info.chain_id)?;
+    let request = AccessRequest::for_transaction(
+        chain_info.chain_id,
+        evm_transaction_context(&tx_bytes, tx_hex_clean)?,
+    );
+    let secret = resolve_wallet_secret(vault, wallet_name_or_id, credential, &request)?;
     let (signature, signed_tx, tx_hash) =
         sign_evm_transaction_with_secret(&secret, account_index, &tx_bytes)?;
 
@@ -82,14 +88,29 @@ fn resolve_wallet_secret(
     vault: &Vault,
     wallet_name_or_id: &str,
     credential: &str,
-    chain_id: &str,
+    request: &AccessRequest,
 ) -> Result<WalletSecret, OwxError> {
     if owx_vault::api_key::is_api_token(credential) {
-        key_ops::resolve_wallet_secret_from_token(vault, credential, wallet_name_or_id, chain_id)
+        key_ops::resolve_wallet_secret_from_token(vault, credential, wallet_name_or_id, request)
     } else {
         let wallet = vault.load_wallet(wallet_name_or_id)?;
         decrypt_wallet_secret(&wallet, credential)
     }
+}
+
+fn evm_transaction_context(tx_bytes: &[u8], raw_hex: &str) -> Result<TransactionContext, OwxError> {
+    use signer_evm::alloy_consensus::{Transaction as _, TypedTransaction};
+
+    let typed_tx = TypedTransaction::decode_unsigned(&mut &tx_bytes[..])
+        .map_err(|e| OwxError::InvalidInput(format!("failed to decode EVM transaction: {e}")))?;
+    let data_hex = hex::encode(typed_tx.input());
+
+    Ok(TransactionContext {
+        to: typed_tx.to().map(|address| format!("{address}")),
+        value: Some(typed_tx.value().to_string()),
+        raw_hex: format!("0x{raw_hex}"),
+        data: (!data_hex.is_empty()).then(|| format!("0x{data_hex}")),
+    })
 }
 
 fn sign_message_with_secret(
@@ -135,6 +156,7 @@ fn sign_evm_transaction_with_secret(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::key_ops;
     use crate::wallet_ops;
 
     const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -196,5 +218,46 @@ mod tests {
 
         let result = sign_transaction(&vault, "w", "solana", "00", "pass", None);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn sign_transaction_with_api_key_respects_recipient_policy() {
+        let (_dir, vault) = temp_vault();
+        let wallet = wallet_ops::import_mnemonic(&vault, "w", TEST_MNEMONIC, "pass", 0).unwrap();
+        let policy = serde_json::json!({
+            "id": "recipient-policy",
+            "name": "Recipient Policy",
+            "version": 1,
+            "created_at": "2026-01-01T00:00:00Z",
+            "rules": [{
+                "type": "allowed_recipients",
+                "addresses": ["0x1111111111111111111111111111111111111111"]
+            }],
+            "action": "deny"
+        });
+        vault
+            .save_policy_raw("recipient-policy", &policy.to_string())
+            .unwrap();
+
+        let wallet_id = wallet.id;
+        let (token, _) = key_ops::create_api_key(
+            &vault,
+            "agent",
+            &[wallet_id],
+            &["recipient-policy".to_owned()],
+            "pass",
+            None,
+        )
+        .unwrap();
+
+        let result = sign_transaction(
+            &vault,
+            "w",
+            "ethereum",
+            "02df018001018252089400000000000000000000000000000000000000008080c0",
+            &token,
+            None,
+        );
+        assert!(matches!(result, Err(OwxError::PolicyDenied { .. })));
     }
 }

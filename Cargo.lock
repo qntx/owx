@@ -2510,6 +2510,7 @@ dependencies = [
  "owx",
  "owx-pay",
  "owx-vault",
+ "serde",
  "serde_json",
  "tokio",
 ]

@@ -1,7 +1,10 @@
+#![allow(clippy::missing_docs_in_private_items)]
+
 //! API key creation and token-based signing flows.
 
 use std::collections::HashMap;
 
+use owx_core::policy::{PolicyContext, SpendingContext, TransactionContext};
 use owx_vault::api_key::{self, ApiKeyFile};
 use owx_vault::crypto;
 use owx_vault::store::Vault;
@@ -11,6 +14,33 @@ use crate::error::OwxError;
 use crate::wallet_secret::{
     WalletSecret, decrypt_wallet_secret, decrypt_wallet_secret_from_envelope,
 };
+
+#[derive(Debug, Clone)]
+pub(crate) struct AccessRequest {
+    pub(crate) chain_id: String,
+    pub(crate) transaction: TransactionContext,
+}
+
+impl AccessRequest {
+    pub(crate) fn message(chain_id: &str) -> Self {
+        Self {
+            chain_id: chain_id.to_owned(),
+            transaction: TransactionContext {
+                to: None,
+                value: None,
+                raw_hex: String::new(),
+                data: None,
+            },
+        }
+    }
+
+    pub(crate) fn for_transaction(chain_id: &str, tx_context: TransactionContext) -> Self {
+        Self {
+            chain_id: chain_id.to_owned(),
+            transaction: tx_context,
+        }
+    }
+}
 
 /// Create an API key for agent access to one or more wallets.
 ///
@@ -75,7 +105,7 @@ pub(crate) fn resolve_wallet_secret_from_token(
     vault: &Vault,
     token: &str,
     wallet_name_or_id: &str,
-    chain_id: &str,
+    request: &AccessRequest,
 ) -> Result<WalletSecret, OwxError> {
     let token_hash = api_key::hash_token(token);
     let key_file = vault.load_api_key_by_token_hash(&token_hash)?;
@@ -92,17 +122,12 @@ pub(crate) fn resolve_wallet_secret_from_token(
 
     let policies = load_policies(vault, &key_file)?;
     if !policies.is_empty() {
-        let context = owx_policy::PolicyContext {
-            chain_id: chain_id.to_owned(),
+        let context = PolicyContext {
+            chain_id: request.chain_id.clone(),
             wallet_id: wallet.id.clone(),
             api_key_id: key_file.id.clone(),
-            transaction: owx_core::policy::TransactionContext {
-                to: None,
-                value: None,
-                raw_hex: String::new(),
-                data: None,
-            },
-            spending: owx_core::policy::SpendingContext {
+            transaction: request.transaction.clone(),
+            spending: SpendingContext {
                 daily_total: "0".to_owned(),
                 date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
             },
@@ -202,8 +227,13 @@ mod tests {
         assert!(token.starts_with("owx_key_"));
         assert_eq!(key_file.wallet_ids, vec![wallet_id]);
 
-        let secret =
-            resolve_wallet_secret_from_token(&vault, &token, "test-wallet", "eip155:8453").unwrap();
+        let secret = resolve_wallet_secret_from_token(
+            &vault,
+            &token,
+            "test-wallet",
+            &AccessRequest::message("eip155:8453"),
+        )
+        .unwrap();
         assert_eq!(secret.phrase(), Some(TEST_MNEMONIC));
     }
 
@@ -233,7 +263,12 @@ mod tests {
         )
         .unwrap();
 
-        let result = resolve_wallet_secret_from_token(&vault, &token, "test-wallet", "eip155:1");
+        let result = resolve_wallet_secret_from_token(
+            &vault,
+            &token,
+            "test-wallet",
+            &AccessRequest::message("eip155:1"),
+        );
         assert!(matches!(result, Err(OwxError::ApiKeyExpired { .. })));
     }
 
@@ -254,7 +289,12 @@ mod tests {
         )
         .unwrap();
 
-        let result = resolve_wallet_secret_from_token(&vault, &token, "test-wallet", "eip155:1");
+        let result = resolve_wallet_secret_from_token(
+            &vault,
+            &token,
+            "test-wallet",
+            &AccessRequest::message("eip155:1"),
+        );
         assert!(matches!(result, Err(OwxError::PolicyDenied { .. })));
     }
 }

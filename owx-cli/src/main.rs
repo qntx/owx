@@ -2,6 +2,7 @@
 
 #![allow(clippy::missing_docs_in_private_items)]
 
+use std::future::Future;
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
@@ -218,7 +219,7 @@ fn main() {
 }
 
 /// Dispatch CLI commands.
-#[allow(clippy::print_stdout, clippy::expect_used, clippy::unwrap_in_result)]
+#[allow(clippy::print_stdout)]
 fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
     match cmd {
         Commands::Wallet { action } => run_wallet(action, agent),
@@ -231,8 +232,7 @@ fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
             rpc,
         } => {
             let cred = read_passphrase("Passphrase or API token: ");
-            let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-            let result = rt.block_on(agent.sign_and_send(
+            let result = block_on(agent.sign_and_send(
                 &wallet,
                 &chain,
                 &tx_hex,
@@ -240,8 +240,7 @@ fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
                 None,
                 rpc.as_deref(),
             ))?;
-            println!("{}", result.tx_hash);
-            Ok(())
+            print_json(&result)
         }
         Commands::Pay { url, method, body } => {
             println!("x402 pay: {method} {url}");
@@ -252,21 +251,12 @@ fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
             Ok(())
         }
         Commands::Discover { query, limit } => {
-            let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-            let result = rt.block_on(owx_pay::discovery::discover(
+            let result = block_on(owx_pay::discovery::discover(
                 query.as_deref(),
                 Some(limit),
                 None,
             ))?;
-            println!(
-                "Found {} services (total: {})",
-                result.services.len(),
-                result.total
-            );
-            for svc in &result.services {
-                println!("  {} {} — {}", svc.price, svc.network, svc.url);
-            }
-            Ok(())
+            print_json(&result)
         }
         Commands::Fund { chain, token } => {
             let wallets = agent.list_wallets()?;
@@ -279,19 +269,12 @@ fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
                 .find(|a| a.chain_id.starts_with("eip155:"))
                 .ok_or_else(|| owx::OwxError::InvalidInput("no EVM account found".into()))?;
 
-            let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-            let result = rt.block_on(owx_pay::fund::fund(
+            let result = block_on(owx_pay::fund::fund(
                 &evm_account.address,
                 Some(&chain),
                 Some(&token),
             ))?;
-            println!("Deposit URL: {}", result.deposit_url);
-            println!("Deposit ID: {}", result.deposit_id);
-            for (wchain, addr) in &result.wallets {
-                println!("  {wchain}: {addr}");
-            }
-            println!("{}", result.instructions);
-            Ok(())
+            print_json(&result)
         }
         Commands::Derive { chain, index } => {
             let mnemonic = read_passphrase("Mnemonic: ");
@@ -303,31 +286,31 @@ fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
 }
 
 /// Execute wallet subcommands.
-#[allow(clippy::print_stdout, clippy::expect_used, clippy::unwrap_in_result)]
+#[allow(clippy::print_stdout)]
 fn run_wallet(action: WalletAction, agent: &AgentWallet) -> Result<(), owx::OwxError> {
     match action {
         WalletAction::Create { name, words } => {
             let pass = read_passphrase("Passphrase: ");
             let info = agent.create_wallet(&name, &pass, words)?;
-            println!("{}", serde_json::to_string_pretty(&info).expect("json"));
+            print_json(&info)?;
         }
         WalletAction::Import { name, mnemonic } => {
             let pass = read_passphrase("Passphrase: ");
             let info = agent.import_mnemonic(&name, &mnemonic, &pass, 0)?;
-            println!("{}", serde_json::to_string_pretty(&info).expect("json"));
+            print_json(&info)?;
         }
         WalletAction::ImportKey { name, key, chain } => {
             let pass = read_passphrase("Passphrase: ");
             let info = agent.import_private_key(&name, &key, &chain, &pass)?;
-            println!("{}", serde_json::to_string_pretty(&info).expect("json"));
+            print_json(&info)?;
         }
         WalletAction::List => {
             let wallets = agent.list_wallets()?;
-            println!("{}", serde_json::to_string_pretty(&wallets).expect("json"));
+            print_json(&wallets)?;
         }
         WalletAction::Info { name } => {
             let info = agent.get_wallet(&name)?;
-            println!("{}", serde_json::to_string_pretty(&info).expect("json"));
+            print_json(&info)?;
         }
         WalletAction::Export { name } => {
             let pass = read_passphrase("Passphrase: ");
@@ -359,14 +342,11 @@ fn run_key(action: KeyAction, agent: &AgentWallet) -> Result<(), owx::OwxError> 
             let pass = read_passphrase("Owner passphrase: ");
             let (token, key) =
                 agent.create_api_key(&name, &wallet, &policy, &pass, expires.as_deref())?;
-            println!("token: {token}");
-            println!("id: {}", key.id);
+            print_json(&serde_json::json!({ "token": token, "key": key }))?;
         }
         KeyAction::List => {
             let keys = agent.list_api_keys()?;
-            for k in &keys {
-                println!("{} {} (wallets: {})", k.id, k.name, k.wallet_ids.join(", "));
-            }
+            print_json(&keys)?;
         }
         KeyAction::Revoke { id } => {
             agent.revoke_api_key(&id)?;
@@ -395,9 +375,26 @@ fn run_sign(action: SignAction, agent: &AgentWallet) -> Result<(), owx::OwxError
             tx_hex,
         } => {
             let result = agent.sign_transaction(&wallet, &chain, &tx_hex, &cred, None)?;
-            println!("{}", serde_json::to_string_pretty(&result)?);
+            print_json(&result)?;
         }
     }
+    Ok(())
+}
+
+fn block_on<T, E, F>(future: F) -> Result<T, owx::OwxError>
+where
+    F: Future<Output = Result<T, E>>,
+    E: Into<owx::OwxError>,
+{
+    let runtime = tokio::runtime::Runtime::new().map_err(|e| {
+        owx::OwxError::InvalidInput(format!("failed to initialize tokio runtime: {e}"))
+    })?;
+    runtime.block_on(async move { future.await.map_err(Into::into) })
+}
+
+#[allow(clippy::print_stdout)]
+fn print_json<T: serde::Serialize>(value: &T) -> Result<(), owx::OwxError> {
+    println!("{}", serde_json::to_string_pretty(value)?);
     Ok(())
 }
 

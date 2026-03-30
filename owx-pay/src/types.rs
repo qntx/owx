@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Result of a payment flow.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PayResult {
     /// HTTP status code of the final response.
     pub status: u16,
@@ -14,7 +14,7 @@ pub struct PayResult {
 }
 
 /// Information about a completed payment.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PaymentInfo {
     /// Human-readable amount (e.g. "$0.01").
     pub amount: String,
@@ -144,7 +144,7 @@ pub struct Eip3009Authorization {
 }
 
 /// A discovered payable service.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Service {
     /// Human-readable name.
     pub name: String,
@@ -159,7 +159,7 @@ pub struct Service {
 }
 
 /// Result of a `discover()` call with pagination.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct DiscoverResult {
     /// Discovered services on this page.
     pub services: Vec<Service>,
@@ -220,7 +220,7 @@ pub struct Pagination {
 }
 
 /// Result of `fund()` call.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct FundResult {
     /// Deposit ID.
     pub deposit_id: String,
