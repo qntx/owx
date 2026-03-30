@@ -69,16 +69,14 @@ impl FromStr for ChainId {
     type Err = OwxError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (namespace, reference) = s.split_once(':').ok_or_else(|| OwxError::CaipParseError {
+        let (ns, ref_part) = s.split_once(':').ok_or_else(|| OwxError::CaipParseError {
             message: format!("expected 'namespace:reference', got '{s}'"),
         })?;
-        let namespace = namespace.to_owned();
-        let reference = reference.to_owned();
-        Self::validate_namespace(&namespace)?;
-        Self::validate_reference(&reference)?;
+        Self::validate_namespace(ns)?;
+        Self::validate_reference(ref_part)?;
         Ok(Self {
-            namespace,
-            reference,
+            namespace: ns.to_owned(),
+            reference: ref_part.to_owned(),
         })
     }
 }
