@@ -242,14 +242,13 @@ fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
             ))?;
             print_json(&result)
         }
-        Commands::Pay { url, method, body } => {
-            println!("x402 pay: {method} {url}");
-            println!("(WalletBridge implementation required — use as library)");
-            if let Some(b) = &body {
-                println!("body: {b}");
-            }
-            Ok(())
-        }
+        Commands::Pay { url, method, body } => print_json(&serde_json::json!({
+            "implemented": false,
+            "message": "CLI pay requires a WalletBridge implementation; use the library API",
+            "method": method,
+            "url": url,
+            "body": body,
+        })),
         Commands::Discover { query, limit } => {
             let result = block_on(owx_pay::discovery::discover(
                 query.as_deref(),
@@ -278,9 +277,12 @@ fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
         }
         Commands::Derive { chain, index } => {
             let mnemonic = read_passphrase("Mnemonic: ");
-            let addr = owx::wallet_ops::derive_address(&mnemonic, &chain, Some(index))?;
-            println!("{addr}");
-            Ok(())
+            let address = AgentWallet::derive_address(&mnemonic, &chain, Some(index))?;
+            print_json(&serde_json::json!({
+                "chain": chain,
+                "index": index,
+                "address": address,
+            }))
         }
     }
 }
@@ -315,15 +317,21 @@ fn run_wallet(action: WalletAction, agent: &AgentWallet) -> Result<(), owx::OwxE
         WalletAction::Export { name } => {
             let pass = read_passphrase("Passphrase: ");
             let secret = agent.export_wallet(&name, &pass)?;
-            println!("{secret}");
+            print_json(&secret)?;
         }
         WalletAction::Rename { name, new_name } => {
             agent.rename_wallet(&name, &new_name)?;
-            println!("renamed to {new_name}");
+            print_json(&serde_json::json!({
+                "status": "renamed",
+                "name": new_name,
+            }))?;
         }
         WalletAction::Delete { name } => {
             agent.delete_wallet(&name)?;
-            println!("deleted");
+            print_json(&serde_json::json!({
+                "status": "deleted",
+                "name": name,
+            }))?;
         }
     }
     Ok(())
@@ -340,9 +348,9 @@ fn run_key(action: KeyAction, agent: &AgentWallet) -> Result<(), owx::OwxError> 
             expires,
         } => {
             let pass = read_passphrase("Owner passphrase: ");
-            let (token, key) =
+            let result =
                 agent.create_api_key(&name, &wallet, &policy, &pass, expires.as_deref())?;
-            print_json(&serde_json::json!({ "token": token, "key": key }))?;
+            print_json(&result)?;
         }
         KeyAction::List => {
             let keys = agent.list_api_keys()?;
@@ -350,7 +358,10 @@ fn run_key(action: KeyAction, agent: &AgentWallet) -> Result<(), owx::OwxError> 
         }
         KeyAction::Revoke { id } => {
             agent.revoke_api_key(&id)?;
-            println!("revoked");
+            print_json(&serde_json::json!({
+                "status": "revoked",
+                "id": id,
+            }))?;
         }
     }
     Ok(())
@@ -367,7 +378,7 @@ fn run_sign(action: SignAction, agent: &AgentWallet) -> Result<(), owx::OwxError
             message,
         } => {
             let result = agent.sign_message(&wallet, &chain, message.as_bytes(), &cred, None)?;
-            println!("{}", result.signature);
+            print_json(&result)?;
         }
         SignAction::Transaction {
             wallet,

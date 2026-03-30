@@ -234,10 +234,9 @@ pub fn export_wallet(
     vault: &Vault,
     name_or_id: &str,
     passphrase: &str,
-) -> Result<String, OwxError> {
+) -> Result<WalletSecret, OwxError> {
     let wallet = vault.load_wallet(name_or_id)?;
-    let secret = decrypt_wallet_secret(&wallet, passphrase)?;
-    secret.export_string()
+    decrypt_wallet_secret(&wallet, passphrase)
 }
 
 #[cfg(test)]
@@ -271,7 +270,7 @@ mod tests {
         assert_eq!(info.accounts.len(), 3);
 
         let exported = export_wallet(&vault, "imported", "pass").unwrap();
-        assert_eq!(exported, TEST_MNEMONIC);
+        assert_eq!(exported.phrase(), Some(TEST_MNEMONIC));
     }
 
     #[test]
@@ -318,9 +317,13 @@ mod tests {
         );
 
         let exported = export_wallet(&vault, "pk-wallet", "pass").unwrap();
-        assert!(exported.contains("private_keys"));
-        assert!(exported.contains("secp256k1"));
-        assert!(!exported.contains("ed25519"));
+        assert!(matches!(
+            exported,
+            WalletSecret::PrivateKeys {
+                secp256k1: Some(_),
+                ed25519: None,
+            }
+        ));
     }
 
     #[test]

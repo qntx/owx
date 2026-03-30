@@ -2,9 +2,10 @@
 
 use owx_vault::store::Vault;
 
+use crate::WalletSecret;
 use crate::broadcast::{self, SendResult};
 use crate::error::OwxError;
-use crate::key_ops;
+use crate::key_ops::{self, ApiKeyCreateResult, ApiKeyInfo};
 use crate::signing::{self, SignResult, TransactionSignResult};
 use crate::wallet_ops::{self, WalletInfo};
 
@@ -33,8 +34,9 @@ impl AgentWallet {
     }
 
     /// Get a reference to the underlying vault.
+    #[allow(dead_code)]
     #[must_use]
-    pub const fn vault(&self) -> &Vault {
+    pub(crate) const fn vault(&self) -> &Vault {
         &self.vault
     }
 
@@ -75,7 +77,11 @@ impl AgentWallet {
     }
 
     /// Export a wallet's mnemonic (requires owner passphrase).
-    pub fn export_wallet(&self, name_or_id: &str, passphrase: &str) -> Result<String, OwxError> {
+    pub fn export_wallet(
+        &self,
+        name_or_id: &str,
+        passphrase: &str,
+    ) -> Result<WalletSecret, OwxError> {
         wallet_ops::export_wallet(&self.vault, name_or_id, passphrase)
     }
 
@@ -89,7 +95,7 @@ impl AgentWallet {
         policy_ids: &[String],
         passphrase: &str,
         expires_at: Option<&str>,
-    ) -> Result<(String, owx_vault::ApiKeyFile), OwxError> {
+    ) -> Result<ApiKeyCreateResult, OwxError> {
         key_ops::create_api_key(
             &self.vault,
             name,
@@ -107,9 +113,8 @@ impl AgentWallet {
     }
 
     /// List all API keys.
-    pub fn list_api_keys(&self) -> Result<Vec<owx_vault::ApiKeyFile>, OwxError> {
-        let keys = self.vault.list_api_keys()?;
-        Ok(keys)
+    pub fn list_api_keys(&self) -> Result<Vec<ApiKeyInfo>, OwxError> {
+        key_ops::list_api_keys(&self.vault)
     }
 
     /// Sign a message. `credential` is either a passphrase or an API token.
@@ -226,7 +231,7 @@ mod tests {
         assert!(!sig.signature.is_empty());
 
         let exported = agent.export_wallet("w", "pass").unwrap();
-        assert_eq!(exported, TEST_MNEMONIC);
+        assert_eq!(exported.phrase(), Some(TEST_MNEMONIC));
     }
 
     #[test]
@@ -238,17 +243,22 @@ mod tests {
             .unwrap();
         let wallet_id = info.id;
 
-        let (token, key) = agent
+        let result = agent
             .create_api_key("agent-key", &[wallet_id], &[], "pass", None)
             .unwrap();
-        assert!(token.starts_with("owx_key_"));
+        assert!(result.token.starts_with("owx_key_"));
+        assert!(
+            !serde_json::to_string(&result.key)
+                .unwrap()
+                .contains("wallet_secrets")
+        );
 
         let sig = agent
-            .sign_message("w", "ethereum", b"hello", &token, None)
+            .sign_message("w", "ethereum", b"hello", &result.token, None)
             .unwrap();
         assert!(!sig.signature.is_empty());
 
-        agent.revoke_api_key(&key.id).unwrap();
+        agent.revoke_api_key(&result.key.id).unwrap();
     }
 
     #[test]

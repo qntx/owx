@@ -20,5 +20,7 @@ pub(crate) mod wallet_secret;
 pub use agent::AgentWallet;
 pub use broadcast::SendResult;
 pub use error::OwxError;
+pub use key_ops::{ApiKeyCreateResult, ApiKeyInfo};
 pub use signing::{SignResult, TransactionSignResult};
 pub use wallet_ops::{AccountInfo, WalletInfo};
+pub use wallet_secret::WalletSecret;

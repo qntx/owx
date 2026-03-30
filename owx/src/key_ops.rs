@@ -1,4 +1,4 @@
-#![allow(clippy::missing_docs_in_private_items)]
+#![allow(clippy::missing_docs_in_private_items, missing_docs)]
 
 //! API key creation and token-based signing flows.
 
@@ -42,6 +42,34 @@ impl AccessRequest {
     }
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ApiKeyInfo {
+    pub id: String,
+    pub name: String,
+    pub created_at: String,
+    pub wallet_ids: Vec<String>,
+    pub policy_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ApiKeyCreateResult {
+    pub token: String,
+    pub key: ApiKeyInfo,
+}
+
+fn api_key_to_info(key_file: &ApiKeyFile) -> ApiKeyInfo {
+    ApiKeyInfo {
+        id: key_file.id.clone(),
+        name: key_file.name.clone(),
+        created_at: key_file.created_at.clone(),
+        wallet_ids: key_file.wallet_ids.clone(),
+        policy_ids: key_file.policy_ids.clone(),
+        expires_at: key_file.expires_at.clone(),
+    }
+}
+
 /// Create an API key for agent access to one or more wallets.
 ///
 /// 1. Authenticates with the owner's passphrase
@@ -57,7 +85,7 @@ pub fn create_api_key(
     policy_ids: &[String],
     passphrase: &str,
     expires_at: Option<&str>,
-) -> Result<(String, ApiKeyFile), OwxError> {
+) -> Result<ApiKeyCreateResult, OwxError> {
     let mut wallet_secrets = HashMap::new();
     let mut resolved_ids = Vec::with_capacity(wallet_ids.len());
     let token = api_key::generate_token();
@@ -91,7 +119,14 @@ pub fn create_api_key(
     };
 
     vault.save_api_key(&key_file)?;
-    Ok((token, key_file))
+    Ok(ApiKeyCreateResult {
+        token,
+        key: api_key_to_info(&key_file),
+    })
+}
+
+pub fn list_api_keys(vault: &Vault) -> Result<Vec<ApiKeyInfo>, OwxError> {
+    Ok(vault.list_api_keys()?.iter().map(api_key_to_info).collect())
 }
 
 /// Resolve a mnemonic from an API token (agent mode).
@@ -214,7 +249,7 @@ mod tests {
         let wallet_id = setup(&vault);
         setup_policy(&vault);
 
-        let (token, key_file) = create_api_key(
+        let result = create_api_key(
             &vault,
             "agent",
             std::slice::from_ref(&wallet_id),
@@ -224,12 +259,21 @@ mod tests {
         )
         .unwrap();
 
-        assert!(token.starts_with("owx_key_"));
-        assert_eq!(key_file.wallet_ids, vec![wallet_id]);
+        assert!(result.token.starts_with("owx_key_"));
+        assert_eq!(result.key.wallet_ids, vec![wallet_id]);
+        assert!(
+            serde_json::to_string(&result.key)
+                .unwrap()
+                .contains("test-policy")
+        );
+
+        let listed = list_api_keys(&vault).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, result.key.id);
 
         let secret = resolve_wallet_secret_from_token(
             &vault,
-            &token,
+            &result.token,
             "test-wallet",
             &AccessRequest::message("eip155:8453"),
         )
@@ -253,7 +297,7 @@ mod tests {
         let vault = Vault::open(dir.path()).unwrap();
         let wallet_id = setup(&vault);
 
-        let (token, _) = create_api_key(
+        let result = create_api_key(
             &vault,
             "a",
             &[wallet_id],
@@ -263,13 +307,13 @@ mod tests {
         )
         .unwrap();
 
-        let result = resolve_wallet_secret_from_token(
+        let resolution = resolve_wallet_secret_from_token(
             &vault,
-            &token,
+            &result.token,
             "test-wallet",
             &AccessRequest::message("eip155:1"),
         );
-        assert!(matches!(result, Err(OwxError::ApiKeyExpired { .. })));
+        assert!(matches!(resolution, Err(OwxError::ApiKeyExpired { .. })));
     }
 
     #[test]
@@ -279,7 +323,7 @@ mod tests {
         let wallet_id = setup(&vault);
         setup_policy(&vault);
 
-        let (token, _) = create_api_key(
+        let result = create_api_key(
             &vault,
             "a",
             &[wallet_id],
@@ -289,12 +333,12 @@ mod tests {
         )
         .unwrap();
 
-        let result = resolve_wallet_secret_from_token(
+        let resolution = resolve_wallet_secret_from_token(
             &vault,
-            &token,
+            &result.token,
             "test-wallet",
             &AccessRequest::message("eip155:1"),
         );
-        assert!(matches!(result, Err(OwxError::PolicyDenied { .. })));
+        assert!(matches!(resolution, Err(OwxError::PolicyDenied { .. })));
     }
 }

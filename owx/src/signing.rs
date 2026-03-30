@@ -240,7 +240,7 @@ mod tests {
             .unwrap();
 
         let wallet_id = wallet.id;
-        let (token, _) = key_ops::create_api_key(
+        let result = key_ops::create_api_key(
             &vault,
             "agent",
             &[wallet_id],
@@ -250,14 +250,14 @@ mod tests {
         )
         .unwrap();
 
-        let result = sign_transaction(
+        let signing_result = sign_transaction(
             &vault,
             "w",
             "ethereum",
             "02df018001018252089400000000000000000000000000000000000000008080c0",
-            &token,
+            &result.token,
             None,
         );
-        assert!(matches!(result, Err(OwxError::PolicyDenied { .. })));
+        assert!(matches!(signing_result, Err(OwxError::PolicyDenied { .. })));
     }
 }
