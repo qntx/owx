@@ -16,13 +16,13 @@ use crate::wallet_secret::{
 };
 
 #[derive(Debug, Clone)]
-pub(crate) struct AccessRequest {
-    pub(crate) chain_id: String,
-    pub(crate) transaction: TransactionContext,
+pub struct AccessRequest {
+    pub chain_id: String,
+    pub transaction: TransactionContext,
 }
 
 impl AccessRequest {
-    pub(crate) fn message(chain_id: &str) -> Self {
+    pub fn message(chain_id: &str) -> Self {
         Self {
             chain_id: chain_id.to_owned(),
             transaction: TransactionContext {
@@ -34,7 +34,7 @@ impl AccessRequest {
         }
     }
 
-    pub(crate) fn for_transaction(chain_id: &str, tx_context: TransactionContext) -> Self {
+    pub fn for_transaction(chain_id: &str, tx_context: TransactionContext) -> Self {
         Self {
             chain_id: chain_id.to_owned(),
             transaction: tx_context,
@@ -136,7 +136,7 @@ pub fn list_api_keys(vault: &Vault) -> Result<Vec<ApiKeyInfo>, OwxError> {
 /// 3. Check wallet scope
 /// 4. Load and evaluate policies
 /// 5. HKDF(token) → decrypt wallet secret
-pub(crate) fn resolve_wallet_secret_from_token(
+pub fn resolve_wallet_secret_from_token(
     vault: &Vault,
     token: &str,
     wallet_name_or_id: &str,

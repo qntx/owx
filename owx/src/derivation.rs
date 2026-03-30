@@ -156,7 +156,7 @@ pub fn sign_with_mnemonic(
     }
 }
 
-pub(crate) fn sign_with_private_key(
+pub fn sign_with_private_key(
     chain_type: ChainType,
     private_key_hex: &str,
     message: &[u8],
@@ -194,7 +194,7 @@ pub(crate) fn sign_with_private_key(
     }
 }
 
-pub(crate) fn sign_evm_transaction_with_mnemonic(
+pub fn sign_evm_transaction_with_mnemonic(
     mnemonic_phrase: &str,
     index: u32,
     tx_bytes: &[u8],
@@ -210,7 +210,7 @@ pub(crate) fn sign_evm_transaction_with_mnemonic(
     sign_evm_transaction_with_signer(&signer, tx_bytes)
 }
 
-pub(crate) fn sign_evm_transaction_with_private_key(
+pub fn sign_evm_transaction_with_private_key(
     private_key_hex: &str,
     tx_bytes: &[u8],
 ) -> Result<(String, Vec<u8>, String), OwxError> {
@@ -219,7 +219,7 @@ pub(crate) fn sign_evm_transaction_with_private_key(
     sign_evm_transaction_with_signer(&signer, tx_bytes)
 }
 
-fn sign_evm_transaction_with_signer(
+pub fn sign_evm_transaction_with_signer(
     signer: &signer::evm::Signer,
     tx_bytes: &[u8],
 ) -> Result<(String, Vec<u8>, String), OwxError> {

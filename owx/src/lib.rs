@@ -8,14 +8,14 @@
 //! - [`owx_policy`] for policy enforcement
 //! - [`owx_pay`] for x402 payments
 
-pub mod agent;
-pub mod broadcast;
-pub mod derivation;
-pub mod error;
-pub mod key_ops;
-pub mod signing;
-pub mod wallet_ops;
-pub(crate) mod wallet_secret;
+mod agent;
+mod broadcast;
+mod derivation;
+mod error;
+mod key_ops;
+mod signing;
+mod wallet_ops;
+mod wallet_secret;
 
 pub use agent::AgentWallet;
 pub use broadcast::SendResult;

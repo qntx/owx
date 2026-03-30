@@ -206,15 +206,11 @@ fn main() {
 
     let agent = match agent_result {
         Ok(a) => a,
-        Err(e) => {
-            eprintln!("error: {e}");
-            std::process::exit(1);
-        }
+        Err(e) => exit_with_error(&e),
     };
 
     if let Err(e) = run(cli.command, &agent) {
-        eprintln!("error: {e}");
-        std::process::exit(1);
+        exit_with_error(&e);
     }
 }
 
@@ -407,6 +403,99 @@ where
 fn print_json<T: serde::Serialize>(value: &T) -> Result<(), owx::OwxError> {
     println!("{}", serde_json::to_string_pretty(value)?);
     Ok(())
+}
+
+#[allow(clippy::print_stderr)]
+fn exit_with_error(error: &owx::OwxError) -> ! {
+    let payload = error_json(error);
+    match serde_json::to_string_pretty(&payload) {
+        Ok(json) => eprintln!("{json}"),
+        Err(_) => eprintln!(
+            "{{\n  \"success\": false,\n  \"error\": {{\n    \"kind\": \"serialization\",\n    \"message\": \"failed to serialize CLI error output\"\n  }}\n}}"
+        ),
+    }
+    std::process::exit(1)
+}
+
+fn error_json(error: &owx::OwxError) -> serde_json::Value {
+    match error {
+        owx::OwxError::Vault(inner) => serde_json::json!({
+            "success": false,
+            "error": {
+                "kind": "vault",
+                "message": error.to_string(),
+                "details": inner.to_string(),
+            }
+        }),
+        owx::OwxError::Policy(inner) => serde_json::json!({
+            "success": false,
+            "error": {
+                "kind": "policy",
+                "message": error.to_string(),
+                "details": inner.to_string(),
+            }
+        }),
+        owx::OwxError::Pay(inner) => serde_json::json!({
+            "success": false,
+            "error": {
+                "kind": "pay",
+                "message": error.to_string(),
+                "details": inner.to_string(),
+            }
+        }),
+        owx::OwxError::PolicyDenied { policy_id, reason } => serde_json::json!({
+            "success": false,
+            "error": {
+                "kind": "policy_denied",
+                "message": error.to_string(),
+                "policy_id": policy_id,
+                "reason": reason,
+            }
+        }),
+        owx::OwxError::ApiKeyExpired { id } => serde_json::json!({
+            "success": false,
+            "error": {
+                "kind": "api_key_expired",
+                "message": error.to_string(),
+                "id": id,
+            }
+        }),
+        owx::OwxError::InvalidInput(message) => serde_json::json!({
+            "success": false,
+            "error": {
+                "kind": "invalid_input",
+                "message": message,
+            }
+        }),
+        owx::OwxError::Derivation(message) => serde_json::json!({
+            "success": false,
+            "error": {
+                "kind": "derivation",
+                "message": message,
+            }
+        }),
+        owx::OwxError::Signing(message) => serde_json::json!({
+            "success": false,
+            "error": {
+                "kind": "signing",
+                "message": message,
+            }
+        }),
+        owx::OwxError::Json(inner) => serde_json::json!({
+            "success": false,
+            "error": {
+                "kind": "json",
+                "message": inner.to_string(),
+            }
+        }),
+        _ => serde_json::json!({
+            "success": false,
+            "error": {
+                "kind": "unknown",
+                "message": error.to_string(),
+            }
+        }),
+    }
 }
 
 /// Read a passphrase from stdin (with a prompt on stderr).
