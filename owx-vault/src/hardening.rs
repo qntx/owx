@@ -99,6 +99,7 @@ pub fn install_signal_handlers() {
     install_unix_signal_handlers();
 }
 
+/// Install Unix signal handlers for graceful shutdown.
 #[cfg(unix)]
 fn install_unix_signal_handlers() {
     use signal_hook::consts::{SIGHUP, SIGINT, SIGQUIT, SIGTERM};
@@ -124,6 +125,7 @@ fn install_unix_signal_handlers() {
         .expect("failed to spawn signal handler thread");
 }
 
+/// Disable core dumps for the current process.
 #[cfg(target_os = "linux")]
 fn disable_core_dumps() -> bool {
     #[allow(unsafe_code)]
@@ -133,7 +135,7 @@ fn disable_core_dumps() -> bool {
             rlim_cur: 0,
             rlim_max: 0,
         };
-        let rlimit_ok = libc::setrlimit(libc::RLIMIT_CORE, &rlim) == 0;
+        let rlimit_ok = libc::setrlimit(libc::RLIMIT_CORE, std::ptr::addr_of!(rlim)) == 0;
         prctl_ok && rlimit_ok
     }
 }
@@ -146,7 +148,7 @@ fn disable_core_dumps() -> bool {
             rlim_cur: 0,
             rlim_max: 0,
         };
-        libc::setrlimit(libc::RLIMIT_CORE, &rlim) == 0
+        libc::setrlimit(libc::RLIMIT_CORE, std::ptr::addr_of!(rlim)) == 0
     }
 }
 
@@ -158,12 +160,13 @@ fn disable_core_dumps() -> bool {
             rlim_cur: 0,
             rlim_max: 0,
         };
-        libc::setrlimit(libc::RLIMIT_CORE, &rlim) == 0
+        libc::setrlimit(libc::RLIMIT_CORE, std::ptr::addr_of!(rlim)) == 0
     }
 }
 
+/// Disable ptrace/debugger attachment for the current process.
 #[cfg(target_os = "linux")]
-fn disable_ptrace() -> bool {
+const fn disable_ptrace() -> bool {
     true // PR_SET_DUMPABLE=0 already prevents ptrace on Linux
 }
 
