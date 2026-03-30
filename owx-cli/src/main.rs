@@ -136,6 +136,17 @@ enum WalletAction {
         #[arg(long, default_value = "ethereum")]
         chain: String,
     },
+    /// Import a wallet from explicit per-curve private keys.
+    ImportKeys {
+        /// Wallet name.
+        name: String,
+        /// Hex-encoded secp256k1 key (EVM/Bitcoin).
+        #[arg(long)]
+        secp256k1: Option<String>,
+        /// Hex-encoded ed25519 key (Solana).
+        #[arg(long)]
+        ed25519: Option<String>,
+    },
     /// List all wallets.
     List,
     /// Show wallet details.
@@ -353,6 +364,21 @@ fn run_wallet(action: WalletAction, vault: &Vault) -> Result<(), owx::OwxError> 
         WalletAction::ImportKey { name, key, chain } => {
             let pass = read_passphrase("Passphrase: ");
             let info = owx::import_private_key(vault, &name, &key, &chain, &pass)?;
+            print_json(&info)?;
+        }
+        WalletAction::ImportKeys {
+            name,
+            secp256k1,
+            ed25519,
+        } => {
+            let pass = read_passphrase("Passphrase: ");
+            let info = owx::import_private_keys(
+                vault,
+                &name,
+                secp256k1.as_deref(),
+                ed25519.as_deref(),
+                &pass,
+            )?;
             print_json(&info)?;
         }
         WalletAction::List => {

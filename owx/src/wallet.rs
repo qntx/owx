@@ -422,4 +422,47 @@ mod tests {
     fn generate_mnemonic_invalid_words() {
         assert!(generate_mnemonic(15).is_err());
     }
+
+    #[test]
+    fn import_dual_keys_all_chains() {
+        let (_dir, vault) = temp_vault();
+        let secp = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+        let ed = "1".repeat(64);
+        let info = import_private_keys(&vault, "dual", Some(secp), Some(&ed), "pass").unwrap();
+        assert_eq!(info.accounts.len(), 3);
+        assert!(
+            info.accounts
+                .iter()
+                .any(|a| a.chain_id.starts_with("eip155:"))
+        );
+        assert!(
+            info.accounts
+                .iter()
+                .any(|a| a.chain_id.starts_with("solana:"))
+        );
+        assert!(
+            info.accounts
+                .iter()
+                .any(|a| a.chain_id.starts_with("bip122:"))
+        );
+    }
+
+    #[test]
+    fn import_keys_secp_only() {
+        let (_dir, vault) = temp_vault();
+        let secp = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+        let info = import_private_keys(&vault, "secp-only", Some(secp), None, "pass").unwrap();
+        assert_eq!(info.accounts.len(), 2);
+        assert!(
+            info.accounts
+                .iter()
+                .all(|a| !a.chain_id.starts_with("solana:"))
+        );
+    }
+
+    #[test]
+    fn import_keys_no_keys_fails() {
+        let (_dir, vault) = temp_vault();
+        assert!(import_private_keys(&vault, "none", None, None, "pass").is_err());
+    }
 }
