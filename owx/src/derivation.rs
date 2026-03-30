@@ -1,3 +1,5 @@
+#![allow(clippy::missing_docs_in_private_items)]
+
 //! HD key derivation bridging kobe ecosystem.
 
 use owx_core::chain::{ALL_CHAIN_TYPES, ChainType, default_chain_for_type};
@@ -133,7 +135,9 @@ pub fn sign_with_mnemonic(
                 .map_err(|e| OwxError::Derivation(e.to_string()))?;
             let s = signer::btc::Signer::from_derived(&derived, signer::btc::Network::Bitcoin)
                 .map_err(|e| OwxError::Signing(e.to_string()))?;
-            let msg = std::str::from_utf8(message).unwrap_or("");
+            let msg = std::str::from_utf8(message).map_err(|_| {
+                OwxError::InvalidInput("bitcoin message must be valid UTF-8".into())
+            })?;
             let sig_b64 = s
                 .sign_message(msg)
                 .map_err(|e| OwxError::Signing(e.to_string()))?;
@@ -150,6 +154,108 @@ pub fn sign_with_mnemonic(
             Ok(sig.to_bytes().to_vec())
         }
     }
+}
+
+pub(crate) fn sign_with_private_key(
+    chain_type: ChainType,
+    private_key_hex: &str,
+    message: &[u8],
+) -> Result<Vec<u8>, OwxError> {
+    use signer::evm::SignerSync;
+    use signer::svm::ed25519_dalek::Signer as _;
+
+    match chain_type {
+        ChainType::Evm => {
+            let signer = signer::evm::Signer::from_hex(private_key_hex)
+                .map_err(|e| OwxError::Signing(e.to_string()))?;
+            let sig = signer
+                .sign_message_sync(message)
+                .map_err(|e| OwxError::Signing(e.to_string()))?;
+            Ok(sig.as_bytes().to_vec())
+        }
+        ChainType::Bitcoin => {
+            let signer =
+                signer::btc::Signer::from_hex(private_key_hex, signer::btc::Network::Bitcoin)
+                    .map_err(|e| OwxError::Signing(e.to_string()))?;
+            let msg = std::str::from_utf8(message).map_err(|_| {
+                OwxError::InvalidInput("bitcoin message must be valid UTF-8".into())
+            })?;
+            let sig_b64 = signer
+                .sign_message(msg)
+                .map_err(|e| OwxError::Signing(e.to_string()))?;
+            Ok(sig_b64.into_bytes())
+        }
+        ChainType::Solana => {
+            let signer = signer::svm::Signer::from_hex(private_key_hex)
+                .map_err(|e| OwxError::Signing(e.to_string()))?;
+            let sig = signer.sign(message);
+            Ok(sig.to_bytes().to_vec())
+        }
+    }
+}
+
+pub(crate) fn sign_evm_transaction_with_mnemonic(
+    mnemonic_phrase: &str,
+    index: u32,
+    tx_bytes: &[u8],
+) -> Result<(String, Vec<u8>, String), OwxError> {
+    let wallet = kobe::Wallet::from_mnemonic(mnemonic_phrase, None)
+        .map_err(|e| OwxError::Derivation(e.to_string()))?;
+    let deriver = kobe_evm::Deriver::new(&wallet);
+    let derived = deriver
+        .derive(index)
+        .map_err(|e| OwxError::Derivation(e.to_string()))?;
+    let signer = signer::evm::Signer::from_derived(&derived)
+        .map_err(|e| OwxError::Signing(e.to_string()))?;
+    sign_evm_transaction_with_signer(&signer, tx_bytes)
+}
+
+pub(crate) fn sign_evm_transaction_with_private_key(
+    private_key_hex: &str,
+    tx_bytes: &[u8],
+) -> Result<(String, Vec<u8>, String), OwxError> {
+    let signer = signer::evm::Signer::from_hex(private_key_hex)
+        .map_err(|e| OwxError::Signing(e.to_string()))?;
+    sign_evm_transaction_with_signer(&signer, tx_bytes)
+}
+
+fn sign_evm_transaction_with_signer(
+    signer: &signer::evm::Signer,
+    tx_bytes: &[u8],
+) -> Result<(String, Vec<u8>, String), OwxError> {
+    use signer::evm::TxSignerSync;
+    use signer_evm::alloy_consensus::{Signed, TxEnvelope, TypedTransaction};
+    use signer_evm::alloy_network::eip2718::Encodable2718;
+
+    let mut typed_tx = TypedTransaction::decode_unsigned(&mut &tx_bytes[..])
+        .map_err(|e| OwxError::InvalidInput(format!("failed to decode EVM transaction: {e}")))?;
+
+    let sig = signer
+        .sign_transaction_sync(&mut typed_tx)
+        .map_err(|e| OwxError::Signing(e.to_string()))?;
+
+    let tx_hash = typed_tx.tx_hash(&sig);
+    let envelope = match typed_tx {
+        TypedTransaction::Legacy(tx) => TxEnvelope::Legacy(Signed::new_unchecked(tx, sig, tx_hash)),
+        TypedTransaction::Eip2930(tx) => {
+            TxEnvelope::Eip2930(Signed::new_unchecked(tx, sig, tx_hash))
+        }
+        TypedTransaction::Eip1559(tx) => {
+            TxEnvelope::Eip1559(Signed::new_unchecked(tx, sig, tx_hash))
+        }
+        TypedTransaction::Eip4844(tx) => {
+            TxEnvelope::Eip4844(Signed::new_unchecked(tx, sig, tx_hash))
+        }
+        TypedTransaction::Eip7702(tx) => {
+            TxEnvelope::Eip7702(Signed::new_unchecked(tx, sig, tx_hash))
+        }
+    };
+
+    Ok((
+        format!("{sig}"),
+        envelope.encoded_2718(),
+        format!("{tx_hash}"),
+    ))
 }
 
 #[cfg(test)]
@@ -209,5 +315,31 @@ mod tests {
     fn sign_solana_message() {
         let sig = sign_with_mnemonic(TEST_MNEMONIC, ChainType::Solana, 0, b"hello").unwrap();
         assert_eq!(sig.len(), 64);
+    }
+
+    #[test]
+    fn sign_private_key_evm_message() {
+        let sig = sign_with_private_key(
+            ChainType::Evm,
+            "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+            b"hello",
+        )
+        .unwrap();
+        assert_eq!(sig.len(), 65);
+    }
+
+    #[test]
+    fn sign_evm_transaction_from_private_key() {
+        let unsigned_tx =
+            hex::decode("02df018001018252089400000000000000000000000000000000000000008080c0")
+                .unwrap();
+        let (signature, signed_tx, tx_hash) = sign_evm_transaction_with_private_key(
+            "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+            &unsigned_tx,
+        )
+        .unwrap();
+        assert!(!signature.is_empty());
+        assert!(!signed_tx.is_empty());
+        assert!(tx_hash.starts_with("0x"));
     }
 }

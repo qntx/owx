@@ -395,7 +395,7 @@ fn run_sign(action: SignAction, agent: &AgentWallet) -> Result<(), owx::OwxError
             tx_hex,
         } => {
             let result = agent.sign_transaction(&wallet, &chain, &tx_hex, &cred, None)?;
-            println!("{}", result.signature);
+            println!("{}", serde_json::to_string_pretty(&result)?);
         }
     }
     Ok(())

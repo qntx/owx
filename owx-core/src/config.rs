@@ -22,6 +22,7 @@ pub struct BackupConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Path to the vault directory.
+    #[serde(default = "default_vault_path")]
     pub vault_path: PathBuf,
     /// RPC endpoints keyed by CAIP-2 chain ID.
     #[serde(default)]
@@ -101,11 +102,16 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            vault_path: PathBuf::from(dirs_home()).join(".owx"),
+            vault_path: default_vault_path(),
             rpc: Self::default_rpc(),
             backup: None,
         }
     }
+}
+
+#[allow(clippy::missing_docs_in_private_items)]
+fn default_vault_path() -> PathBuf {
+    PathBuf::from(dirs_home()).join(".owx")
 }
 
 /// Best-effort home directory resolution.
@@ -174,5 +180,21 @@ mod tests {
         assert_eq!(cfg.rpc_url("eip155:11155111"), Some("https://sepolia.rpc"));
         assert_eq!(cfg.rpc_url("eip155:137"), Some("https://polygon-rpc.com"));
         assert_eq!(cfg.vault_path, PathBuf::from("/tmp/custom-vault"));
+    }
+
+    #[test]
+    fn load_partial_config_without_vault_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config.json");
+        let user_config = serde_json::json!({
+            "rpc": {
+                "eip155:1": "https://partial-eth.rpc"
+            }
+        });
+        std::fs::write(&config_path, serde_json::to_string(&user_config).unwrap()).unwrap();
+
+        let cfg = Config::load_or_default_from(&config_path);
+        assert_eq!(cfg.rpc_url("eip155:1"), Some("https://partial-eth.rpc"));
+        assert_eq!(cfg.rpc_url("eip155:137"), Some("https://polygon-rpc.com"));
     }
 }

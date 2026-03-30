@@ -1,12 +1,16 @@
+#![allow(clippy::missing_docs_in_private_items)]
+
 //! Wallet CRUD operations: create, import, export, delete.
 
-use owx_core::chain::{ALL_CHAIN_TYPES, ChainType, default_chain_for_type};
-use owx_core::wallet_file::{EncryptedWallet, KeyType, WalletAccount};
+use owx_core::chain::{ALL_CHAIN_TYPES, default_chain_for_type};
+use owx_core::wallet_file::{EncryptedWallet, WalletAccount};
 use owx_vault::crypto;
 use owx_vault::store::Vault;
+use zeroize::Zeroize;
 
 use crate::derivation;
 use crate::error::OwxError;
+use crate::wallet_secret::{WalletSecret, decrypt_wallet_secret};
 
 /// Public wallet info (no secrets).
 #[derive(Debug, Clone, serde::Serialize)]
@@ -50,6 +54,16 @@ fn wallet_to_info(w: &EncryptedWallet) -> WalletInfo {
     }
 }
 
+fn encrypt_wallet_secret(
+    secret: WalletSecret,
+    passphrase: &str,
+) -> Result<serde_json::Value, OwxError> {
+    let mut secret_bytes = secret.into_bytes()?;
+    let envelope = crypto::encrypt(&secret_bytes, passphrase)?;
+    secret_bytes.zeroize();
+    serde_json::to_value(&envelope).map_err(OwxError::from)
+}
+
 /// Create a new wallet: generate mnemonic, derive all-chain accounts, encrypt, store.
 pub fn create_wallet(
     vault: &Vault,
@@ -68,15 +82,16 @@ pub fn create_wallet(
     let phrase = kobe_wallet.mnemonic();
 
     let accounts = derivation::derive_all_accounts(phrase, 0)?;
-    let envelope = crypto::encrypt(phrase.as_bytes(), passphrase)?;
-    let crypto_json = serde_json::to_value(&envelope)?;
+    let secret = WalletSecret::mnemonic(phrase.to_owned());
+    let key_type = secret.key_type();
+    let crypto_json = encrypt_wallet_secret(secret, passphrase)?;
 
     let wallet = EncryptedWallet::new(
         uuid::Uuid::new_v4().to_string(),
         name.to_owned(),
         accounts,
         crypto_json,
-        KeyType::Mnemonic,
+        key_type,
     );
 
     vault.save_wallet(&wallet)?;
@@ -99,15 +114,16 @@ pub fn import_mnemonic(
 
     // Validate the mnemonic by attempting derivation
     let accounts = derivation::derive_all_accounts(mnemonic_phrase, index)?;
-    let envelope = crypto::encrypt(mnemonic_phrase.as_bytes(), passphrase)?;
-    let crypto_json = serde_json::to_value(&envelope)?;
+    let secret = WalletSecret::mnemonic(mnemonic_phrase.to_owned());
+    let key_type = secret.key_type();
+    let crypto_json = encrypt_wallet_secret(secret, passphrase)?;
 
     let wallet = EncryptedWallet::new(
         uuid::Uuid::new_v4().to_string(),
         name.to_owned(),
         accounts,
         crypto_json,
-        KeyType::Mnemonic,
+        key_type,
     );
 
     vault.save_wallet(&wallet)?;
@@ -144,8 +160,6 @@ pub fn import_private_key(
     chain: &str,
     passphrase: &str,
 ) -> Result<WalletInfo, OwxError> {
-    use zeroize::Zeroize;
-
     if vault.wallet_name_exists(name)? {
         return Err(OwxError::Vault(owx_vault::VaultError::WalletNameExists(
             name.to_owned(),
@@ -159,47 +173,31 @@ pub fn import_private_key(
     let key_bytes = hex::decode(trimmed)
         .map_err(|e| OwxError::InvalidInput(format!("invalid hex private key: {e}")))?;
 
-    let mut other_key = vec![0u8; 32];
-    getrandom::fill(&mut other_key)
-        .map_err(|e| OwxError::InvalidInput(format!("CSPRNG failed: {e}")))?;
-
-    let (secp256k1, ed25519) = match chain_info.chain_type {
-        ChainType::Evm | ChainType::Bitcoin => (key_bytes, other_key),
-        ChainType::Solana => (other_key, key_bytes),
-    };
-
-    let payload = serde_json::json!({
-        "secp256k1": hex::encode(&secp256k1),
-        "ed25519": hex::encode(&ed25519),
-    });
-    let mut payload_bytes = payload.to_string().into_bytes();
+    let secret = WalletSecret::private_key(chain_info.chain_type, hex::encode(&key_bytes));
+    let key_type = secret.key_type();
 
     let mut accounts = Vec::new();
     for ct in &ALL_CHAIN_TYPES {
-        let default = default_chain_for_type(*ct);
-        let key_for_chain = match ct {
-            ChainType::Evm | ChainType::Bitcoin => &secp256k1,
-            ChainType::Solana => &ed25519,
-        };
-        let address = derivation::derive_address_from_key(*ct, key_for_chain)?;
-        accounts.push(WalletAccount {
-            account_id: format!("{}:{address}", default.chain_id),
-            address,
-            chain_id: default.chain_id.to_owned(),
-            derivation_path: String::new(),
-        });
+        if secret.supports_chain(*ct) {
+            let default = default_chain_for_type(*ct);
+            let address = derivation::derive_address_from_key(*ct, &key_bytes)?;
+            accounts.push(WalletAccount {
+                account_id: format!("{}:{address}", default.chain_id),
+                address,
+                chain_id: default.chain_id.to_owned(),
+                derivation_path: String::new(),
+            });
+        }
     }
 
-    let envelope = crypto::encrypt(&payload_bytes, passphrase)?;
-    payload_bytes.zeroize();
-    let crypto_json = serde_json::to_value(&envelope)?;
+    let crypto_json = encrypt_wallet_secret(secret, passphrase)?;
 
     let wallet = EncryptedWallet::new(
         uuid::Uuid::new_v4().to_string(),
         name.to_owned(),
         accounts,
         crypto_json,
-        KeyType::PrivateKey,
+        key_type,
     );
 
     vault.save_wallet(&wallet)?;
@@ -238,22 +236,8 @@ pub fn export_wallet(
     passphrase: &str,
 ) -> Result<String, OwxError> {
     let wallet = vault.load_wallet(name_or_id)?;
-    let envelope: owx_vault::CryptoEnvelope = serde_json::from_value(wallet.crypto)?;
-    let secret = crypto::decrypt(&envelope, passphrase)?;
-
-    String::from_utf8(secret.expose().to_vec())
-        .map_err(|_| OwxError::InvalidInput("wallet contains invalid UTF-8".into()))
-}
-
-/// Decrypt the mnemonic from an encrypted wallet.
-pub(crate) fn decrypt_mnemonic(
-    wallet: &EncryptedWallet,
-    credential: &str,
-) -> Result<String, OwxError> {
-    let envelope: owx_vault::CryptoEnvelope = serde_json::from_value(wallet.crypto.clone())?;
-    let secret = crypto::decrypt(&envelope, credential)?;
-    String::from_utf8(secret.expose().to_vec())
-        .map_err(|_| OwxError::InvalidInput("wallet contains invalid UTF-8 mnemonic".into()))
+    let secret = decrypt_wallet_secret(&wallet, passphrase)?;
+    secret.export_string()
 }
 
 #[cfg(test)]
@@ -318,7 +302,7 @@ mod tests {
         let key_hex = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
         let info = import_private_key(&vault, "pk-wallet", key_hex, "ethereum", "pass").unwrap();
         assert_eq!(info.name, "pk-wallet");
-        assert_eq!(info.accounts.len(), 3);
+        assert_eq!(info.accounts.len(), 2);
 
         let evm = info
             .accounts
@@ -327,10 +311,16 @@ mod tests {
             .unwrap();
         assert!(evm.address.starts_with("0x"));
         assert!(evm.derivation_path.is_empty());
+        assert!(
+            info.accounts
+                .iter()
+                .all(|a| !a.chain_id.starts_with("solana:"))
+        );
 
         let exported = export_wallet(&vault, "pk-wallet", "pass").unwrap();
+        assert!(exported.contains("private_keys"));
         assert!(exported.contains("secp256k1"));
-        assert!(exported.contains("ed25519"));
+        assert!(!exported.contains("ed25519"));
     }
 
     #[test]

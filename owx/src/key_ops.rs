@@ -5,9 +5,12 @@ use std::collections::HashMap;
 use owx_vault::api_key::{self, ApiKeyFile};
 use owx_vault::crypto;
 use owx_vault::store::Vault;
+use zeroize::Zeroize;
 
 use crate::error::OwxError;
-use crate::wallet_ops;
+use crate::wallet_secret::{
+    WalletSecret, decrypt_wallet_secret, decrypt_wallet_secret_from_envelope,
+};
 
 /// Create an API key for agent access to one or more wallets.
 ///
@@ -31,9 +34,11 @@ pub fn create_api_key(
 
     for wid in wallet_ids {
         let wallet = vault.load_wallet(wid)?;
-        let mnemonic = wallet_ops::decrypt_mnemonic(&wallet, passphrase)?;
-
-        let hkdf_envelope = crypto::encrypt_hkdf(mnemonic.as_bytes(), &token)?;
+        let secret = decrypt_wallet_secret(&wallet, passphrase)?;
+        let mut secret_bytes = secret.into_bytes()?;
+        let encrypted_secret = crypto::encrypt_hkdf(&secret_bytes, &token);
+        secret_bytes.zeroize();
+        let hkdf_envelope = encrypted_secret?;
         let envelope_json = serde_json::to_value(&hkdf_envelope)?;
 
         wallet_secrets.insert(wallet.id.clone(), envelope_json);
@@ -65,13 +70,13 @@ pub fn create_api_key(
 /// 2. Check expiry
 /// 3. Check wallet scope
 /// 4. Load and evaluate policies
-/// 5. HKDF(token) → decrypt mnemonic
-pub(crate) fn resolve_mnemonic_from_token(
+/// 5. HKDF(token) → decrypt wallet secret
+pub(crate) fn resolve_wallet_secret_from_token(
     vault: &Vault,
     token: &str,
     wallet_name_or_id: &str,
     chain_id: &str,
-) -> Result<String, OwxError> {
+) -> Result<WalletSecret, OwxError> {
     let token_hash = api_key::hash_token(token);
     let key_file = vault.load_api_key_by_token_hash(&token_hash)?;
 
@@ -120,10 +125,7 @@ pub(crate) fn resolve_mnemonic_from_token(
     })?;
 
     let envelope: owx_vault::CryptoEnvelope = serde_json::from_value(envelope_value.clone())?;
-    let secret = crypto::decrypt(&envelope, token)?;
-
-    String::from_utf8(secret.expose().to_vec())
-        .map_err(|_| OwxError::InvalidInput("wallet contains invalid UTF-8 mnemonic".into()))
+    decrypt_wallet_secret_from_envelope(&envelope, token, wallet.key_type)
 }
 
 /// Check whether an API key has expired.
@@ -156,6 +158,7 @@ fn load_policies(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::wallet_ops;
 
     const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
@@ -199,9 +202,9 @@ mod tests {
         assert!(token.starts_with("owx_key_"));
         assert_eq!(key_file.wallet_ids, vec![wallet_id]);
 
-        let mnemonic =
-            resolve_mnemonic_from_token(&vault, &token, "test-wallet", "eip155:8453").unwrap();
-        assert_eq!(mnemonic, TEST_MNEMONIC);
+        let secret =
+            resolve_wallet_secret_from_token(&vault, &token, "test-wallet", "eip155:8453").unwrap();
+        assert_eq!(secret.phrase(), Some(TEST_MNEMONIC));
     }
 
     #[test]
@@ -230,7 +233,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = resolve_mnemonic_from_token(&vault, &token, "test-wallet", "eip155:1");
+        let result = resolve_wallet_secret_from_token(&vault, &token, "test-wallet", "eip155:1");
         assert!(matches!(result, Err(OwxError::ApiKeyExpired { .. })));
     }
 
@@ -251,7 +254,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = resolve_mnemonic_from_token(&vault, &token, "test-wallet", "eip155:1");
+        let result = resolve_wallet_secret_from_token(&vault, &token, "test-wallet", "eip155:1");
         assert!(matches!(result, Err(OwxError::PolicyDenied { .. })));
     }
 }

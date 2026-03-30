@@ -5,7 +5,7 @@ use owx_vault::store::Vault;
 use crate::broadcast::{self, SendResult};
 use crate::error::OwxError;
 use crate::key_ops;
-use crate::signing::{self, SignResult};
+use crate::signing::{self, SignResult, TransactionSignResult};
 use crate::wallet_ops::{self, WalletInfo};
 
 /// Agent-native, self-custodial, policy-gated, multi-chain wallet.
@@ -132,7 +132,7 @@ impl AgentWallet {
         tx_hex: &str,
         credential: &str,
         index: Option<u32>,
-    ) -> Result<SignResult, OwxError> {
+    ) -> Result<TransactionSignResult, OwxError> {
         signing::sign_transaction(&self.vault, wallet, chain, tx_hex, credential, index)
     }
 
@@ -249,5 +249,46 @@ mod tests {
         assert!(!sig.signature.is_empty());
 
         agent.revoke_api_key(&key.id).unwrap();
+    }
+
+    #[test]
+    fn private_key_wallet_signs_messages() {
+        let (_dir, agent) = temp_agent();
+
+        agent
+            .import_private_key(
+                "pk",
+                "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+                "ethereum",
+                "pass",
+            )
+            .unwrap();
+
+        let sig = agent
+            .sign_message("pk", "ethereum", b"hello", "pass", None)
+            .unwrap();
+        assert!(!sig.signature.is_empty());
+    }
+
+    #[test]
+    fn transaction_signing_returns_signed_tx() {
+        let (_dir, agent) = temp_agent();
+
+        agent
+            .import_mnemonic("w", TEST_MNEMONIC, "pass", 0)
+            .unwrap();
+
+        let result = agent
+            .sign_transaction(
+                "w",
+                "ethereum",
+                "02df018001018252089400000000000000000000000000000000000000008080c0",
+                "pass",
+                None,
+            )
+            .unwrap();
+        assert!(!result.signature.is_empty());
+        assert!(!result.signed_tx.is_empty());
+        assert!(result.tx_hash.starts_with("0x"));
     }
 }

@@ -15,6 +15,10 @@ pub mod error;
 pub mod key_ops;
 pub mod signing;
 pub mod wallet_ops;
+pub(crate) mod wallet_secret;
 
 pub use agent::AgentWallet;
+pub use broadcast::SendResult;
 pub use error::OwxError;
+pub use signing::{SignResult, TransactionSignResult};
+pub use wallet_ops::{AccountInfo, WalletInfo};

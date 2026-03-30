@@ -1,6 +1,5 @@
 //! Sign and broadcast transactions to chain RPCs.
 
-use owx_core::chain::ChainType;
 use owx_core::parse_chain;
 use owx_vault::store::Vault;
 
@@ -29,70 +28,40 @@ pub async fn sign_and_send(
 ) -> Result<SendResult, OwxError> {
     let chain_info = parse_chain(chain).map_err(OwxError::InvalidInput)?;
 
-    let tx_hex_clean = tx_hex.strip_prefix("0x").unwrap_or(tx_hex);
-    let tx_bytes = hex::decode(tx_hex_clean)
-        .map_err(|e| OwxError::InvalidInput(format!("invalid hex transaction: {e}")))?;
+    if chain_info.chain_type != owx_core::chain::ChainType::Evm {
+        return Err(OwxError::InvalidInput(
+            "sign_and_send is only implemented for EVM chains".into(),
+        ));
+    }
 
-    let sign_result = signing::sign_message(
-        vault,
-        wallet_name_or_id,
-        chain,
-        &tx_bytes,
-        credential,
-        index,
-    )?;
+    let sign_result =
+        signing::sign_transaction(vault, wallet_name_or_id, chain, tx_hex, credential, index)?;
 
-    let rpc = resolve_rpc_url(chain_info.chain_id, chain_info.chain_type, rpc_url)?;
-    let tx_hash = broadcast(
-        chain_info.chain_type,
-        &rpc,
-        &tx_bytes,
-        &sign_result.signature,
-    )
-    .await?;
+    let rpc = resolve_rpc_url(vault, chain_info.chain_id, rpc_url)?;
+    let tx_hash = broadcast_evm(&rpc, &sign_result.signed_tx).await?;
 
     Ok(SendResult { tx_hash })
 }
 
 /// Resolve the RPC URL: explicit > config > built-in default.
 fn resolve_rpc_url(
+    vault: &Vault,
     chain_id: &str,
-    chain_type: ChainType,
     explicit: Option<&str>,
 ) -> Result<String, OwxError> {
     if let Some(url) = explicit {
         return Ok(url.to_owned());
     }
 
-    let config = owx_core::Config::default();
+    let config_path = vault.root().join("config.json");
+    let config = owx_core::Config::load_or_default_from(&config_path);
     if let Some(url) = config.rpc_url(chain_id) {
         return Ok(url.to_owned());
-    }
-
-    let namespace = chain_type.namespace();
-    for (key, url) in &config.rpc {
-        if key.starts_with(namespace) {
-            return Ok(url.clone());
-        }
     }
 
     Err(OwxError::InvalidInput(format!(
         "no RPC URL configured for chain '{chain_id}'"
     )))
-}
-
-/// Dispatch broadcast to the correct chain handler.
-async fn broadcast(
-    chain_type: ChainType,
-    rpc_url: &str,
-    _tx_bytes: &[u8],
-    signature_hex: &str,
-) -> Result<String, OwxError> {
-    match chain_type {
-        ChainType::Evm => broadcast_evm(rpc_url, signature_hex).await,
-        ChainType::Bitcoin => broadcast_bitcoin(rpc_url, signature_hex).await,
-        ChainType::Solana => broadcast_solana(rpc_url, signature_hex).await,
-    }
 }
 
 /// Broadcast a signed EVM transaction via `eth_sendRawTransaction`.
@@ -102,45 +71,6 @@ async fn broadcast_evm(rpc_url: &str, signed_hex: &str) -> Result<String, OwxErr
         "jsonrpc": "2.0",
         "method": "eth_sendRawTransaction",
         "params": [hex_tx],
-        "id": 1
-    });
-
-    let resp = rpc_post_json(rpc_url, &body).await?;
-    extract_json_result(&resp)
-}
-
-/// Broadcast a signed Bitcoin transaction via Blockstream/Mempool REST API.
-async fn broadcast_bitcoin(rpc_url: &str, signed_hex: &str) -> Result<String, OwxError> {
-    let url = format!("{}/tx", rpc_url.trim_end_matches('/'));
-    let client = reqwest::Client::new();
-    let resp = client
-        .post(&url)
-        .header("content-type", "text/plain")
-        .body(signed_hex.to_owned())
-        .send()
-        .await
-        .map_err(|e| OwxError::InvalidInput(format!("broadcast failed: {e}")))?;
-
-    let body = resp.text().await.unwrap_or_default();
-    if body.is_empty() {
-        return Err(OwxError::InvalidInput(
-            "empty response from broadcast".into(),
-        ));
-    }
-    Ok(body.trim().to_owned())
-}
-
-/// Broadcast a signed Solana transaction via `sendTransaction` JSON-RPC.
-async fn broadcast_solana(rpc_url: &str, signed_hex: &str) -> Result<String, OwxError> {
-    use base64::Engine;
-    let signed_bytes = hex::decode(signed_hex)
-        .map_err(|e| OwxError::InvalidInput(format!("invalid signed tx hex: {e}")))?;
-    let b64_tx = base64::engine::general_purpose::STANDARD.encode(&signed_bytes);
-
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "method": "sendTransaction",
-        "params": [b64_tx, {"encoding": "base64"}],
         "id": 1
     });
 
