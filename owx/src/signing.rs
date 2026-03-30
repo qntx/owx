@@ -81,7 +81,7 @@ fn resolve_wallet_secret(
     if owx_vault::api_key::is_api_token(credential) {
         key_ops::resolve_wallet_secret_from_token(vault, credential, wallet_name_or_id, request)
     } else {
-        let wallet = vault.load_wallet(wallet_name_or_id)?;
+        let wallet = vault.wallets().load(wallet_name_or_id)?;
         decrypt_wallet_secret(&wallet, credential)
     }
 }
@@ -224,7 +224,8 @@ mod tests {
             "action": "deny"
         });
         vault
-            .save_policy_raw("recipient-policy", &policy.to_string())
+            .policies()
+            .save_raw("recipient-policy", &policy.to_string())
             .unwrap();
 
         let wallet_id = wallet.id;

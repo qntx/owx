@@ -73,9 +73,12 @@ pub fn create_api_key(
     let mut wallet_secrets = HashMap::new();
     let mut resolved_ids = Vec::with_capacity(wallet_ids.len());
     let token = api_key::generate_token();
+    let wallet_store = vault.wallets();
+    let policy_store = vault.policies();
+    let api_key_store = vault.api_keys();
 
     for wid in wallet_ids {
-        let wallet = vault.load_wallet(wid)?;
+        let wallet = wallet_store.load(wid)?;
         let secret = decrypt_wallet_secret(&wallet, passphrase)?;
         let mut secret_bytes = secret.into_bytes()?;
         let encrypted_secret = crypto::encrypt_hkdf(&secret_bytes, &token);
@@ -88,7 +91,7 @@ pub fn create_api_key(
     }
 
     for pid in policy_ids {
-        vault.load_policy(pid)?;
+        policy_store.load(pid)?;
     }
 
     let key_file = ApiKeyFile {
@@ -102,7 +105,7 @@ pub fn create_api_key(
         wallet_secrets,
     };
 
-    vault.save_api_key(&key_file)?;
+    api_key_store.save(&key_file)?;
     Ok(ApiKeyCreateResult {
         token,
         key: api_key_to_info(&key_file),
@@ -110,7 +113,12 @@ pub fn create_api_key(
 }
 
 pub fn list_api_keys(vault: &Vault) -> Result<Vec<ApiKeyInfo>, OwxError> {
-    Ok(vault.list_api_keys()?.iter().map(api_key_to_info).collect())
+    Ok(vault
+        .api_keys()
+        .list()?
+        .iter()
+        .map(api_key_to_info)
+        .collect())
 }
 
 /// Resolve a mnemonic from an API token (agent mode).
@@ -127,11 +135,11 @@ pub fn resolve_wallet_secret_from_token(
     request: &AccessRequest,
 ) -> Result<WalletSecret, OwxError> {
     let token_hash = api_key::hash_token(token);
-    let key_file = vault.load_api_key_by_token_hash(&token_hash)?;
+    let key_file = vault.api_keys().load_by_token_hash(&token_hash)?;
 
     check_expiry(&key_file)?;
 
-    let wallet = vault.load_wallet(wallet_name_or_id)?;
+    let wallet = vault.wallets().load(wallet_name_or_id)?;
     if !key_file.wallet_ids.contains(&wallet.id) {
         return Err(OwxError::InvalidInput(format!(
             "API key '{}' does not have access to wallet '{}'",
@@ -191,8 +199,9 @@ fn load_policies(
     key_file: &ApiKeyFile,
 ) -> Result<Vec<owx_policy::Policy>, OwxError> {
     let mut policies = Vec::with_capacity(key_file.policy_ids.len());
+    let policy_store = vault.policies();
     for pid in &key_file.policy_ids {
-        let policy = vault.load_policy(pid)?;
+        let policy = policy_store.load(pid)?;
         policies.push(policy);
     }
     Ok(policies)
@@ -222,7 +231,8 @@ mod tests {
             "action": "deny"
         });
         vault
-            .save_policy_raw("test-policy", &policy.to_string())
+            .policies()
+            .save_raw("test-policy", &policy.to_string())
             .unwrap();
     }
 

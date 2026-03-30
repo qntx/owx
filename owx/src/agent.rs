@@ -111,7 +111,7 @@ impl AgentWallet {
 
     /// Revoke (delete) an API key by ID.
     pub fn revoke_api_key(&self, id: &str) -> Result<(), OwxError> {
-        self.vault.delete_api_key(id)?;
+        self.vault.api_keys().delete(id)?;
         Ok(())
     }
 
