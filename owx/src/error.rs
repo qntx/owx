@@ -1,5 +1,7 @@
 //! Top-level error type for OWX.
 
+#![allow(clippy::missing_docs_in_private_items)]
+
 use serde::{Serialize, Serializer};
 
 #[allow(missing_docs)]
@@ -80,14 +82,13 @@ pub enum OwxError {
 struct ErrorPayload {
     code: OwxErrorCode,
     message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    details: Option<serde_json::Value>,
+    details: serde_json::Value,
 }
 
 impl OwxError {
     #[must_use]
     #[allow(missing_docs)]
-    pub fn code(&self) -> OwxErrorCode {
+    pub const fn code(&self) -> OwxErrorCode {
         match self {
             Self::Vault(inner) => match inner {
                 owx_vault::VaultError::Crypto(_) => OwxErrorCode::VaultCrypto,
@@ -128,9 +129,9 @@ impl OwxError {
         }
     }
 
-    fn details(&self) -> Option<serde_json::Value> {
+    fn details(&self) -> serde_json::Value {
         match self {
-            Self::Vault(inner) => Some(match inner {
+            Self::Vault(inner) => match inner {
                 owx_vault::VaultError::Crypto(reason)
                 | owx_vault::VaultError::InvalidParams(reason)
                 | owx_vault::VaultError::InvalidInput(reason)
@@ -152,11 +153,11 @@ impl OwxError {
                     "path": path,
                     "reason": source.to_string(),
                 }),
-                owx_vault::VaultError::Json(inner) => {
-                    serde_json::json!({ "source": "vault", "reason": inner.to_string() })
+                owx_vault::VaultError::Json(json_error) => {
+                    serde_json::json!({ "source": "vault", "reason": json_error.to_string() })
                 }
-            }),
-            Self::Policy(inner) => Some(match inner {
+            },
+            Self::Policy(inner) => match inner {
                 owx_policy::PolicyError::Denied { policy_id, reason } => {
                     serde_json::json!({
                         "source": "policy",
@@ -167,11 +168,11 @@ impl OwxError {
                 owx_policy::PolicyError::ExecutableFailed(reason) => {
                     serde_json::json!({ "source": "policy", "reason": reason })
                 }
-                owx_policy::PolicyError::Json(inner) => {
-                    serde_json::json!({ "source": "policy", "reason": inner.to_string() })
+                owx_policy::PolicyError::Json(json_error) => {
+                    serde_json::json!({ "source": "policy", "reason": json_error.to_string() })
                 }
-            }),
-            Self::Pay(inner) => Some(match inner {
+            },
+            Self::Pay(inner) => match inner {
                 owx_pay::PayError::NotPaymentRequired(status) => {
                     serde_json::json!({ "source": "pay", "status": status })
                 }
@@ -181,21 +182,21 @@ impl OwxError {
                 | owx_pay::PayError::InvalidInput(reason) => {
                     serde_json::json!({ "source": "pay", "reason": reason })
                 }
-                owx_pay::PayError::Http(inner) => {
-                    serde_json::json!({ "source": "pay", "reason": inner.to_string() })
+                owx_pay::PayError::Http(http_error) => {
+                    serde_json::json!({ "source": "pay", "reason": http_error.to_string() })
                 }
-                owx_pay::PayError::Json(inner) => {
-                    serde_json::json!({ "source": "pay", "reason": inner.to_string() })
+                owx_pay::PayError::Json(json_error) => {
+                    serde_json::json!({ "source": "pay", "reason": json_error.to_string() })
                 }
-            }),
+            },
             Self::PolicyDenied { policy_id, reason } => {
-                Some(serde_json::json!({ "policy_id": policy_id, "reason": reason }))
+                serde_json::json!({ "policy_id": policy_id, "reason": reason })
             }
-            Self::ApiKeyExpired { id } => Some(serde_json::json!({ "id": id })),
+            Self::ApiKeyExpired { id } => serde_json::json!({ "id": id }),
             Self::InvalidInput(reason)
             | Self::Derivation(reason)
-            | Self::Signing(reason) => Some(serde_json::json!({ "reason": reason })),
-            Self::Json(inner) => Some(serde_json::json!({ "reason": inner.to_string() })),
+            | Self::Signing(reason) => serde_json::json!({ "reason": reason }),
+            Self::Json(json_error) => serde_json::json!({ "reason": json_error.to_string() }),
         }
     }
 }
