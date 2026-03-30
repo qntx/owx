@@ -1,15 +1,15 @@
 //! Agent-native, self-custodial, policy-gated, multi-chain wallet toolkit.
 //!
 //! `owx` is the orchestration layer that combines:
+//! - [`owx_core`] for shared types and chain registry
 //! - [`kobe`] for HD key derivation
 //! - [`signer`] for chain-specific signing
-//! - [`owx_vault`] for encrypted storage
+//! - [`owx_vault`] for encrypted storage and process hardening
 //! - [`owx_policy`] for policy enforcement
 //! - [`owx_pay`] for x402 payments
 
 pub mod agent;
 pub mod broadcast;
-pub mod chain;
 pub mod derivation;
 pub mod error;
 pub mod key_ops;

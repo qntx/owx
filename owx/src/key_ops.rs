@@ -91,13 +91,13 @@ pub(crate) fn resolve_mnemonic_from_token(
             chain_id: chain_id.to_owned(),
             wallet_id: wallet.id.clone(),
             api_key_id: key_file.id.clone(),
-            transaction: owx_policy::types::TransactionContext {
+            transaction: owx_core::policy::TransactionContext {
                 to: None,
                 value: None,
                 raw_hex: String::new(),
                 data: None,
             },
-            spending: owx_policy::types::SpendingContext {
+            spending: owx_core::policy::SpendingContext {
                 daily_total: "0".to_owned(),
                 date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
             },

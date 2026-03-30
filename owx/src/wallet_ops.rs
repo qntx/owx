@@ -1,8 +1,9 @@
 //! Wallet CRUD operations: create, import, export, delete.
 
+use owx_core::chain::{ALL_CHAIN_TYPES, ChainType, default_chain_for_type};
+use owx_core::wallet_file::{EncryptedWallet, KeyType, WalletAccount};
 use owx_vault::crypto;
 use owx_vault::store::Vault;
-use owx_vault::wallet_file::{EncryptedWallet, KeyType};
 
 use crate::derivation;
 use crate::error::OwxError;
@@ -143,7 +144,6 @@ pub fn import_private_key(
     chain: &str,
     passphrase: &str,
 ) -> Result<WalletInfo, OwxError> {
-    use owx_vault::wallet_file::WalletAccount;
     use zeroize::Zeroize;
 
     if vault.wallet_name_exists(name)? {
@@ -152,7 +152,7 @@ pub fn import_private_key(
         )));
     }
 
-    let chain_info = crate::chain::parse_chain(chain).map_err(OwxError::InvalidInput)?;
+    let chain_info = owx_core::parse_chain(chain).map_err(OwxError::InvalidInput)?;
     let trimmed = private_key_hex
         .strip_prefix("0x")
         .unwrap_or(private_key_hex);
@@ -163,11 +163,9 @@ pub fn import_private_key(
     getrandom::fill(&mut other_key)
         .map_err(|e| OwxError::InvalidInput(format!("CSPRNG failed: {e}")))?;
 
-    let (secp256k1, ed25519) = match chain_info.family {
-        crate::chain::ChainFamily::Evm | crate::chain::ChainFamily::Bitcoin => {
-            (key_bytes, other_key)
-        }
-        crate::chain::ChainFamily::Solana => (other_key, key_bytes),
+    let (secp256k1, ed25519) = match chain_info.chain_type {
+        ChainType::Evm | ChainType::Bitcoin => (key_bytes, other_key),
+        ChainType::Solana => (other_key, key_bytes),
     };
 
     let payload = serde_json::json!({
@@ -177,13 +175,13 @@ pub fn import_private_key(
     let mut payload_bytes = payload.to_string().into_bytes();
 
     let mut accounts = Vec::new();
-    for family in &crate::chain::ALL_FAMILIES {
-        let default = crate::chain::default_chain(*family);
-        let key_for_chain = match family {
-            crate::chain::ChainFamily::Evm | crate::chain::ChainFamily::Bitcoin => &secp256k1,
-            crate::chain::ChainFamily::Solana => &ed25519,
+    for ct in &ALL_CHAIN_TYPES {
+        let default = default_chain_for_type(*ct);
+        let key_for_chain = match ct {
+            ChainType::Evm | ChainType::Bitcoin => &secp256k1,
+            ChainType::Solana => &ed25519,
         };
-        let address = derivation::derive_address_from_key(*family, key_for_chain)?;
+        let address = derivation::derive_address_from_key(*ct, key_for_chain)?;
         accounts.push(WalletAccount {
             account_id: format!("{}:{address}", default.chain_id),
             address,
@@ -220,7 +218,7 @@ pub fn derive_address(
     chain: &str,
     index: Option<u32>,
 ) -> Result<String, OwxError> {
-    let chain_info = crate::chain::parse_chain(chain).map_err(OwxError::InvalidInput)?;
+    let chain_info = owx_core::parse_chain(chain).map_err(OwxError::InvalidInput)?;
     let accounts = derivation::derive_all_accounts(mnemonic_phrase, index.unwrap_or(0))?;
     accounts
         .iter()

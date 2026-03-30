@@ -10,6 +10,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
+owx-core.workspace = true
 owx-vault.workspace = true
 owx-policy.workspace = true
 owx-pay.workspace = true

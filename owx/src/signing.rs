@@ -1,8 +1,8 @@
 //! Transaction and message signing operations.
 
+use owx_core::parse_chain;
 use owx_vault::store::Vault;
 
-use crate::chain::parse_chain;
 use crate::derivation;
 use crate::error::OwxError;
 use crate::key_ops;
@@ -29,7 +29,7 @@ pub fn sign_message(
 
     let mnemonic = resolve_mnemonic(vault, wallet_name_or_id, credential, chain_info.chain_id)?;
     let sig_bytes =
-        derivation::sign_with_mnemonic(&mnemonic, chain_info.family, account_index, message)?;
+        derivation::sign_with_mnemonic(&mnemonic, chain_info.chain_type, account_index, message)?;
 
     Ok(SignResult {
         signature: hex::encode(&sig_bytes),

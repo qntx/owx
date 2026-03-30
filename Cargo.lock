@@ -2482,6 +2482,7 @@ dependencies = [
  "kobe-btc",
  "kobe-evm",
  "kobe-svm",
+ "owx-core",
  "owx-pay",
  "owx-policy",
  "owx-vault",

@@ -1,8 +1,9 @@
 //! Sign and broadcast transactions to chain RPCs.
 
+use owx_core::chain::ChainType;
+use owx_core::parse_chain;
 use owx_vault::store::Vault;
 
-use crate::chain::{ChainFamily, parse_chain};
 use crate::error::OwxError;
 use crate::signing;
 
@@ -41,8 +42,14 @@ pub async fn sign_and_send(
         index,
     )?;
 
-    let rpc = resolve_rpc_url(chain_info.chain_id, chain_info.family, rpc_url)?;
-    let tx_hash = broadcast(chain_info.family, &rpc, &tx_bytes, &sign_result.signature).await?;
+    let rpc = resolve_rpc_url(chain_info.chain_id, chain_info.chain_type, rpc_url)?;
+    let tx_hash = broadcast(
+        chain_info.chain_type,
+        &rpc,
+        &tx_bytes,
+        &sign_result.signature,
+    )
+    .await?;
 
     Ok(SendResult { tx_hash })
 }
@@ -50,23 +57,19 @@ pub async fn sign_and_send(
 /// Resolve the RPC URL: explicit > config > built-in default.
 fn resolve_rpc_url(
     chain_id: &str,
-    family: ChainFamily,
+    chain_type: ChainType,
     explicit: Option<&str>,
 ) -> Result<String, OwxError> {
     if let Some(url) = explicit {
         return Ok(url.to_owned());
     }
 
-    let config = owx_vault::Config::default();
+    let config = owx_core::Config::default();
     if let Some(url) = config.rpc_url(chain_id) {
         return Ok(url.to_owned());
     }
 
-    let namespace = match family {
-        ChainFamily::Evm => "eip155",
-        ChainFamily::Bitcoin => "bip122",
-        ChainFamily::Solana => "solana",
-    };
+    let namespace = chain_type.namespace();
     for (key, url) in &config.rpc {
         if key.starts_with(namespace) {
             return Ok(url.clone());
@@ -80,15 +83,15 @@ fn resolve_rpc_url(
 
 /// Dispatch broadcast to the correct chain handler.
 async fn broadcast(
-    family: ChainFamily,
+    chain_type: ChainType,
     rpc_url: &str,
     _tx_bytes: &[u8],
     signature_hex: &str,
 ) -> Result<String, OwxError> {
-    match family {
-        ChainFamily::Evm => broadcast_evm(rpc_url, signature_hex).await,
-        ChainFamily::Bitcoin => broadcast_bitcoin(rpc_url, signature_hex).await,
-        ChainFamily::Solana => broadcast_solana(rpc_url, signature_hex).await,
+    match chain_type {
+        ChainType::Evm => broadcast_evm(rpc_url, signature_hex).await,
+        ChainType::Bitcoin => broadcast_bitcoin(rpc_url, signature_hex).await,
+        ChainType::Solana => broadcast_solana(rpc_url, signature_hex).await,
     }
 }
 

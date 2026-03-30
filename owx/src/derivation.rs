@@ -1,11 +1,11 @@
 //! HD key derivation bridging kobe ecosystem.
 
-use owx_vault::wallet_file::WalletAccount;
+use owx_core::chain::{ALL_CHAIN_TYPES, ChainType, default_chain_for_type};
+use owx_core::wallet_file::WalletAccount;
 
-use crate::chain::{ALL_FAMILIES, ChainFamily, default_chain};
 use crate::error::OwxError;
 
-/// Derive accounts for all chain families from a mnemonic at the given index.
+/// Derive accounts for all chain types from a mnemonic at the given index.
 pub fn derive_all_accounts(
     mnemonic_phrase: &str,
     index: u32,
@@ -13,24 +13,24 @@ pub fn derive_all_accounts(
     let wallet = kobe::Wallet::from_mnemonic(mnemonic_phrase, None)
         .map_err(|e| OwxError::Derivation(e.to_string()))?;
 
-    let mut accounts = Vec::with_capacity(ALL_FAMILIES.len());
-    for family in &ALL_FAMILIES {
-        let chain = default_chain(*family);
-        let acct = derive_account_for_family(&wallet, *family, chain.chain_id, index)?;
+    let mut accounts = Vec::with_capacity(ALL_CHAIN_TYPES.len());
+    for ct in &ALL_CHAIN_TYPES {
+        let chain = default_chain_for_type(*ct);
+        let acct = derive_account_for_chain(&wallet, *ct, chain.chain_id, index)?;
         accounts.push(acct);
     }
     Ok(accounts)
 }
 
-/// Derive a single account for a specific chain family.
-fn derive_account_for_family(
+/// Derive a single account for a specific chain type.
+fn derive_account_for_chain(
     wallet: &kobe::Wallet,
-    family: ChainFamily,
+    chain_type: ChainType,
     chain_id: &str,
     index: u32,
 ) -> Result<WalletAccount, OwxError> {
-    match family {
-        ChainFamily::Evm => {
+    match chain_type {
+        ChainType::Evm => {
             let deriver = kobe_evm::Deriver::new(wallet);
             let d = deriver
                 .derive(index)
@@ -42,7 +42,7 @@ fn derive_account_for_family(
                 derivation_path: d.path,
             })
         }
-        ChainFamily::Bitcoin => {
+        ChainType::Bitcoin => {
             let deriver = kobe_btc::Deriver::new(wallet, kobe_btc::Network::Mainnet)
                 .map_err(|e| OwxError::Derivation(e.to_string()))?;
             let d = deriver
@@ -55,7 +55,7 @@ fn derive_account_for_family(
                 derivation_path: d.path.to_string(),
             })
         }
-        ChainFamily::Solana => {
+        ChainType::Solana => {
             let deriver = kobe_svm::Deriver::new(wallet);
             let d = deriver
                 .derive(index)
@@ -70,9 +70,9 @@ fn derive_account_for_family(
     }
 }
 
-/// Derive an address from a raw private key for a given chain family.
+/// Derive an address from a raw private key for a given chain type.
 pub fn derive_address_from_key(
-    family: ChainFamily,
+    chain_type: ChainType,
     private_key: &[u8],
 ) -> Result<String, OwxError> {
     let key32: [u8; 32] = private_key.try_into().map_err(|_| {
@@ -82,28 +82,28 @@ pub fn derive_address_from_key(
         ))
     })?;
 
-    match family {
-        ChainFamily::Evm => {
+    match chain_type {
+        ChainType::Evm => {
             let s = signer::evm::Signer::from_bytes(&key32.into())
                 .map_err(|e| OwxError::Derivation(e.to_string()))?;
             Ok(format!("{}", s.address()))
         }
-        ChainFamily::Bitcoin => {
+        ChainType::Bitcoin => {
             let s = signer::btc::Signer::from_bytes(&key32, signer::btc::Network::Bitcoin)
                 .map_err(|e| OwxError::Derivation(e.to_string()))?;
             Ok(s.p2wpkh_address(signer::btc::Network::Bitcoin).to_string())
         }
-        ChainFamily::Solana => {
+        ChainType::Solana => {
             let s = signer::svm::Signer::from_bytes(&key32);
             Ok(s.address())
         }
     }
 }
 
-/// Sign a message with a mnemonic-derived key for the given chain family.
+/// Sign a message with a mnemonic-derived key for the given chain type.
 pub fn sign_with_mnemonic(
     mnemonic_phrase: &str,
-    family: ChainFamily,
+    chain_type: ChainType,
     index: u32,
     message: &[u8],
 ) -> Result<Vec<u8>, OwxError> {
@@ -112,8 +112,8 @@ pub fn sign_with_mnemonic(
     let wallet = kobe::Wallet::from_mnemonic(mnemonic_phrase, None)
         .map_err(|e| OwxError::Derivation(e.to_string()))?;
 
-    match family {
-        ChainFamily::Evm => {
+    match chain_type {
+        ChainType::Evm => {
             let deriver = kobe_evm::Deriver::new(&wallet);
             let derived = deriver
                 .derive(index)
@@ -125,7 +125,7 @@ pub fn sign_with_mnemonic(
                 .map_err(|e| OwxError::Signing(e.to_string()))?;
             Ok(sig.as_bytes().to_vec())
         }
-        ChainFamily::Bitcoin => {
+        ChainType::Bitcoin => {
             let deriver = kobe_btc::Deriver::new(&wallet, kobe_btc::Network::Mainnet)
                 .map_err(|e| OwxError::Derivation(e.to_string()))?;
             let derived = deriver
@@ -139,7 +139,7 @@ pub fn sign_with_mnemonic(
                 .map_err(|e| OwxError::Signing(e.to_string()))?;
             Ok(sig_b64.into_bytes())
         }
-        ChainFamily::Solana => {
+        ChainType::Solana => {
             let deriver = kobe_svm::Deriver::new(&wallet);
             let derived = deriver
                 .derive(index)
@@ -201,13 +201,13 @@ mod tests {
 
     #[test]
     fn sign_evm_message() {
-        let sig = sign_with_mnemonic(TEST_MNEMONIC, ChainFamily::Evm, 0, b"hello").unwrap();
+        let sig = sign_with_mnemonic(TEST_MNEMONIC, ChainType::Evm, 0, b"hello").unwrap();
         assert_eq!(sig.len(), 65);
     }
 
     #[test]
     fn sign_solana_message() {
-        let sig = sign_with_mnemonic(TEST_MNEMONIC, ChainFamily::Solana, 0, b"hello").unwrap();
+        let sig = sign_with_mnemonic(TEST_MNEMONIC, ChainType::Solana, 0, b"hello").unwrap();
         assert_eq!(sig.len(), 64);
     }
 }
