@@ -1,32 +1,50 @@
 //! Top-level error type for OWX.
 
-#![allow(clippy::missing_docs_in_private_items)]
-
 use serde::{Serialize, Serializer};
 
-#[allow(missing_docs)]
+/// Structured error codes for API consumers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum OwxErrorCode {
+    /// Vault encryption/decryption failed.
     VaultCrypto,
+    /// Invalid KDF parameters (possible downgrade attack).
     VaultInvalidParams,
+    /// Wallet not found by name or ID.
     WalletNotFound,
+    /// Wallet name already exists.
     WalletNameExists,
+    /// Multiple wallets match the given name.
     AmbiguousWallet,
+    /// API key not found.
     ApiKeyNotFound,
+    /// Policy not found.
     PolicyNotFound,
+    /// Invalid input from the caller.
     InvalidInput,
+    /// File-system I/O error.
     Io,
+    /// JSON serialization/deserialization error.
     Json,
+    /// Policy denied the request.
     PolicyDenied,
+    /// Executable policy failed.
     PolicyExecutableFailed,
+    /// Server did not return 402.
     PaymentNotRequired,
+    /// Malformed x402 response.
     PaymentProtocolMalformed,
+    /// Unsupported payment chain/scheme.
     PaymentUnsupported,
+    /// Payment signing failed.
     PaymentSigningFailed,
+    /// HTTP request failed.
     Http,
+    /// API key expired.
     ApiKeyExpired,
+    /// HD key derivation error.
     Derivation,
+    /// Cryptographic signing error.
     Signing,
 }
 
@@ -78,16 +96,9 @@ pub enum OwxError {
     Json(#[from] serde_json::Error),
 }
 
-#[derive(Serialize)]
-struct ErrorPayload {
-    code: OwxErrorCode,
-    message: String,
-    details: serde_json::Value,
-}
-
 impl OwxError {
+    /// Returns the structured error code for this error.
     #[must_use]
-    #[allow(missing_docs)]
     pub const fn code(&self) -> OwxErrorCode {
         match self {
             Self::Vault(inner) => match inner {
@@ -126,77 +137,15 @@ impl OwxError {
             Self::Json(_) => OwxErrorCode::Json,
         }
     }
+}
 
-    fn details(&self) -> serde_json::Value {
-        match self {
-            Self::Vault(inner) => match inner {
-                owx_vault::VaultError::Crypto(reason)
-                | owx_vault::VaultError::InvalidParams(reason)
-                | owx_vault::VaultError::InvalidInput(reason)
-                | owx_vault::VaultError::PolicyNotFound(reason) => {
-                    serde_json::json!({ "source": "vault", "reason": reason })
-                }
-                owx_vault::VaultError::WalletNotFound(id)
-                | owx_vault::VaultError::WalletNameExists(id) => {
-                    serde_json::json!({ "source": "vault", "id": id })
-                }
-                owx_vault::VaultError::AmbiguousWallet { name, count } => {
-                    serde_json::json!({ "source": "vault", "name": name, "count": count })
-                }
-                owx_vault::VaultError::ApiKeyNotFound => {
-                    serde_json::json!({ "source": "vault" })
-                }
-                owx_vault::VaultError::Io { path, source } => serde_json::json!({
-                    "source": "vault",
-                    "path": path,
-                    "reason": source.to_string(),
-                }),
-                owx_vault::VaultError::Json(json_error) => {
-                    serde_json::json!({ "source": "vault", "reason": json_error.to_string() })
-                }
-            },
-            Self::Policy(inner) => match inner {
-                owx_policy::PolicyError::Denied { policy_id, reason } => {
-                    serde_json::json!({
-                        "source": "policy",
-                        "policy_id": policy_id,
-                        "reason": reason,
-                    })
-                }
-                owx_policy::PolicyError::ExecutableFailed(reason) => {
-                    serde_json::json!({ "source": "policy", "reason": reason })
-                }
-                owx_policy::PolicyError::Json(json_error) => {
-                    serde_json::json!({ "source": "policy", "reason": json_error.to_string() })
-                }
-            },
-            Self::Pay(inner) => match inner {
-                owx_pay::PayError::NotPaymentRequired(status) => {
-                    serde_json::json!({ "source": "pay", "status": status })
-                }
-                owx_pay::PayError::ProtocolMalformed(reason)
-                | owx_pay::PayError::Unsupported(reason)
-                | owx_pay::PayError::SigningFailed(reason)
-                | owx_pay::PayError::InvalidInput(reason) => {
-                    serde_json::json!({ "source": "pay", "reason": reason })
-                }
-                owx_pay::PayError::Http(http_error) => {
-                    serde_json::json!({ "source": "pay", "reason": http_error.to_string() })
-                }
-                owx_pay::PayError::Json(json_error) => {
-                    serde_json::json!({ "source": "pay", "reason": json_error.to_string() })
-                }
-            },
-            Self::PolicyDenied { policy_id, reason } => {
-                serde_json::json!({ "policy_id": policy_id, "reason": reason })
-            }
-            Self::ApiKeyExpired { id } => serde_json::json!({ "id": id }),
-            Self::InvalidInput(reason) | Self::Derivation(reason) | Self::Signing(reason) => {
-                serde_json::json!({ "reason": reason })
-            }
-            Self::Json(json_error) => serde_json::json!({ "reason": json_error.to_string() }),
-        }
-    }
+/// Serialization payload: `{"code": "...", "message": "..."}`.
+#[derive(Serialize)]
+struct ErrorPayload {
+    /// Structured error code.
+    code: OwxErrorCode,
+    /// Human-readable message.
+    message: String,
 }
 
 impl Serialize for OwxError {
@@ -204,7 +153,6 @@ impl Serialize for OwxError {
         ErrorPayload {
             code: self.code(),
             message: self.to_string(),
-            details: self.details(),
         }
         .serialize(serializer)
     }
@@ -240,7 +188,7 @@ mod tests {
     }
 
     #[test]
-    fn json_serialization_exposes_code_message_and_details() {
+    fn json_serialization_shape() {
         let err = OwxError::from(owx_vault::VaultError::AmbiguousWallet {
             name: "agent".into(),
             count: 2,
@@ -253,19 +201,22 @@ mod tests {
                 .unwrap()
                 .contains("ambiguous wallet name")
         );
-        assert_eq!(json["details"]["name"], "agent");
-        assert_eq!(json["details"]["count"], 2);
+        assert!(json.get("details").is_none());
     }
 
     #[test]
-    fn top_level_policy_denied_serialization_preserves_fields() {
+    fn policy_denied_serialization() {
         let err = OwxError::PolicyDenied {
             policy_id: "spending-limit".into(),
             reason: "exceeded daily limit".into(),
         };
         let json = serde_json::to_value(&err).unwrap();
         assert_eq!(json["code"], "POLICY_DENIED");
-        assert_eq!(json["details"]["policy_id"], "spending-limit");
-        assert_eq!(json["details"]["reason"], "exceeded daily limit");
+        assert!(
+            json["message"]
+                .as_str()
+                .unwrap()
+                .contains("exceeded daily limit")
+        );
     }
 }

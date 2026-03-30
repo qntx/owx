@@ -92,6 +92,18 @@ enum Commands {
         #[arg(long, default_value = "0")]
         index: u32,
     },
+    /// Generate a new BIP-39 mnemonic phrase (without creating a wallet).
+    Generate {
+        /// Number of words (12 or 24).
+        #[arg(long, default_value = "12")]
+        words: u32,
+    },
+    /// Policy management commands.
+    Policy {
+        /// Policy subcommand.
+        #[command(subcommand)]
+        action: PolicyAction,
+    },
 }
 
 /// Wallet subcommands.
@@ -189,6 +201,9 @@ enum SignAction {
         chain: String,
         /// Message to sign.
         message: String,
+        /// Message encoding: "utf8" (default) or "hex".
+        #[arg(long, default_value = "utf8")]
+        encoding: String,
     },
     /// Sign a transaction (hex-encoded).
     #[command(name = "tx")]
@@ -199,6 +214,31 @@ enum SignAction {
         chain: String,
         /// Hex-encoded transaction.
         tx_hex: String,
+    },
+}
+
+/// Policy subcommands.
+#[derive(Subcommand)]
+enum PolicyAction {
+    /// Create a policy from a JSON file or inline JSON.
+    Create {
+        /// Policy ID.
+        id: String,
+        /// Inline JSON policy definition.
+        #[arg(long)]
+        json: String,
+    },
+    /// List all policies.
+    List,
+    /// Show a policy by ID.
+    Info {
+        /// Policy ID.
+        id: String,
+    },
+    /// Delete a policy.
+    Delete {
+        /// Policy ID.
+        id: String,
     },
 }
 
@@ -288,6 +328,11 @@ fn run(cmd: Commands, vault: &Vault) -> Result<(), owx::OwxError> {
                 "address": address,
             }))
         }
+        Commands::Generate { words } => {
+            let phrase = owx::generate_mnemonic(words)?;
+            print_json(&serde_json::json!({ "mnemonic": phrase }))
+        }
+        Commands::Policy { action } => run_policy(action, &vault),
     }
 }
 
@@ -380,9 +425,15 @@ fn run_sign(action: SignAction, vault: &Vault) -> Result<(), owx::OwxError> {
             wallet,
             chain,
             message,
+            encoding,
         } => {
-            let result =
-                owx::sign_message(vault, &wallet, &chain, message.as_bytes(), &cred, None)?;
+            let msg_bytes = match encoding.as_str() {
+                "hex" => hex::decode(&message).map_err(|e| {
+                    owx::OwxError::InvalidInput(format!("invalid hex message: {e}"))
+                })?,
+                _ => message.into_bytes(),
+            };
+            let result = owx::sign_message(vault, &wallet, &chain, &msg_bytes, &cred, None)?;
             print_json(&result)?;
         }
         SignAction::Transaction {
@@ -392,6 +443,31 @@ fn run_sign(action: SignAction, vault: &Vault) -> Result<(), owx::OwxError> {
         } => {
             let result = owx::sign_transaction(vault, &wallet, &chain, &tx_hex, &cred, None)?;
             print_json(&result)?;
+        }
+    }
+    Ok(())
+}
+
+/// Execute policy subcommands.
+#[allow(clippy::print_stdout)]
+fn run_policy(action: PolicyAction, vault: &Vault) -> Result<(), owx::OwxError> {
+    match action {
+        PolicyAction::Create { id, json } => {
+            vault.save_policy_raw(&id, &json)?;
+            print_json(&serde_json::json!({ "status": "created", "id": id }))?;
+        }
+        PolicyAction::List => {
+            let policies = vault.list_policies()?;
+            print_json(&policies)?;
+        }
+        PolicyAction::Info { id } => {
+            let raw = vault.load_policy_raw(&id)?;
+            let value: serde_json::Value = serde_json::from_str(&raw)?;
+            print_json(&value)?;
+        }
+        PolicyAction::Delete { id } => {
+            vault.delete_policy(&id)?;
+            print_json(&serde_json::json!({ "status": "deleted", "id": id }))?;
         }
     }
     Ok(())

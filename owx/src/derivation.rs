@@ -1,29 +1,65 @@
-//! HD key derivation bridging kobe ecosystem.
+//! HD key derivation and signing bridges to the kobe/signer ecosystem.
 
 use owx_core::chain::{ALL_CHAIN_TYPES, ChainType, default_chain_for_type};
 use owx_core::wallet_file::WalletAccount;
 
 use crate::error::OwxError;
 
+/// Extension trait for converting arbitrary errors into [`OwxError`] variants.
+trait DerivationResultExt<T> {
+    /// Map the error to [`OwxError::Derivation`].
+    fn derive_err(self) -> Result<T, OwxError>;
+}
+
+impl<T, E: std::fmt::Display> DerivationResultExt<T> for Result<T, E> {
+    fn derive_err(self) -> Result<T, OwxError> {
+        self.map_err(|e| OwxError::Derivation(e.to_string()))
+    }
+}
+
+/// Extension trait for converting signing errors into [`OwxError::Signing`].
+trait SigningResultExt<T> {
+    /// Map the error to [`OwxError::Signing`].
+    fn sign_err(self) -> Result<T, OwxError>;
+}
+
+impl<T, E: std::fmt::Display> SigningResultExt<T> for Result<T, E> {
+    fn sign_err(self) -> Result<T, OwxError> {
+        self.map_err(|e| OwxError::Signing(e.to_string()))
+    }
+}
+
+/// Build a [`WalletAccount`] from derivation output.
+fn make_account(chain_id: &str, address: &str, path: &str) -> WalletAccount {
+    WalletAccount {
+        account_id: format!("{chain_id}:{address}"),
+        address: address.to_owned(),
+        chain_id: chain_id.to_owned(),
+        derivation_path: path.to_owned(),
+    }
+}
+
 /// Derive accounts for all chain types from a mnemonic at the given index.
 pub fn derive_all_accounts(
     mnemonic_phrase: &str,
     index: u32,
 ) -> Result<Vec<WalletAccount>, OwxError> {
-    let wallet = kobe::Wallet::from_mnemonic(mnemonic_phrase, None)
-        .map_err(|e| OwxError::Derivation(e.to_string()))?;
-
+    let wallet = kobe::Wallet::from_mnemonic(mnemonic_phrase, None).derive_err()?;
     let mut accounts = Vec::with_capacity(ALL_CHAIN_TYPES.len());
     for ct in &ALL_CHAIN_TYPES {
         let chain = default_chain_for_type(*ct);
-        let acct = derive_account_for_chain(&wallet, *ct, chain.chain_id.as_ref(), index)?;
-        accounts.push(acct);
+        accounts.push(derive_account(
+            &wallet,
+            *ct,
+            chain.chain_id.as_ref(),
+            index,
+        )?);
     }
     Ok(accounts)
 }
 
 /// Derive a single account for a specific chain type.
-fn derive_account_for_chain(
+fn derive_account(
     wallet: &kobe::Wallet,
     chain_type: ChainType,
     chain_id: &str,
@@ -31,41 +67,19 @@ fn derive_account_for_chain(
 ) -> Result<WalletAccount, OwxError> {
     match chain_type {
         ChainType::Evm => {
-            let deriver = kobe_evm::Deriver::new(wallet);
-            let d = deriver
-                .derive(index)
-                .map_err(|e| OwxError::Derivation(e.to_string()))?;
-            Ok(WalletAccount {
-                account_id: format!("{chain_id}:{}", d.address),
-                address: d.address.clone(),
-                chain_id: chain_id.to_owned(),
-                derivation_path: d.path,
-            })
+            let d = kobe_evm::Deriver::new(wallet).derive(index).derive_err()?;
+            Ok(make_account(chain_id, &d.address, &d.path))
         }
         ChainType::Bitcoin => {
-            let deriver = kobe_btc::Deriver::new(wallet, kobe_btc::Network::Mainnet)
-                .map_err(|e| OwxError::Derivation(e.to_string()))?;
-            let d = deriver
+            let d = kobe_btc::Deriver::new(wallet, kobe_btc::Network::Mainnet)
+                .derive_err()?
                 .derive(index)
-                .map_err(|e| OwxError::Derivation(e.to_string()))?;
-            Ok(WalletAccount {
-                account_id: format!("{chain_id}:{}", d.address),
-                address: d.address.clone(),
-                chain_id: chain_id.to_owned(),
-                derivation_path: d.path.to_string(),
-            })
+                .derive_err()?;
+            Ok(make_account(chain_id, &d.address, &d.path.to_string()))
         }
         ChainType::Solana => {
-            let deriver = kobe_svm::Deriver::new(wallet);
-            let d = deriver
-                .derive(index)
-                .map_err(|e| OwxError::Derivation(e.to_string()))?;
-            Ok(WalletAccount {
-                account_id: format!("{chain_id}:{}", d.address),
-                address: d.address.clone(),
-                chain_id: chain_id.to_owned(),
-                derivation_path: d.path,
-            })
+            let d = kobe_svm::Deriver::new(wallet).derive(index).derive_err()?;
+            Ok(make_account(chain_id, &d.address, &d.path))
         }
     }
 }
@@ -81,22 +95,17 @@ pub fn derive_address_from_key(
             private_key.len()
         ))
     })?;
-
     match chain_type {
         ChainType::Evm => {
-            let s = signer::evm::Signer::from_bytes(&key32.into())
-                .map_err(|e| OwxError::Derivation(e.to_string()))?;
+            let s = signer::evm::Signer::from_bytes(&key32.into()).derive_err()?;
             Ok(format!("{}", s.address()))
         }
         ChainType::Bitcoin => {
             let s = signer::btc::Signer::from_bytes(&key32, signer::btc::Network::Bitcoin)
-                .map_err(|e| OwxError::Derivation(e.to_string()))?;
+                .derive_err()?;
             Ok(s.p2wpkh_address(signer::btc::Network::Bitcoin).to_string())
         }
-        ChainType::Solana => {
-            let s = signer::svm::Signer::from_bytes(&key32);
-            Ok(s.address())
-        }
+        ChainType::Solana => Ok(signer::svm::Signer::from_bytes(&key32).address()),
     }
 }
 
@@ -109,47 +118,30 @@ pub fn sign_with_mnemonic(
 ) -> Result<Vec<u8>, OwxError> {
     use signer::evm::SignerSync;
     use signer::svm::ed25519_dalek::Signer as _;
-    let wallet = kobe::Wallet::from_mnemonic(mnemonic_phrase, None)
-        .map_err(|e| OwxError::Derivation(e.to_string()))?;
 
+    let wallet = kobe::Wallet::from_mnemonic(mnemonic_phrase, None).derive_err()?;
     match chain_type {
         ChainType::Evm => {
-            let deriver = kobe_evm::Deriver::new(&wallet);
-            let derived = deriver
-                .derive(index)
-                .map_err(|e| OwxError::Derivation(e.to_string()))?;
-            let s = signer::evm::Signer::from_derived(&derived)
-                .map_err(|e| OwxError::Signing(e.to_string()))?;
-            let sig = s
-                .sign_message_sync(message)
-                .map_err(|e| OwxError::Signing(e.to_string()))?;
-            Ok(sig.as_bytes().to_vec())
+            let derived = kobe_evm::Deriver::new(&wallet).derive(index).derive_err()?;
+            let s = signer::evm::Signer::from_derived(&derived).sign_err()?;
+            Ok(s.sign_message_sync(message).sign_err()?.as_bytes().to_vec())
         }
         ChainType::Bitcoin => {
-            let deriver = kobe_btc::Deriver::new(&wallet, kobe_btc::Network::Mainnet)
-                .map_err(|e| OwxError::Derivation(e.to_string()))?;
-            let derived = deriver
+            let derived = kobe_btc::Deriver::new(&wallet, kobe_btc::Network::Mainnet)
+                .derive_err()?
                 .derive(index)
-                .map_err(|e| OwxError::Derivation(e.to_string()))?;
+                .derive_err()?;
             let s = signer::btc::Signer::from_derived(&derived, signer::btc::Network::Bitcoin)
-                .map_err(|e| OwxError::Signing(e.to_string()))?;
+                .sign_err()?;
             let msg = std::str::from_utf8(message).map_err(|_| {
                 OwxError::InvalidInput("bitcoin message must be valid UTF-8".into())
             })?;
-            let sig_b64 = s
-                .sign_message(msg)
-                .map_err(|e| OwxError::Signing(e.to_string()))?;
-            Ok(sig_b64.into_bytes())
+            Ok(s.sign_message(msg).sign_err()?.into_bytes())
         }
         ChainType::Solana => {
-            let deriver = kobe_svm::Deriver::new(&wallet);
-            let derived = deriver
-                .derive(index)
-                .map_err(|e| OwxError::Derivation(e.to_string()))?;
-            let s = signer::svm::Signer::from_derived(&derived)
-                .map_err(|e| OwxError::Signing(e.to_string()))?;
-            let sig = s.sign(message);
-            Ok(sig.to_bytes().to_vec())
+            let derived = kobe_svm::Deriver::new(&wallet).derive(index).derive_err()?;
+            let s = signer::svm::Signer::from_derived(&derived).sign_err()?;
+            Ok(s.sign(message).to_bytes().to_vec())
         }
     }
 }
@@ -165,30 +157,20 @@ pub fn sign_with_private_key(
 
     match chain_type {
         ChainType::Evm => {
-            let signer = signer::evm::Signer::from_hex(private_key_hex)
-                .map_err(|e| OwxError::Signing(e.to_string()))?;
-            let sig = signer
-                .sign_message_sync(message)
-                .map_err(|e| OwxError::Signing(e.to_string()))?;
-            Ok(sig.as_bytes().to_vec())
+            let s = signer::evm::Signer::from_hex(private_key_hex).sign_err()?;
+            Ok(s.sign_message_sync(message).sign_err()?.as_bytes().to_vec())
         }
         ChainType::Bitcoin => {
-            let signer =
-                signer::btc::Signer::from_hex(private_key_hex, signer::btc::Network::Bitcoin)
-                    .map_err(|e| OwxError::Signing(e.to_string()))?;
+            let s = signer::btc::Signer::from_hex(private_key_hex, signer::btc::Network::Bitcoin)
+                .sign_err()?;
             let msg = std::str::from_utf8(message).map_err(|_| {
                 OwxError::InvalidInput("bitcoin message must be valid UTF-8".into())
             })?;
-            let sig_b64 = signer
-                .sign_message(msg)
-                .map_err(|e| OwxError::Signing(e.to_string()))?;
-            Ok(sig_b64.into_bytes())
+            Ok(s.sign_message(msg).sign_err()?.into_bytes())
         }
         ChainType::Solana => {
-            let signer = signer::svm::Signer::from_hex(private_key_hex)
-                .map_err(|e| OwxError::Signing(e.to_string()))?;
-            let sig = signer.sign(message);
-            Ok(sig.to_bytes().to_vec())
+            let s = signer::svm::Signer::from_hex(private_key_hex).sign_err()?;
+            Ok(s.sign(message).to_bytes().to_vec())
         }
     }
 }
@@ -199,15 +181,10 @@ pub fn sign_evm_transaction_with_mnemonic(
     index: u32,
     tx_bytes: &[u8],
 ) -> Result<(String, Vec<u8>, String), OwxError> {
-    let wallet = kobe::Wallet::from_mnemonic(mnemonic_phrase, None)
-        .map_err(|e| OwxError::Derivation(e.to_string()))?;
-    let deriver = kobe_evm::Deriver::new(&wallet);
-    let derived = deriver
-        .derive(index)
-        .map_err(|e| OwxError::Derivation(e.to_string()))?;
-    let signer = signer::evm::Signer::from_derived(&derived)
-        .map_err(|e| OwxError::Signing(e.to_string()))?;
-    sign_evm_transaction_with_signer(&signer, tx_bytes)
+    let wallet = kobe::Wallet::from_mnemonic(mnemonic_phrase, None).derive_err()?;
+    let derived = kobe_evm::Deriver::new(&wallet).derive(index).derive_err()?;
+    let evm_signer = signer::evm::Signer::from_derived(&derived).sign_err()?;
+    sign_evm_transaction_with_signer(&evm_signer, tx_bytes)
 }
 
 /// Sign an EVM transaction with a raw private key.
@@ -215,9 +192,8 @@ pub fn sign_evm_transaction_with_private_key(
     private_key_hex: &str,
     tx_bytes: &[u8],
 ) -> Result<(String, Vec<u8>, String), OwxError> {
-    let signer = signer::evm::Signer::from_hex(private_key_hex)
-        .map_err(|e| OwxError::Signing(e.to_string()))?;
-    sign_evm_transaction_with_signer(&signer, tx_bytes)
+    let evm_signer = signer::evm::Signer::from_hex(private_key_hex).sign_err()?;
+    sign_evm_transaction_with_signer(&evm_signer, tx_bytes)
 }
 
 /// Sign an EVM transaction using an already-constructed signer.
@@ -232,9 +208,7 @@ pub fn sign_evm_transaction_with_signer(
     let mut typed_tx = TypedTransaction::decode_unsigned(&mut &tx_bytes[..])
         .map_err(|e| OwxError::InvalidInput(format!("failed to decode EVM transaction: {e}")))?;
 
-    let sig = signer
-        .sign_transaction_sync(&mut typed_tx)
-        .map_err(|e| OwxError::Signing(e.to_string()))?;
+    let sig = signer.sign_transaction_sync(&mut typed_tx).sign_err()?;
 
     let tx_hash = typed_tx.tx_hash(&sig);
     let envelope = match typed_tx {
@@ -266,15 +240,10 @@ pub fn sign_typed_data_with_mnemonic(
     index: u32,
     typed_data_json: &str,
 ) -> Result<Vec<u8>, OwxError> {
-    let wallet = kobe::Wallet::from_mnemonic(mnemonic_phrase, None)
-        .map_err(|e| OwxError::Derivation(e.to_string()))?;
-    let deriver = kobe_evm::Deriver::new(&wallet);
-    let derived = deriver
-        .derive(index)
-        .map_err(|e| OwxError::Derivation(e.to_string()))?;
-    let signer = signer::evm::Signer::from_derived(&derived)
-        .map_err(|e| OwxError::Signing(e.to_string()))?;
-    sign_typed_data_with_signer(&signer, typed_data_json)
+    let wallet = kobe::Wallet::from_mnemonic(mnemonic_phrase, None).derive_err()?;
+    let derived = kobe_evm::Deriver::new(&wallet).derive(index).derive_err()?;
+    let evm_signer = signer::evm::Signer::from_derived(&derived).sign_err()?;
+    sign_typed_data_with_signer(&evm_signer, typed_data_json)
 }
 
 /// Sign EIP-712 typed data with a raw private key.
@@ -282,9 +251,8 @@ pub fn sign_typed_data_with_private_key(
     private_key_hex: &str,
     typed_data_json: &str,
 ) -> Result<Vec<u8>, OwxError> {
-    let signer = signer::evm::Signer::from_hex(private_key_hex)
-        .map_err(|e| OwxError::Signing(e.to_string()))?;
-    sign_typed_data_with_signer(&signer, typed_data_json)
+    let evm_signer = signer::evm::Signer::from_hex(private_key_hex).sign_err()?;
+    sign_typed_data_with_signer(&evm_signer, typed_data_json)
 }
 
 /// Sign EIP-712 typed data using an already-constructed EVM signer.
@@ -303,7 +271,7 @@ fn sign_typed_data_with_signer(
     // here we sign the raw JSON bytes via EIP-191 personal_sign as a pragmatic approach.
     let sig = signer
         .sign_message_sync(typed_data_json.as_bytes())
-        .map_err(|e| OwxError::Signing(e.to_string()))?;
+        .sign_err()?;
     Ok(sig.as_bytes().to_vec())
 }
 
