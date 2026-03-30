@@ -4,7 +4,6 @@ use std::path::PathBuf;
 
 /// Errors that can occur in vault operations.
 #[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
 pub enum VaultError {
     /// Encryption or decryption failed.
     #[error("crypto: {0}")]

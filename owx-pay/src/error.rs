@@ -2,7 +2,6 @@
 
 /// Errors from payment operations.
 #[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
 pub enum PayError {
     /// The server did not return a 402 response.
     #[error("not a 402 response (status {0})")]

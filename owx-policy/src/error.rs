@@ -2,7 +2,6 @@
 
 /// Errors from policy operations.
 #[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
 pub enum PolicyError {
     /// Policy evaluation denied the request.
     #[error("denied by policy '{policy_id}': {reason}")]
