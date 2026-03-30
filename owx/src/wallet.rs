@@ -47,7 +47,7 @@ pub fn create_wallet(
     passphrase: &str,
     words: usize,
 ) -> Result<WalletInfo, OwxError> {
-    if vault.wallets().name_exists(name)? {
+    if vault.wallet_name_exists(name)? {
         return Err(OwxError::Vault(owx_vault::VaultError::WalletNameExists(
             name.to_owned(),
         )));
@@ -70,7 +70,7 @@ pub fn create_wallet(
         key_type,
     );
 
-    vault.wallets().save(&wallet)?;
+    vault.save_wallet(&wallet)?;
     Ok(wallet_to_info(&wallet))
 }
 
@@ -82,7 +82,7 @@ pub fn import_mnemonic(
     passphrase: &str,
     index: u32,
 ) -> Result<WalletInfo, OwxError> {
-    if vault.wallets().name_exists(name)? {
+    if vault.wallet_name_exists(name)? {
         return Err(OwxError::Vault(owx_vault::VaultError::WalletNameExists(
             name.to_owned(),
         )));
@@ -102,26 +102,26 @@ pub fn import_mnemonic(
         key_type,
     );
 
-    vault.wallets().save(&wallet)?;
+    vault.save_wallet(&wallet)?;
     Ok(wallet_to_info(&wallet))
 }
 
 /// List all wallets.
 pub fn list_wallets(vault: &Vault) -> Result<Vec<WalletInfo>, OwxError> {
-    let wallets = vault.wallets().list()?;
+    let wallets = vault.list_wallets()?;
     Ok(wallets.iter().map(wallet_to_info).collect())
 }
 
 /// Get a single wallet by name or ID.
 pub fn get_wallet(vault: &Vault, name_or_id: &str) -> Result<WalletInfo, OwxError> {
-    let wallet = vault.wallets().load(name_or_id)?;
+    let wallet = vault.load_wallet(name_or_id)?;
     Ok(wallet_to_info(&wallet))
 }
 
 /// Delete a wallet.
 pub fn delete_wallet(vault: &Vault, name_or_id: &str) -> Result<(), OwxError> {
-    let wallet = vault.wallets().load(name_or_id)?;
-    vault.wallets().delete(&wallet.id)?;
+    let wallet = vault.load_wallet(name_or_id)?;
+    vault.delete_wallet(&wallet.id)?;
     Ok(())
 }
 
@@ -136,7 +136,7 @@ pub fn import_private_key(
     chain: &str,
     passphrase: &str,
 ) -> Result<WalletInfo, OwxError> {
-    if vault.wallets().name_exists(name)? {
+    if vault.wallet_name_exists(name)? {
         return Err(OwxError::Vault(owx_vault::VaultError::WalletNameExists(
             name.to_owned(),
         )));
@@ -177,13 +177,13 @@ pub fn import_private_key(
         key_type,
     );
 
-    vault.wallets().save(&wallet)?;
+    vault.save_wallet(&wallet)?;
     Ok(wallet_to_info(&wallet))
 }
 
 /// Rename a wallet.
 pub fn rename_wallet(vault: &Vault, name_or_id: &str, new_name: &str) -> Result<(), OwxError> {
-    vault.wallets().rename(name_or_id, new_name)?;
+    vault.rename_wallet(name_or_id, new_name)?;
     Ok(())
 }
 
@@ -223,7 +223,7 @@ pub fn export_wallet(
     name_or_id: &str,
     passphrase: &str,
 ) -> Result<String, OwxError> {
-    let wallet = vault.wallets().load(name_or_id)?;
+    let wallet = vault.load_wallet(name_or_id)?;
     let secret = decrypt_wallet_secret(&wallet, passphrase)?;
     secret.export_string()
 }

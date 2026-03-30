@@ -1,8 +1,5 @@
 //! File-system vault: CRUD for wallets, API keys, and policies.
 
-#![allow(missing_docs)]
-#![allow(clippy::missing_docs_in_private_items)]
-
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -15,25 +12,13 @@ use crate::error::VaultError;
 use crate::permissions;
 
 /// A file-system vault rooted at a directory (e.g. `~/.owx`).
+///
+/// All wallet, API key, and policy files are stored under this root with
+/// strict filesystem permissions on Unix.
 #[derive(Debug, Clone)]
 pub struct Vault {
     /// Root path of the vault.
     root: PathBuf,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct WalletStore<'a> {
-    vault: &'a Vault,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct ApiKeyStore<'a> {
-    vault: &'a Vault,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct PolicyStore<'a> {
-    vault: &'a Vault,
 }
 
 /// Validate that an ID is safe for use as a filename component.
@@ -46,84 +31,6 @@ fn sanitize_id(id: &str) -> Result<&str, VaultError> {
         )));
     }
     Ok(id)
-}
-
-impl WalletStore<'_> {
-    pub fn save(self, wallet: &EncryptedWallet) -> Result<(), VaultError> {
-        self.vault.save_wallet(wallet)
-    }
-
-    pub fn list(self) -> Result<Vec<EncryptedWallet>, VaultError> {
-        self.vault.list_wallets()
-    }
-
-    pub fn load(self, name_or_id: &str) -> Result<EncryptedWallet, VaultError> {
-        self.vault.load_wallet(name_or_id)
-    }
-
-    pub fn delete(self, id: &str) -> Result<(), VaultError> {
-        self.vault.delete_wallet(id)
-    }
-
-    pub fn name_exists(self, name: &str) -> Result<bool, VaultError> {
-        self.vault.wallet_name_exists(name)
-    }
-
-    pub fn rename(self, name_or_id: &str, new_name: &str) -> Result<(), VaultError> {
-        self.vault.rename_wallet(name_or_id, new_name)
-    }
-}
-
-impl ApiKeyStore<'_> {
-    pub fn save(self, key: &ApiKeyFile) -> Result<(), VaultError> {
-        self.vault.save_api_key(key)
-    }
-
-    pub fn load(self, id: &str) -> Result<ApiKeyFile, VaultError> {
-        self.vault.load_api_key(id)
-    }
-
-    pub fn load_by_token_hash(self, token_hash: &str) -> Result<ApiKeyFile, VaultError> {
-        self.vault.load_api_key_by_token_hash(token_hash)
-    }
-
-    pub fn list(self) -> Result<Vec<ApiKeyFile>, VaultError> {
-        self.vault.list_api_keys()
-    }
-
-    pub fn delete(self, id: &str) -> Result<(), VaultError> {
-        self.vault.delete_api_key(id)
-    }
-}
-
-impl PolicyStore<'_> {
-    pub fn save(self, policy: &Policy) -> Result<(), VaultError> {
-        self.vault.save_policy(policy)
-    }
-
-    pub fn load(self, id: &str) -> Result<Policy, VaultError> {
-        self.vault.load_policy(id)
-    }
-
-    pub fn list(self) -> Result<Vec<Policy>, VaultError> {
-        self.vault.list_policies()
-    }
-
-    pub fn save_raw(self, id: &str, json: &str) -> Result<(), VaultError> {
-        self.vault.save_policy_raw(id, json)
-    }
-
-    pub fn load_raw(self, id: &str) -> Result<String, VaultError> {
-        self.vault.load_policy_raw(id)
-    }
-
-    pub fn list_raw(self) -> Result<Vec<String>, VaultError> {
-        self.vault.list_policies_raw()
-    }
-
-    pub fn delete(self, id: &str) -> Result<(), VaultError> {
-        self.vault.delete_policy(id)
-    }
 }
 
 impl Vault {
@@ -146,31 +53,8 @@ impl Vault {
         &self.root
     }
 
-    #[must_use]
-    pub const fn wallets(&self) -> WalletStore<'_> {
-        WalletStore { vault: self }
-    }
-
-    #[must_use]
-    pub const fn api_keys(&self) -> ApiKeyStore<'_> {
-        ApiKeyStore { vault: self }
-    }
-
-    #[must_use]
-    pub const fn policies(&self) -> PolicyStore<'_> {
-        PolicyStore { vault: self }
-    }
-
-    /// Ensure and return the wallets subdirectory.
-    fn wallets_dir(&self) -> Result<PathBuf, VaultError> {
-        let dir = self.root.join("wallets");
-        fs::create_dir_all(&dir).map_err(|e| VaultError::io(&dir, e))?;
-        permissions::set_dir_permissions(&dir);
-        Ok(dir)
-    }
-
-    /// Save an encrypted wallet file.
-    fn save_wallet(&self, wallet: &EncryptedWallet) -> Result<(), VaultError> {
+    /// Save an encrypted wallet file with strict permissions.
+    pub fn save_wallet(&self, wallet: &EncryptedWallet) -> Result<(), VaultError> {
         sanitize_id(&wallet.id)?;
         let dir = self.wallets_dir()?;
         let path = dir.join(format!("{}.json", wallet.id));
@@ -181,26 +65,22 @@ impl Vault {
     }
 
     /// List all encrypted wallets, sorted by `created_at` descending (newest first).
-    #[allow(clippy::print_stderr)]
-    fn list_wallets(&self) -> Result<Vec<EncryptedWallet>, VaultError> {
+    pub fn list_wallets(&self) -> Result<Vec<EncryptedWallet>, VaultError> {
         let dir = self.wallets_dir()?;
         let mut wallets = Vec::new();
-        for file_entry in read_json_dir(&dir)? {
-            match serde_json::from_str::<EncryptedWallet>(&file_entry.contents) {
-                Ok(w) => wallets.push(w),
-                Err(e) => {
-                    #[cfg(debug_assertions)]
-                    eprintln!("warning: skipping {}: {e}", file_entry.path.display());
-                    let _ = e;
-                }
+        for entry in read_json_dir(&dir)? {
+            if let Ok(w) = serde_json::from_str::<EncryptedWallet>(&entry.contents) {
+                wallets.push(w);
             }
         }
         wallets.sort_by(|a, b| b.created_at.cmp(&a.created_at));
         Ok(wallets)
     }
 
-    /// Load a wallet by exact ID, then by name. Errors if not found or ambiguous.
-    fn load_wallet(&self, name_or_id: &str) -> Result<EncryptedWallet, VaultError> {
+    /// Load a wallet by exact ID first, then by name.
+    ///
+    /// Returns an error if no wallet matches or if the name is ambiguous.
+    pub fn load_wallet(&self, name_or_id: &str) -> Result<EncryptedWallet, VaultError> {
         let wallets = self.list_wallets()?;
 
         if let Some(w) = wallets.iter().find(|w| w.id == name_or_id) {
@@ -220,7 +100,7 @@ impl Vault {
     }
 
     /// Delete a wallet file by ID.
-    fn delete_wallet(&self, id: &str) -> Result<(), VaultError> {
+    pub fn delete_wallet(&self, id: &str) -> Result<(), VaultError> {
         sanitize_id(id)?;
         let dir = self.wallets_dir()?;
         let path = dir.join(format!("{id}.json"));
@@ -231,12 +111,12 @@ impl Vault {
     }
 
     /// Check whether a wallet with the given name exists.
-    fn wallet_name_exists(&self, name: &str) -> Result<bool, VaultError> {
+    pub fn wallet_name_exists(&self, name: &str) -> Result<bool, VaultError> {
         Ok(self.list_wallets()?.iter().any(|w| w.name == name))
     }
 
     /// Rename a wallet. Loads, mutates, and re-saves the wallet file.
-    fn rename_wallet(&self, name_or_id: &str, new_name: &str) -> Result<(), VaultError> {
+    pub fn rename_wallet(&self, name_or_id: &str, new_name: &str) -> Result<(), VaultError> {
         let mut wallet = self.load_wallet(name_or_id)?;
         if wallet.name == new_name {
             return Ok(());
@@ -248,16 +128,8 @@ impl Vault {
         self.save_wallet(&wallet)
     }
 
-    /// Ensure and return the keys subdirectory.
-    fn keys_dir(&self) -> Result<PathBuf, VaultError> {
-        let dir = self.root.join("keys");
-        fs::create_dir_all(&dir).map_err(|e| VaultError::io(&dir, e))?;
-        permissions::set_dir_permissions(&dir);
-        Ok(dir)
-    }
-
-    /// Save an API key file.
-    fn save_api_key(&self, key: &ApiKeyFile) -> Result<(), VaultError> {
+    /// Save an API key file with strict permissions.
+    pub fn save_api_key(&self, key: &ApiKeyFile) -> Result<(), VaultError> {
         sanitize_id(&key.id)?;
         let dir = self.keys_dir()?;
         let path = dir.join(format!("{}.json", key.id));
@@ -268,7 +140,7 @@ impl Vault {
     }
 
     /// Load an API key by ID.
-    fn load_api_key(&self, id: &str) -> Result<ApiKeyFile, VaultError> {
+    pub fn load_api_key(&self, id: &str) -> Result<ApiKeyFile, VaultError> {
         sanitize_id(id)?;
         let dir = self.keys_dir()?;
         let path = dir.join(format!("{id}.json"));
@@ -279,8 +151,8 @@ impl Vault {
         Ok(serde_json::from_str(&contents)?)
     }
 
-    /// Look up an API key by SHA-256 token hash. Scans all key files.
-    fn load_api_key_by_token_hash(&self, token_hash: &str) -> Result<ApiKeyFile, VaultError> {
+    /// Look up an API key by the SHA-256 hash of the token. Scans all key files.
+    pub fn load_api_key_by_token_hash(&self, token_hash: &str) -> Result<ApiKeyFile, VaultError> {
         self.list_api_keys()?
             .into_iter()
             .find(|k| k.token_hash == token_hash)
@@ -288,18 +160,12 @@ impl Vault {
     }
 
     /// List all API keys, sorted by creation time (newest first).
-    #[allow(clippy::print_stderr)]
-    fn list_api_keys(&self) -> Result<Vec<ApiKeyFile>, VaultError> {
+    pub fn list_api_keys(&self) -> Result<Vec<ApiKeyFile>, VaultError> {
         let dir = self.keys_dir()?;
         let mut keys = Vec::new();
-        for file_entry in read_json_dir(&dir)? {
-            match serde_json::from_str::<ApiKeyFile>(&file_entry.contents) {
-                Ok(k) => keys.push(k),
-                Err(e) => {
-                    #[cfg(debug_assertions)]
-                    eprintln!("warning: skipping {}: {e}", file_entry.path.display());
-                    let _ = e;
-                }
+        for entry in read_json_dir(&dir)? {
+            if let Ok(k) = serde_json::from_str::<ApiKeyFile>(&entry.contents) {
+                keys.push(k);
             }
         }
         keys.sort_by(|a, b| b.created_at.cmp(&a.created_at));
@@ -307,7 +173,7 @@ impl Vault {
     }
 
     /// Delete an API key by ID.
-    fn delete_api_key(&self, id: &str) -> Result<(), VaultError> {
+    pub fn delete_api_key(&self, id: &str) -> Result<(), VaultError> {
         sanitize_id(id)?;
         let dir = self.keys_dir()?;
         let path = dir.join(format!("{id}.json"));
@@ -317,15 +183,8 @@ impl Vault {
         fs::remove_file(&path).map_err(|e| VaultError::io(&path, e))
     }
 
-    /// Ensure and return the policies subdirectory.
-    fn policies_dir(&self) -> Result<PathBuf, VaultError> {
-        let dir = self.root.join("policies");
-        fs::create_dir_all(&dir).map_err(|e| VaultError::io(&dir, e))?;
-        Ok(dir)
-    }
-
-    /// Save a policy.
-    fn save_policy(&self, policy: &Policy) -> Result<(), VaultError> {
+    /// Save a policy definition.
+    pub fn save_policy(&self, policy: &Policy) -> Result<(), VaultError> {
         sanitize_id(&policy.id)?;
         let dir = self.policies_dir()?;
         let path = dir.join(format!("{}.json", policy.id));
@@ -334,7 +193,7 @@ impl Vault {
     }
 
     /// Load a policy by ID.
-    fn load_policy(&self, id: &str) -> Result<Policy, VaultError> {
+    pub fn load_policy(&self, id: &str) -> Result<Policy, VaultError> {
         sanitize_id(id)?;
         let dir = self.policies_dir()?;
         let path = dir.join(format!("{id}.json"));
@@ -346,26 +205,20 @@ impl Vault {
     }
 
     /// List all policies, sorted alphabetically by name.
-    #[allow(clippy::print_stderr)]
-    fn list_policies(&self) -> Result<Vec<Policy>, VaultError> {
+    pub fn list_policies(&self) -> Result<Vec<Policy>, VaultError> {
         let dir = self.policies_dir()?;
         let mut policies = Vec::new();
         for entry in read_json_dir(&dir)? {
-            match serde_json::from_str::<Policy>(&entry.contents) {
-                Ok(p) => policies.push(p),
-                Err(e) => {
-                    #[cfg(debug_assertions)]
-                    eprintln!("warning: skipping {}: {e}", entry.path.display());
-                    let _ = e;
-                }
+            if let Ok(p) = serde_json::from_str::<Policy>(&entry.contents) {
+                policies.push(p);
             }
         }
         policies.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(policies)
     }
 
-    /// Save a raw policy JSON value by ID.
-    fn save_policy_raw(&self, id: &str, json: &str) -> Result<(), VaultError> {
+    /// Save a raw policy JSON string by ID.
+    pub fn save_policy_raw(&self, id: &str, json: &str) -> Result<(), VaultError> {
         sanitize_id(id)?;
         let dir = self.policies_dir()?;
         let path = dir.join(format!("{id}.json"));
@@ -373,7 +226,7 @@ impl Vault {
     }
 
     /// Load a raw policy JSON string by ID.
-    fn load_policy_raw(&self, id: &str) -> Result<String, VaultError> {
+    pub fn load_policy_raw(&self, id: &str) -> Result<String, VaultError> {
         sanitize_id(id)?;
         let dir = self.policies_dir()?;
         let path = dir.join(format!("{id}.json"));
@@ -384,17 +237,16 @@ impl Vault {
     }
 
     /// List all raw policy JSON files.
-    fn list_policies_raw(&self) -> Result<Vec<String>, VaultError> {
+    pub fn list_policies_raw(&self) -> Result<Vec<String>, VaultError> {
         let dir = self.policies_dir()?;
-        let mut out = Vec::new();
-        for entry in read_json_dir(&dir)? {
-            out.push(entry.contents);
-        }
-        Ok(out)
+        Ok(read_json_dir(&dir)?
+            .into_iter()
+            .map(|e| e.contents)
+            .collect())
     }
 
     /// Delete a policy by ID.
-    fn delete_policy(&self, id: &str) -> Result<(), VaultError> {
+    pub fn delete_policy(&self, id: &str) -> Result<(), VaultError> {
         sanitize_id(id)?;
         let dir = self.policies_dir()?;
         let path = dir.join(format!("{id}.json"));
@@ -403,18 +255,38 @@ impl Vault {
         }
         fs::remove_file(&path).map_err(|e| VaultError::io(&path, e))
     }
+
+    /// Ensure and return the wallets subdirectory.
+    fn wallets_dir(&self) -> Result<PathBuf, VaultError> {
+        let dir = self.root.join("wallets");
+        fs::create_dir_all(&dir).map_err(|e| VaultError::io(&dir, e))?;
+        permissions::set_dir_permissions(&dir);
+        Ok(dir)
+    }
+
+    /// Ensure and return the keys subdirectory.
+    fn keys_dir(&self) -> Result<PathBuf, VaultError> {
+        let dir = self.root.join("keys");
+        fs::create_dir_all(&dir).map_err(|e| VaultError::io(&dir, e))?;
+        permissions::set_dir_permissions(&dir);
+        Ok(dir)
+    }
+
+    /// Ensure and return the policies subdirectory.
+    fn policies_dir(&self) -> Result<PathBuf, VaultError> {
+        let dir = self.root.join("policies");
+        fs::create_dir_all(&dir).map_err(|e| VaultError::io(&dir, e))?;
+        Ok(dir)
+    }
 }
 
 /// A JSON file read from disk.
 struct JsonFileEntry {
-    /// Path to the file.
-    path: PathBuf,
-    /// File contents.
+    /// File contents as a string.
     contents: String,
 }
 
 /// Read all `.json` files from a directory.
-#[allow(clippy::print_stderr)]
 fn read_json_dir(dir: &Path) -> Result<Vec<JsonFileEntry>, VaultError> {
     let mut entries = Vec::new();
     let rd = match fs::read_dir(dir) {
@@ -428,13 +300,8 @@ fn read_json_dir(dir: &Path) -> Result<Vec<JsonFileEntry>, VaultError> {
         if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
             continue;
         }
-        match fs::read_to_string(&path) {
-            Ok(contents) => entries.push(JsonFileEntry { path, contents }),
-            Err(e) => {
-                #[cfg(debug_assertions)]
-                eprintln!("warning: skipping {}: {e}", path.display());
-                let _ = e;
-            }
+        if let Ok(contents) = fs::read_to_string(&path) {
+            entries.push(JsonFileEntry { contents });
         }
     }
     Ok(entries)
@@ -472,9 +339,9 @@ mod tests {
     fn save_and_list_wallets() {
         let (_dir, vault) = temp_vault();
         let w = dummy_wallet("id-1", "my-wallet");
-        vault.wallets().save(&w).unwrap();
+        vault.save_wallet(&w).unwrap();
 
-        let wallets = vault.wallets().list().unwrap();
+        let wallets = vault.list_wallets().unwrap();
         assert_eq!(wallets.len(), 1);
         assert_eq!(wallets[0].id, "id-1");
     }
@@ -482,38 +349,32 @@ mod tests {
     #[test]
     fn load_by_name_or_id() {
         let (_dir, vault) = temp_vault();
-        vault
-            .wallets()
-            .save(&dummy_wallet("uuid-1", "alpha"))
-            .unwrap();
+        vault.save_wallet(&dummy_wallet("uuid-1", "alpha")).unwrap();
 
-        let by_id = vault.wallets().load("uuid-1").unwrap();
+        let by_id = vault.load_wallet("uuid-1").unwrap();
         assert_eq!(by_id.name, "alpha");
 
-        let by_name = vault.wallets().load("alpha").unwrap();
+        let by_name = vault.load_wallet("alpha").unwrap();
         assert_eq!(by_name.id, "uuid-1");
 
-        assert!(vault.wallets().load("missing").is_err());
+        assert!(vault.load_wallet("missing").is_err());
     }
 
     #[test]
     fn delete_wallet() {
         let (_dir, vault) = temp_vault();
-        vault.wallets().save(&dummy_wallet("del-1", "del")).unwrap();
-        assert_eq!(vault.wallets().list().unwrap().len(), 1);
-        vault.wallets().delete("del-1").unwrap();
-        assert_eq!(vault.wallets().list().unwrap().len(), 0);
+        vault.save_wallet(&dummy_wallet("del-1", "del")).unwrap();
+        assert_eq!(vault.list_wallets().unwrap().len(), 1);
+        vault.delete_wallet("del-1").unwrap();
+        assert_eq!(vault.list_wallets().unwrap().len(), 0);
     }
 
     #[test]
     fn wallet_name_exists_check() {
         let (_dir, vault) = temp_vault();
-        vault
-            .wallets()
-            .save(&dummy_wallet("id-x", "exists"))
-            .unwrap();
-        assert!(vault.wallets().name_exists("exists").unwrap());
-        assert!(!vault.wallets().name_exists("nope").unwrap());
+        vault.save_wallet(&dummy_wallet("id-x", "exists")).unwrap();
+        assert!(vault.wallet_name_exists("exists").unwrap());
+        assert!(!vault.wallet_name_exists("nope").unwrap());
     }
 
     #[test]
@@ -535,73 +396,69 @@ mod tests {
             wallet_secrets: HashMap::new(),
         };
 
-        vault.api_keys().save(&key).unwrap();
-        let loaded = vault.api_keys().load("k1").unwrap();
+        vault.save_api_key(&key).unwrap();
+        let loaded = vault.load_api_key("k1").unwrap();
         assert_eq!(loaded.name, "agent");
 
         let by_hash = vault
-            .api_keys()
-            .load_by_token_hash(&hash_token(&token))
+            .load_api_key_by_token_hash(&hash_token(&token))
             .unwrap();
         assert_eq!(by_hash.id, "k1");
 
-        vault.api_keys().delete("k1").unwrap();
-        assert!(vault.api_keys().load("k1").is_err());
+        vault.delete_api_key("k1").unwrap();
+        assert!(vault.load_api_key("k1").is_err());
     }
 
     #[test]
     fn path_traversal_in_save_rejected() {
         let (_dir, vault) = temp_vault();
         let wallet = dummy_wallet("../../../etc/passwd", "evil");
-        assert!(vault.wallets().save(&wallet).is_err());
+        assert!(vault.save_wallet(&wallet).is_err());
     }
 
     #[test]
     fn path_traversal_in_delete_rejected() {
         let (_dir, vault) = temp_vault();
-        vault
-            .wallets()
-            .save(&dummy_wallet("legit", "legit"))
-            .unwrap();
-        assert!(vault.wallets().delete("../../../etc/passwd").is_err());
-        assert_eq!(vault.wallets().list().unwrap().len(), 1);
+        vault.save_wallet(&dummy_wallet("legit", "legit")).unwrap();
+        assert!(vault.delete_wallet("../../../etc/passwd").is_err());
+        assert_eq!(vault.list_wallets().unwrap().len(), 1);
     }
 
     #[test]
     fn path_traversal_in_api_key_rejected() {
         let (_dir, vault) = temp_vault();
-        assert!(vault.api_keys().load("../secret").is_err());
-        assert!(vault.api_keys().delete("../secret").is_err());
+        assert!(vault.load_api_key("../secret").is_err());
+        assert!(vault.delete_api_key("../secret").is_err());
     }
 
     #[test]
     fn path_traversal_in_policy_rejected() {
         let (_dir, vault) = temp_vault();
-        assert!(vault.policies().save_raw("../evil", "{}").is_err());
-        assert!(vault.policies().load_raw("../evil").is_err());
-        assert!(vault.policies().delete("../evil").is_err());
+        assert!(vault.save_policy_raw("../evil", "{}").is_err());
+        assert!(vault.load_policy_raw("../evil").is_err());
+        assert!(vault.delete_policy("../evil").is_err());
     }
 
     #[test]
     fn empty_id_rejected() {
         let (_dir, vault) = temp_vault();
-        assert!(vault.wallets().delete("").is_err());
-        assert!(vault.api_keys().load("").is_err());
+        assert!(vault.delete_wallet("").is_err());
+        assert!(vault.load_api_key("").is_err());
     }
 
     #[test]
     fn policy_raw_crud() {
         let (_dir, vault) = temp_vault();
         let json = r#"{"id":"p1","name":"test"}"#;
-        vault.policies().save_raw("p1", json).unwrap();
+        vault.save_policy_raw("p1", json).unwrap();
 
-        let loaded = vault.policies().load_raw("p1").unwrap();
+        let loaded = vault.load_policy_raw("p1").unwrap();
         assert_eq!(loaded, json);
 
-        let all = vault.policies().list_raw().unwrap();
+        let all = vault.list_policies_raw().unwrap();
         assert_eq!(all.len(), 1);
 
-        vault.policies().delete("p1").unwrap();
-        assert!(vault.policies().load_raw("p1").is_err());
+        vault.delete_policy("p1").unwrap();
+        assert!(vault.load_policy_raw("p1").is_err());
     }
 }
