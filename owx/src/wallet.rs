@@ -1,6 +1,6 @@
 //! Wallet CRUD operations: create, import, export, delete, derive.
 
-use owx_core::chain::{ALL_CHAIN_TYPES, default_chain_for_type};
+use owx_core::chain::{ALL_CHAIN_TYPES, ChainType, default_chain_for_type};
 use owx_core::wallet_file::{EncryptedWallet, WalletAccount};
 use owx_core::{AccountInfo, WalletInfo};
 use owx_vault::Vault;
@@ -169,6 +169,77 @@ pub fn import_private_key(
 
     let crypto_json = encrypt_wallet_secret(secret, passphrase)?;
 
+    let wallet = EncryptedWallet::new(
+        uuid::Uuid::new_v4().to_string(),
+        name.to_owned(),
+        accounts,
+        crypto_json,
+        key_type,
+    );
+
+    vault.save_wallet(&wallet)?;
+    Ok(wallet_to_info(&wallet))
+}
+
+/// Import a wallet from explicit per-curve hex-encoded private keys.
+///
+/// Both keys are stored so all chain families are addressable.
+/// Either key may be `None`, in which case the corresponding chains are unavailable.
+pub fn import_private_keys(
+    vault: &Vault,
+    name: &str,
+    secp256k1_hex: Option<&str>,
+    ed25519_hex: Option<&str>,
+    passphrase: &str,
+) -> Result<WalletInfo, OwxError> {
+    fn decode_hex_key(hex_str: &str) -> Result<Vec<u8>, OwxError> {
+        let trimmed = hex_str.strip_prefix("0x").unwrap_or(hex_str);
+        hex::decode(trimmed)
+            .map_err(|e| OwxError::InvalidInput(format!("invalid hex private key: {e}")))
+    }
+
+    if secp256k1_hex.is_none() && ed25519_hex.is_none() {
+        return Err(OwxError::InvalidInput(
+            "at least one private key must be provided".into(),
+        ));
+    }
+    if vault.wallet_name_exists(name)? {
+        return Err(OwxError::Vault(owx_vault::VaultError::WalletNameExists(
+            name.to_owned(),
+        )));
+    }
+
+    let secp = secp256k1_hex.map(decode_hex_key).transpose()?;
+    let ed = ed25519_hex.map(decode_hex_key).transpose()?;
+
+    let secret = WalletSecret::PrivateKeys {
+        secp256k1: secp.as_ref().map(hex::encode),
+        ed25519: ed.as_ref().map(hex::encode),
+    };
+    let key_type = secret.key_type();
+
+    let mut accounts = Vec::new();
+    for ct in &ALL_CHAIN_TYPES {
+        if secret.supports_chain(*ct) {
+            let default = default_chain_for_type(*ct);
+            let chain_id = default.chain_id.into_owned();
+            let key_bytes = match ct {
+                ChainType::Evm | ChainType::Bitcoin => secp.as_deref(),
+                ChainType::Solana => ed.as_deref(),
+            };
+            if let Some(kb) = key_bytes {
+                let address = derivation::derive_address_from_key(*ct, kb)?;
+                accounts.push(WalletAccount {
+                    account_id: format!("{chain_id}:{address}"),
+                    address,
+                    chain_id,
+                    derivation_path: String::new(),
+                });
+            }
+        }
+    }
+
+    let crypto_json = encrypt_wallet_secret(secret, passphrase)?;
     let wallet = EncryptedWallet::new(
         uuid::Uuid::new_v4().to_string(),
         name.to_owned(),

@@ -27,5 +27,5 @@ pub use owx_vault::Vault;
 pub use signing::{sign_message, sign_transaction, sign_typed_data};
 pub use wallet::{
     create_wallet, delete_wallet, derive_address, export_wallet, generate_mnemonic, get_wallet,
-    import_mnemonic, import_private_key, list_wallets, rename_wallet,
+    import_mnemonic, import_private_key, import_private_keys, list_wallets, rename_wallet,
 };
