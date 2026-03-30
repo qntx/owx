@@ -273,7 +273,7 @@ fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
         }
         Commands::Derive { chain, index } => {
             let mnemonic = read_passphrase("Mnemonic: ");
-            let address = AgentWallet::derive_address(&mnemonic, &chain, Some(index))?;
+            let address = owx::derive_address(&mnemonic, &chain, Some(index))?;
             print_json(&serde_json::json!({
                 "chain": chain,
                 "index": index,

@@ -13,6 +13,7 @@ mod broadcast;
 mod derivation;
 mod error;
 mod key_ops;
+mod services;
 mod signing;
 mod wallet_ops;
 mod wallet_secret;
@@ -23,4 +24,5 @@ pub use owx_core::{
     AccountInfo, ApiKeyCreateResult, ApiKeyInfo, SendResult, SignResult, TransactionSignResult,
     WalletInfo,
 };
+pub use services::{ApiKeyService, SigningService, WalletService, derive_address};
 pub use wallet_secret::WalletSecret;

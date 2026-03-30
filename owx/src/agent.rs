@@ -3,17 +3,10 @@
 #![allow(missing_docs)]
 #![allow(clippy::missing_docs_in_private_items)]
 
-use owx_core::{
-    ApiKeyCreateResult, ApiKeyInfo, SendResult, SignResult, TransactionSignResult, WalletInfo,
-};
 use owx_vault::store::Vault;
 
-use crate::WalletSecret;
-use crate::broadcast;
 use crate::error::OwxError;
-use crate::key_ops;
-use crate::signing;
-use crate::wallet_ops;
+use crate::services::{ApiKeyService, SigningService, WalletService};
 
 /// Agent-native, self-custodial, policy-gated, multi-chain wallet.
 ///
@@ -24,135 +17,6 @@ use crate::wallet_ops;
 pub struct AgentWallet {
     /// Underlying vault for encrypted storage.
     vault: Vault,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct WalletService<'a> {
-    vault: &'a Vault,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct ApiKeyService<'a> {
-    vault: &'a Vault,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct SigningService<'a> {
-    vault: &'a Vault,
-}
-
-impl WalletService<'_> {
-    pub fn create(
-        self,
-        name: &str,
-        passphrase: &str,
-        words: usize,
-    ) -> Result<WalletInfo, OwxError> {
-        wallet_ops::create_wallet(self.vault, name, passphrase, words)
-    }
-
-    pub fn import_mnemonic(
-        self,
-        name: &str,
-        mnemonic_phrase: &str,
-        passphrase: &str,
-        index: u32,
-    ) -> Result<WalletInfo, OwxError> {
-        wallet_ops::import_mnemonic(self.vault, name, mnemonic_phrase, passphrase, index)
-    }
-
-    pub fn list(self) -> Result<Vec<WalletInfo>, OwxError> {
-        wallet_ops::list_wallets(self.vault)
-    }
-
-    pub fn get(self, name_or_id: &str) -> Result<WalletInfo, OwxError> {
-        wallet_ops::get_wallet(self.vault, name_or_id)
-    }
-
-    pub fn delete(self, name_or_id: &str) -> Result<(), OwxError> {
-        wallet_ops::delete_wallet(self.vault, name_or_id)
-    }
-
-    pub fn export(self, name_or_id: &str, passphrase: &str) -> Result<WalletSecret, OwxError> {
-        wallet_ops::export_wallet(self.vault, name_or_id, passphrase)
-    }
-
-    pub fn import_private_key(
-        self,
-        name: &str,
-        private_key_hex: &str,
-        chain: &str,
-        passphrase: &str,
-    ) -> Result<WalletInfo, OwxError> {
-        wallet_ops::import_private_key(self.vault, name, private_key_hex, chain, passphrase)
-    }
-
-    pub fn rename(self, name_or_id: &str, new_name: &str) -> Result<(), OwxError> {
-        wallet_ops::rename_wallet(self.vault, name_or_id, new_name)
-    }
-}
-
-impl ApiKeyService<'_> {
-    pub fn create(
-        self,
-        name: &str,
-        wallet_ids: &[String],
-        policy_ids: &[String],
-        passphrase: &str,
-        expires_at: Option<&str>,
-    ) -> Result<ApiKeyCreateResult, OwxError> {
-        key_ops::create_api_key(
-            self.vault, name, wallet_ids, policy_ids, passphrase, expires_at,
-        )
-    }
-
-    pub fn revoke(self, id: &str) -> Result<(), OwxError> {
-        self.vault.api_keys().delete(id)?;
-        Ok(())
-    }
-
-    pub fn list(self) -> Result<Vec<ApiKeyInfo>, OwxError> {
-        key_ops::list_api_keys(self.vault)
-    }
-}
-
-impl SigningService<'_> {
-    pub fn sign_message(
-        self,
-        wallet: &str,
-        chain: &str,
-        message: &[u8],
-        credential: &str,
-        index: Option<u32>,
-    ) -> Result<SignResult, OwxError> {
-        signing::sign_message(self.vault, wallet, chain, message, credential, index)
-    }
-
-    pub fn sign_transaction(
-        self,
-        wallet: &str,
-        chain: &str,
-        tx_hex: &str,
-        credential: &str,
-        index: Option<u32>,
-    ) -> Result<TransactionSignResult, OwxError> {
-        signing::sign_transaction(self.vault, wallet, chain, tx_hex, credential, index)
-    }
-
-    pub async fn sign_and_send(
-        self,
-        wallet: &str,
-        chain: &str,
-        tx_hex: &str,
-        credential: &str,
-        index: Option<u32>,
-        rpc_url: Option<&str>,
-    ) -> Result<SendResult, OwxError> {
-        broadcast::sign_and_send(
-            self.vault, wallet, chain, tx_hex, credential, index, rpc_url,
-        )
-        .await
-    }
 }
 
 impl AgentWallet {
@@ -177,155 +41,17 @@ impl AgentWallet {
 
     #[must_use]
     pub const fn wallets(&self) -> WalletService<'_> {
-        WalletService { vault: &self.vault }
+        WalletService::new(&self.vault)
     }
 
     #[must_use]
     pub const fn api_keys(&self) -> ApiKeyService<'_> {
-        ApiKeyService { vault: &self.vault }
+        ApiKeyService::new(&self.vault)
     }
 
     #[must_use]
     pub const fn signing(&self) -> SigningService<'_> {
-        SigningService { vault: &self.vault }
-    }
-
-    /// Create a new wallet with a randomly generated mnemonic.
-    pub fn create_wallet(
-        &self,
-        name: &str,
-        passphrase: &str,
-        words: usize,
-    ) -> Result<WalletInfo, OwxError> {
-        self.wallets().create(name, passphrase, words)
-    }
-
-    /// Import a wallet from an existing mnemonic phrase.
-    pub fn import_mnemonic(
-        &self,
-        name: &str,
-        mnemonic_phrase: &str,
-        passphrase: &str,
-        index: u32,
-    ) -> Result<WalletInfo, OwxError> {
-        self.wallets()
-            .import_mnemonic(name, mnemonic_phrase, passphrase, index)
-    }
-
-    /// List all wallets.
-    pub fn list_wallets(&self) -> Result<Vec<WalletInfo>, OwxError> {
-        self.wallets().list()
-    }
-
-    /// Get a single wallet by name or ID.
-    pub fn get_wallet(&self, name_or_id: &str) -> Result<WalletInfo, OwxError> {
-        self.wallets().get(name_or_id)
-    }
-
-    /// Delete a wallet by name or ID.
-    pub fn delete_wallet(&self, name_or_id: &str) -> Result<(), OwxError> {
-        self.wallets().delete(name_or_id)
-    }
-
-    /// Export a wallet's mnemonic (requires owner passphrase).
-    pub fn export_wallet(
-        &self,
-        name_or_id: &str,
-        passphrase: &str,
-    ) -> Result<WalletSecret, OwxError> {
-        self.wallets().export(name_or_id, passphrase)
-    }
-
-    /// Create an API key for agent access to wallets.
-    ///
-    /// Returns `(token, key_file)`. The token is shown once to the user.
-    pub fn create_api_key(
-        &self,
-        name: &str,
-        wallet_ids: &[String],
-        policy_ids: &[String],
-        passphrase: &str,
-        expires_at: Option<&str>,
-    ) -> Result<ApiKeyCreateResult, OwxError> {
-        self.api_keys()
-            .create(name, wallet_ids, policy_ids, passphrase, expires_at)
-    }
-
-    /// Revoke (delete) an API key by ID.
-    pub fn revoke_api_key(&self, id: &str) -> Result<(), OwxError> {
-        self.api_keys().revoke(id)
-    }
-
-    /// List all API keys.
-    pub fn list_api_keys(&self) -> Result<Vec<ApiKeyInfo>, OwxError> {
-        self.api_keys().list()
-    }
-
-    /// Sign a message. `credential` is either a passphrase or an API token.
-    pub fn sign_message(
-        &self,
-        wallet: &str,
-        chain: &str,
-        message: &[u8],
-        credential: &str,
-        index: Option<u32>,
-    ) -> Result<SignResult, OwxError> {
-        self.signing()
-            .sign_message(wallet, chain, message, credential, index)
-    }
-
-    /// Sign a hex-encoded transaction. `credential` is either a passphrase or an API token.
-    pub fn sign_transaction(
-        &self,
-        wallet: &str,
-        chain: &str,
-        tx_hex: &str,
-        credential: &str,
-        index: Option<u32>,
-    ) -> Result<TransactionSignResult, OwxError> {
-        self.signing()
-            .sign_transaction(wallet, chain, tx_hex, credential, index)
-    }
-
-    /// Import a wallet from a hex-encoded private key.
-    pub fn import_private_key(
-        &self,
-        name: &str,
-        private_key_hex: &str,
-        chain: &str,
-        passphrase: &str,
-    ) -> Result<WalletInfo, OwxError> {
-        self.wallets()
-            .import_private_key(name, private_key_hex, chain, passphrase)
-    }
-
-    /// Rename a wallet.
-    pub fn rename_wallet(&self, name_or_id: &str, new_name: &str) -> Result<(), OwxError> {
-        self.wallets().rename(name_or_id, new_name)
-    }
-
-    /// Derive an address from a mnemonic for a specific chain.
-    pub fn derive_address(
-        mnemonic_phrase: &str,
-        chain: &str,
-        index: Option<u32>,
-    ) -> Result<String, OwxError> {
-        wallet_ops::derive_address(mnemonic_phrase, chain, index)
-    }
-
-    /// Sign a transaction and broadcast it to the chain RPC.
-    pub async fn sign_and_send(
-        &self,
-        wallet: &str,
-        chain: &str,
-        tx_hex: &str,
-        credential: &str,
-        index: Option<u32>,
-        rpc_url: Option<&str>,
-    ) -> Result<SendResult, OwxError> {
-        self.signing()
-            .sign_and_send(wallet, chain, tx_hex, credential, index, rpc_url)
-            .await
+        SigningService::new(&self.vault)
     }
 }
 
