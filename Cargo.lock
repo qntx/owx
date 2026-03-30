@@ -2557,6 +2557,7 @@ name = "owx-vault"
 version = "0.2.0"
 dependencies = [
  "aes-gcm",
+ "chrono",
  "getrandom 0.4.2",
  "hex",
  "hkdf",

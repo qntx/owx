@@ -9,6 +9,7 @@
 //! Core types ([`EncryptedWallet`], [`ApiKeyFile`], [`Config`]) live in
 //! [`owx_core`] and are re-exported here for convenience.
 
+pub mod audit;
 pub mod crypto;
 pub mod error;
 pub mod hardening;

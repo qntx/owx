@@ -41,7 +41,7 @@ pub fn create_api_key(
     }
 
     for pid in policy_ids {
-        vault.load_policy_raw(pid)?;
+        vault.load_policy(pid)?;
     }
 
     let key_file = ApiKeyFile {
@@ -146,8 +146,7 @@ fn load_policies(
 ) -> Result<Vec<owx_policy::Policy>, OwxError> {
     let mut policies = Vec::with_capacity(key_file.policy_ids.len());
     for pid in &key_file.policy_ids {
-        let json = vault.load_policy_raw(pid)?;
-        let policy: owx_policy::Policy = serde_json::from_str(&json)?;
+        let policy = vault.load_policy(pid)?;
         policies.push(policy);
     }
     Ok(policies)
