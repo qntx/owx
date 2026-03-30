@@ -10,8 +10,10 @@ use std::sync::{Mutex, OnceLock};
 
 /// Global registry of cleanup functions to run on termination signals.
 type CleanupHooks = Mutex<Vec<Box<dyn Fn() + Send>>>;
+/// Lazily-initialized global cleanup hook registry.
 static CLEANUP_HOOKS: OnceLock<CleanupHooks> = OnceLock::new();
 
+/// Get or initialize the global cleanup hooks registry.
 fn hooks() -> &'static Mutex<Vec<Box<dyn Fn() + Send>>> {
     CLEANUP_HOOKS.get_or_init(|| Mutex::new(Vec::new()))
 }
@@ -221,7 +223,7 @@ pub const fn munlock_slice(_ptr: *const u8, _len: usize) {}
 /// Read an environment variable and remove it from the process environment.
 pub fn clear_env_var(name: &str) -> Option<String> {
     let value = std::env::var(name).ok();
-    #[allow(deprecated, unsafe_code)]
+    #[allow(deprecated, unsafe_code, clippy::disallowed_methods)]
     // SAFETY: We accept the documented UB risk of remove_var in multi-threaded
     // programs. This function is only called during single-threaded startup.
     unsafe {
