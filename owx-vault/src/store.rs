@@ -1,6 +1,7 @@
 //! File-system vault: CRUD for wallets, API keys, and policies.
 
 #![allow(missing_docs)]
+#![allow(clippy::missing_docs_in_private_items)]
 
 use std::fs;
 use std::path::{Path, PathBuf};

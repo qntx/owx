@@ -1,5 +1,8 @@
 //! The main [`AgentWallet`] orchestration type.
 
+#![allow(missing_docs)]
+#![allow(clippy::missing_docs_in_private_items)]
+
 use owx_core::{
     ApiKeyCreateResult, ApiKeyInfo, SendResult, SignResult, TransactionSignResult, WalletInfo,
 };
@@ -23,6 +26,135 @@ pub struct AgentWallet {
     vault: Vault,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct WalletService<'a> {
+    vault: &'a Vault,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ApiKeyService<'a> {
+    vault: &'a Vault,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SigningService<'a> {
+    vault: &'a Vault,
+}
+
+impl WalletService<'_> {
+    pub fn create(
+        self,
+        name: &str,
+        passphrase: &str,
+        words: usize,
+    ) -> Result<WalletInfo, OwxError> {
+        wallet_ops::create_wallet(self.vault, name, passphrase, words)
+    }
+
+    pub fn import_mnemonic(
+        self,
+        name: &str,
+        mnemonic_phrase: &str,
+        passphrase: &str,
+        index: u32,
+    ) -> Result<WalletInfo, OwxError> {
+        wallet_ops::import_mnemonic(self.vault, name, mnemonic_phrase, passphrase, index)
+    }
+
+    pub fn list(self) -> Result<Vec<WalletInfo>, OwxError> {
+        wallet_ops::list_wallets(self.vault)
+    }
+
+    pub fn get(self, name_or_id: &str) -> Result<WalletInfo, OwxError> {
+        wallet_ops::get_wallet(self.vault, name_or_id)
+    }
+
+    pub fn delete(self, name_or_id: &str) -> Result<(), OwxError> {
+        wallet_ops::delete_wallet(self.vault, name_or_id)
+    }
+
+    pub fn export(self, name_or_id: &str, passphrase: &str) -> Result<WalletSecret, OwxError> {
+        wallet_ops::export_wallet(self.vault, name_or_id, passphrase)
+    }
+
+    pub fn import_private_key(
+        self,
+        name: &str,
+        private_key_hex: &str,
+        chain: &str,
+        passphrase: &str,
+    ) -> Result<WalletInfo, OwxError> {
+        wallet_ops::import_private_key(self.vault, name, private_key_hex, chain, passphrase)
+    }
+
+    pub fn rename(self, name_or_id: &str, new_name: &str) -> Result<(), OwxError> {
+        wallet_ops::rename_wallet(self.vault, name_or_id, new_name)
+    }
+}
+
+impl ApiKeyService<'_> {
+    pub fn create(
+        self,
+        name: &str,
+        wallet_ids: &[String],
+        policy_ids: &[String],
+        passphrase: &str,
+        expires_at: Option<&str>,
+    ) -> Result<ApiKeyCreateResult, OwxError> {
+        key_ops::create_api_key(
+            self.vault, name, wallet_ids, policy_ids, passphrase, expires_at,
+        )
+    }
+
+    pub fn revoke(self, id: &str) -> Result<(), OwxError> {
+        self.vault.api_keys().delete(id)?;
+        Ok(())
+    }
+
+    pub fn list(self) -> Result<Vec<ApiKeyInfo>, OwxError> {
+        key_ops::list_api_keys(self.vault)
+    }
+}
+
+impl SigningService<'_> {
+    pub fn sign_message(
+        self,
+        wallet: &str,
+        chain: &str,
+        message: &[u8],
+        credential: &str,
+        index: Option<u32>,
+    ) -> Result<SignResult, OwxError> {
+        signing::sign_message(self.vault, wallet, chain, message, credential, index)
+    }
+
+    pub fn sign_transaction(
+        self,
+        wallet: &str,
+        chain: &str,
+        tx_hex: &str,
+        credential: &str,
+        index: Option<u32>,
+    ) -> Result<TransactionSignResult, OwxError> {
+        signing::sign_transaction(self.vault, wallet, chain, tx_hex, credential, index)
+    }
+
+    pub async fn sign_and_send(
+        self,
+        wallet: &str,
+        chain: &str,
+        tx_hex: &str,
+        credential: &str,
+        index: Option<u32>,
+        rpc_url: Option<&str>,
+    ) -> Result<SendResult, OwxError> {
+        broadcast::sign_and_send(
+            self.vault, wallet, chain, tx_hex, credential, index, rpc_url,
+        )
+        .await
+    }
+}
+
 impl AgentWallet {
     /// Open an agent wallet backed by a vault at the given path.
     pub fn open(vault_path: impl Into<std::path::PathBuf>) -> Result<Self, OwxError> {
@@ -43,6 +175,21 @@ impl AgentWallet {
         &self.vault
     }
 
+    #[must_use]
+    pub const fn wallets(&self) -> WalletService<'_> {
+        WalletService { vault: &self.vault }
+    }
+
+    #[must_use]
+    pub const fn api_keys(&self) -> ApiKeyService<'_> {
+        ApiKeyService { vault: &self.vault }
+    }
+
+    #[must_use]
+    pub const fn signing(&self) -> SigningService<'_> {
+        SigningService { vault: &self.vault }
+    }
+
     /// Create a new wallet with a randomly generated mnemonic.
     pub fn create_wallet(
         &self,
@@ -50,7 +197,7 @@ impl AgentWallet {
         passphrase: &str,
         words: usize,
     ) -> Result<WalletInfo, OwxError> {
-        wallet_ops::create_wallet(&self.vault, name, passphrase, words)
+        self.wallets().create(name, passphrase, words)
     }
 
     /// Import a wallet from an existing mnemonic phrase.
@@ -61,22 +208,23 @@ impl AgentWallet {
         passphrase: &str,
         index: u32,
     ) -> Result<WalletInfo, OwxError> {
-        wallet_ops::import_mnemonic(&self.vault, name, mnemonic_phrase, passphrase, index)
+        self.wallets()
+            .import_mnemonic(name, mnemonic_phrase, passphrase, index)
     }
 
     /// List all wallets.
     pub fn list_wallets(&self) -> Result<Vec<WalletInfo>, OwxError> {
-        wallet_ops::list_wallets(&self.vault)
+        self.wallets().list()
     }
 
     /// Get a single wallet by name or ID.
     pub fn get_wallet(&self, name_or_id: &str) -> Result<WalletInfo, OwxError> {
-        wallet_ops::get_wallet(&self.vault, name_or_id)
+        self.wallets().get(name_or_id)
     }
 
     /// Delete a wallet by name or ID.
     pub fn delete_wallet(&self, name_or_id: &str) -> Result<(), OwxError> {
-        wallet_ops::delete_wallet(&self.vault, name_or_id)
+        self.wallets().delete(name_or_id)
     }
 
     /// Export a wallet's mnemonic (requires owner passphrase).
@@ -85,7 +233,7 @@ impl AgentWallet {
         name_or_id: &str,
         passphrase: &str,
     ) -> Result<WalletSecret, OwxError> {
-        wallet_ops::export_wallet(&self.vault, name_or_id, passphrase)
+        self.wallets().export(name_or_id, passphrase)
     }
 
     /// Create an API key for agent access to wallets.
@@ -99,25 +247,18 @@ impl AgentWallet {
         passphrase: &str,
         expires_at: Option<&str>,
     ) -> Result<ApiKeyCreateResult, OwxError> {
-        key_ops::create_api_key(
-            &self.vault,
-            name,
-            wallet_ids,
-            policy_ids,
-            passphrase,
-            expires_at,
-        )
+        self.api_keys()
+            .create(name, wallet_ids, policy_ids, passphrase, expires_at)
     }
 
     /// Revoke (delete) an API key by ID.
     pub fn revoke_api_key(&self, id: &str) -> Result<(), OwxError> {
-        self.vault.api_keys().delete(id)?;
-        Ok(())
+        self.api_keys().revoke(id)
     }
 
     /// List all API keys.
     pub fn list_api_keys(&self) -> Result<Vec<ApiKeyInfo>, OwxError> {
-        key_ops::list_api_keys(&self.vault)
+        self.api_keys().list()
     }
 
     /// Sign a message. `credential` is either a passphrase or an API token.
@@ -129,7 +270,8 @@ impl AgentWallet {
         credential: &str,
         index: Option<u32>,
     ) -> Result<SignResult, OwxError> {
-        signing::sign_message(&self.vault, wallet, chain, message, credential, index)
+        self.signing()
+            .sign_message(wallet, chain, message, credential, index)
     }
 
     /// Sign a hex-encoded transaction. `credential` is either a passphrase or an API token.
@@ -141,7 +283,8 @@ impl AgentWallet {
         credential: &str,
         index: Option<u32>,
     ) -> Result<TransactionSignResult, OwxError> {
-        signing::sign_transaction(&self.vault, wallet, chain, tx_hex, credential, index)
+        self.signing()
+            .sign_transaction(wallet, chain, tx_hex, credential, index)
     }
 
     /// Import a wallet from a hex-encoded private key.
@@ -152,12 +295,13 @@ impl AgentWallet {
         chain: &str,
         passphrase: &str,
     ) -> Result<WalletInfo, OwxError> {
-        wallet_ops::import_private_key(&self.vault, name, private_key_hex, chain, passphrase)
+        self.wallets()
+            .import_private_key(name, private_key_hex, chain, passphrase)
     }
 
     /// Rename a wallet.
     pub fn rename_wallet(&self, name_or_id: &str, new_name: &str) -> Result<(), OwxError> {
-        wallet_ops::rename_wallet(&self.vault, name_or_id, new_name)
+        self.wallets().rename(name_or_id, new_name)
     }
 
     /// Derive an address from a mnemonic for a specific chain.
@@ -179,16 +323,9 @@ impl AgentWallet {
         index: Option<u32>,
         rpc_url: Option<&str>,
     ) -> Result<SendResult, OwxError> {
-        broadcast::sign_and_send(
-            &self.vault,
-            wallet,
-            chain,
-            tx_hex,
-            credential,
-            index,
-            rpc_url,
-        )
-        .await
+        self.signing()
+            .sign_and_send(wallet, chain, tx_hex, credential, index, rpc_url)
+            .await
     }
 }
 
@@ -209,15 +346,15 @@ mod tests {
     fn full_lifecycle() {
         let (_dir, agent) = temp_agent();
 
-        let info = agent.create_wallet("my-wallet", "pass", 12).unwrap();
+        let info = agent.wallets().create("my-wallet", "pass", 12).unwrap();
         assert_eq!(info.name, "my-wallet");
         assert_eq!(info.accounts.len(), 3);
 
-        let wallets = agent.list_wallets().unwrap();
+        let wallets = agent.wallets().list().unwrap();
         assert_eq!(wallets.len(), 1);
 
-        agent.delete_wallet("my-wallet").unwrap();
-        assert!(agent.list_wallets().unwrap().is_empty());
+        agent.wallets().delete("my-wallet").unwrap();
+        assert!(agent.wallets().list().unwrap().is_empty());
     }
 
     #[test]
@@ -225,15 +362,17 @@ mod tests {
         let (_dir, agent) = temp_agent();
 
         agent
+            .wallets()
             .import_mnemonic("w", TEST_MNEMONIC, "pass", 0)
             .unwrap();
 
         let sig = agent
+            .signing()
             .sign_message("w", "ethereum", b"hello", "pass", None)
             .unwrap();
         assert!(!sig.signature.is_empty());
 
-        let exported = agent.export_wallet("w", "pass").unwrap();
+        let exported = agent.wallets().export("w", "pass").unwrap();
         assert_eq!(exported.phrase(), Some(TEST_MNEMONIC));
     }
 
@@ -242,12 +381,14 @@ mod tests {
         let (_dir, agent) = temp_agent();
 
         let info = agent
+            .wallets()
             .import_mnemonic("w", TEST_MNEMONIC, "pass", 0)
             .unwrap();
         let wallet_id = info.id;
 
         let result = agent
-            .create_api_key("agent-key", &[wallet_id], &[], "pass", None)
+            .api_keys()
+            .create("agent-key", &[wallet_id], &[], "pass", None)
             .unwrap();
         assert!(result.token.starts_with("owx_key_"));
         assert!(
@@ -257,11 +398,12 @@ mod tests {
         );
 
         let sig = agent
+            .signing()
             .sign_message("w", "ethereum", b"hello", &result.token, None)
             .unwrap();
         assert!(!sig.signature.is_empty());
 
-        agent.revoke_api_key(&result.key.id).unwrap();
+        agent.api_keys().revoke(&result.key.id).unwrap();
     }
 
     #[test]
@@ -269,6 +411,7 @@ mod tests {
         let (_dir, agent) = temp_agent();
 
         agent
+            .wallets()
             .import_private_key(
                 "pk",
                 "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
@@ -278,6 +421,7 @@ mod tests {
             .unwrap();
 
         let sig = agent
+            .signing()
             .sign_message("pk", "ethereum", b"hello", "pass", None)
             .unwrap();
         assert!(!sig.signature.is_empty());
@@ -288,10 +432,12 @@ mod tests {
         let (_dir, agent) = temp_agent();
 
         agent
+            .wallets()
             .import_mnemonic("w", TEST_MNEMONIC, "pass", 0)
             .unwrap();
 
         let result = agent
+            .signing()
             .sign_transaction(
                 "w",
                 "ethereum",

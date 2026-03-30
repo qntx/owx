@@ -228,7 +228,7 @@ fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
             rpc,
         } => {
             let cred = read_passphrase("Passphrase or API token: ");
-            let result = block_on(agent.sign_and_send(
+            let result = block_on(agent.signing().sign_and_send(
                 &wallet,
                 &chain,
                 &tx_hex,
@@ -254,7 +254,7 @@ fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
             print_json(&result)
         }
         Commands::Fund { chain, token } => {
-            let wallets = agent.list_wallets()?;
+            let wallets = agent.wallets().list()?;
             let wallet_info = wallets.first().ok_or_else(|| {
                 owx::OwxError::InvalidInput("no wallets found; create one first".into())
             })?;
@@ -289,41 +289,45 @@ fn run_wallet(action: WalletAction, agent: &AgentWallet) -> Result<(), owx::OwxE
     match action {
         WalletAction::Create { name, words } => {
             let pass = read_passphrase("Passphrase: ");
-            let info = agent.create_wallet(&name, &pass, words)?;
+            let info = agent.wallets().create(&name, &pass, words)?;
             print_json(&info)?;
         }
         WalletAction::Import { name, mnemonic } => {
             let pass = read_passphrase("Passphrase: ");
-            let info = agent.import_mnemonic(&name, &mnemonic, &pass, 0)?;
+            let info = agent
+                .wallets()
+                .import_mnemonic(&name, &mnemonic, &pass, 0)?;
             print_json(&info)?;
         }
         WalletAction::ImportKey { name, key, chain } => {
             let pass = read_passphrase("Passphrase: ");
-            let info = agent.import_private_key(&name, &key, &chain, &pass)?;
+            let info = agent
+                .wallets()
+                .import_private_key(&name, &key, &chain, &pass)?;
             print_json(&info)?;
         }
         WalletAction::List => {
-            let wallets = agent.list_wallets()?;
+            let wallets = agent.wallets().list()?;
             print_json(&wallets)?;
         }
         WalletAction::Info { name } => {
-            let info = agent.get_wallet(&name)?;
+            let info = agent.wallets().get(&name)?;
             print_json(&info)?;
         }
         WalletAction::Export { name } => {
             let pass = read_passphrase("Passphrase: ");
-            let secret = agent.export_wallet(&name, &pass)?;
+            let secret = agent.wallets().export(&name, &pass)?;
             print_json(&secret)?;
         }
         WalletAction::Rename { name, new_name } => {
-            agent.rename_wallet(&name, &new_name)?;
+            agent.wallets().rename(&name, &new_name)?;
             print_json(&serde_json::json!({
                 "status": "renamed",
                 "name": new_name,
             }))?;
         }
         WalletAction::Delete { name } => {
-            agent.delete_wallet(&name)?;
+            agent.wallets().delete(&name)?;
             print_json(&serde_json::json!({
                 "status": "deleted",
                 "name": name,
@@ -345,15 +349,17 @@ fn run_key(action: KeyAction, agent: &AgentWallet) -> Result<(), owx::OwxError> 
         } => {
             let pass = read_passphrase("Owner passphrase: ");
             let result =
-                agent.create_api_key(&name, &wallet, &policy, &pass, expires.as_deref())?;
+                agent
+                    .api_keys()
+                    .create(&name, &wallet, &policy, &pass, expires.as_deref())?;
             print_json(&result)?;
         }
         KeyAction::List => {
-            let keys = agent.list_api_keys()?;
+            let keys = agent.api_keys().list()?;
             print_json(&keys)?;
         }
         KeyAction::Revoke { id } => {
-            agent.revoke_api_key(&id)?;
+            agent.api_keys().revoke(&id)?;
             print_json(&serde_json::json!({
                 "status": "revoked",
                 "id": id,
@@ -373,7 +379,10 @@ fn run_sign(action: SignAction, agent: &AgentWallet) -> Result<(), owx::OwxError
             chain,
             message,
         } => {
-            let result = agent.sign_message(&wallet, &chain, message.as_bytes(), &cred, None)?;
+            let result =
+                agent
+                    .signing()
+                    .sign_message(&wallet, &chain, message.as_bytes(), &cred, None)?;
             print_json(&result)?;
         }
         SignAction::Transaction {
@@ -381,7 +390,9 @@ fn run_sign(action: SignAction, agent: &AgentWallet) -> Result<(), owx::OwxError
             chain,
             tx_hex,
         } => {
-            let result = agent.sign_transaction(&wallet, &chain, &tx_hex, &cred, None)?;
+            let result = agent
+                .signing()
+                .sign_transaction(&wallet, &chain, &tx_hex, &cred, None)?;
             print_json(&result)?;
         }
     }

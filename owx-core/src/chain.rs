@@ -34,6 +34,7 @@ pub struct Chain {
     pub chain_id: Cow<'static, str>,
 }
 
+#[allow(clippy::missing_docs_in_private_items)]
 impl Chain {
     const fn known(name: &'static str, chain_type: ChainType, chain_id: &'static str) -> Self {
         Self {
@@ -43,12 +44,12 @@ impl Chain {
         }
     }
 
-    fn custom(chain_type: ChainType, chain_id: ChainId) -> Self {
-        let chain_id = chain_id.to_string();
+    fn custom(chain_type: ChainType, chain_id: &ChainId) -> Self {
+        let chain_id_text = chain_id.to_string();
         Self {
-            name: Cow::Owned(chain_id.clone()),
+            name: Cow::Owned(chain_id_text.clone()),
             chain_type,
-            chain_id: Cow::Owned(chain_id),
+            chain_id: Cow::Owned(chain_id_text),
         }
     }
 }
@@ -98,7 +99,7 @@ pub fn parse_chain(s: &str) -> Result<Chain, String> {
 
     let chain_id = ChainId::from_str(s).map_err(|error| error.to_string())?;
     if let Some(chain_type) = ChainType::from_namespace(&chain_id.namespace) {
-        return Ok(Chain::custom(chain_type, chain_id));
+        return Ok(Chain::custom(chain_type, &chain_id));
     }
 
     Err(format!(
