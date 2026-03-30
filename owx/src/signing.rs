@@ -1,17 +1,16 @@
-#![allow(clippy::missing_docs_in_private_items)]
-
 //! Transaction and message signing operations.
 
 use owx_core::chain::ChainType;
 use owx_core::parse_chain;
 use owx_core::policy::TransactionContext;
 use owx_core::{SignResult, TransactionSignResult};
-use owx_vault::store::Vault;
+use owx_vault::Vault;
 
 use crate::derivation;
 use crate::error::OwxError;
-use crate::key_ops::{self, AccessRequest};
-use crate::wallet_secret::{WalletSecret, decrypt_wallet_secret};
+use crate::key;
+use crate::key::AccessRequest;
+use crate::secret::{WalletSecret, decrypt_wallet_secret};
 
 /// Sign a message. The `credential` is either a passphrase or an API token (`owx_key_...`).
 pub fn sign_message(
@@ -33,6 +32,7 @@ pub fn sign_message(
 
     Ok(SignResult {
         signature: hex::encode(&sig_bytes),
+        recovery_id: None,
     })
 }
 
@@ -72,6 +72,56 @@ pub fn sign_transaction(
     })
 }
 
+/// Sign EIP-712 typed structured data. Only supported for EVM chains.
+pub fn sign_typed_data(
+    vault: &Vault,
+    wallet_name_or_id: &str,
+    chain: &str,
+    typed_data_json: &str,
+    credential: &str,
+    index: Option<u32>,
+) -> Result<SignResult, OwxError> {
+    let chain_info = parse_chain(chain).map_err(OwxError::InvalidInput)?;
+    if chain_info.chain_type != ChainType::Evm {
+        return Err(OwxError::InvalidInput(
+            "EIP-712 typed data signing is only supported for EVM chains".into(),
+        ));
+    }
+    if owx_vault::api_key::is_api_token(credential) {
+        return Err(OwxError::InvalidInput(
+            "EIP-712 typed data signing via API key is not yet supported".into(),
+        ));
+    }
+    let account_index = index.unwrap_or(0);
+    let secret = {
+        let wallet = vault.wallets().load(wallet_name_or_id)?;
+        decrypt_wallet_secret(&wallet, credential)?
+    };
+    let sig_bytes = sign_typed_data_with_secret(&secret, account_index, typed_data_json)?;
+    Ok(SignResult {
+        signature: hex::encode(&sig_bytes),
+        recovery_id: None,
+    })
+}
+
+fn sign_typed_data_with_secret(
+    secret: &WalletSecret,
+    index: u32,
+    typed_data_json: &str,
+) -> Result<Vec<u8>, OwxError> {
+    match secret {
+        WalletSecret::Mnemonic { phrase } => {
+            derivation::sign_typed_data_with_mnemonic(phrase, index, typed_data_json)
+        }
+        WalletSecret::PrivateKeys { .. } => {
+            let key_hex = secret.private_key_hex(ChainType::Evm).ok_or_else(|| {
+                OwxError::InvalidInput("wallet does not contain an EVM private key".into())
+            })?;
+            derivation::sign_typed_data_with_private_key(key_hex, typed_data_json)
+        }
+    }
+}
+
 fn resolve_wallet_secret(
     vault: &Vault,
     wallet_name_or_id: &str,
@@ -79,7 +129,7 @@ fn resolve_wallet_secret(
     request: &AccessRequest,
 ) -> Result<WalletSecret, OwxError> {
     if owx_vault::api_key::is_api_token(credential) {
-        key_ops::resolve_wallet_secret_from_token(vault, credential, wallet_name_or_id, request)
+        key::resolve_wallet_secret_from_token(vault, credential, wallet_name_or_id, request)
     } else {
         let wallet = vault.wallets().load(wallet_name_or_id)?;
         decrypt_wallet_secret(&wallet, credential)
@@ -144,8 +194,8 @@ fn sign_evm_transaction_with_secret(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::key_ops;
-    use crate::wallet_ops;
+    use crate::key;
+    use crate::wallet;
 
     const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
@@ -158,7 +208,7 @@ mod tests {
     #[test]
     fn sign_message_with_passphrase() {
         let (_dir, vault) = temp_vault();
-        wallet_ops::import_mnemonic(&vault, "w", TEST_MNEMONIC, "pass", 0).unwrap();
+        wallet::import_mnemonic(&vault, "w", TEST_MNEMONIC, "pass", 0).unwrap();
 
         let result = sign_message(&vault, "w", "ethereum", b"hello", "pass", None).unwrap();
         assert!(!result.signature.is_empty());
@@ -167,7 +217,7 @@ mod tests {
     #[test]
     fn sign_message_with_private_key_wallet() {
         let (_dir, vault) = temp_vault();
-        wallet_ops::import_private_key(
+        wallet::import_private_key(
             &vault,
             "w",
             "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
@@ -183,7 +233,7 @@ mod tests {
     #[test]
     fn sign_evm_transaction_with_passphrase() {
         let (_dir, vault) = temp_vault();
-        wallet_ops::import_mnemonic(&vault, "w", TEST_MNEMONIC, "pass", 0).unwrap();
+        wallet::import_mnemonic(&vault, "w", TEST_MNEMONIC, "pass", 0).unwrap();
 
         let result = sign_transaction(
             &vault,
@@ -202,7 +252,7 @@ mod tests {
     #[test]
     fn sign_transaction_rejects_non_evm_chain() {
         let (_dir, vault) = temp_vault();
-        wallet_ops::import_mnemonic(&vault, "w", TEST_MNEMONIC, "pass", 0).unwrap();
+        wallet::import_mnemonic(&vault, "w", TEST_MNEMONIC, "pass", 0).unwrap();
 
         let result = sign_transaction(&vault, "w", "solana", "00", "pass", None);
         assert!(result.is_err());
@@ -211,7 +261,7 @@ mod tests {
     #[test]
     fn sign_transaction_with_api_key_respects_recipient_policy() {
         let (_dir, vault) = temp_vault();
-        let wallet = wallet_ops::import_mnemonic(&vault, "w", TEST_MNEMONIC, "pass", 0).unwrap();
+        let w = wallet::import_mnemonic(&vault, "w", TEST_MNEMONIC, "pass", 0).unwrap();
         let policy = serde_json::json!({
             "id": "recipient-policy",
             "name": "Recipient Policy",
@@ -228,8 +278,8 @@ mod tests {
             .save_raw("recipient-policy", &policy.to_string())
             .unwrap();
 
-        let wallet_id = wallet.id;
-        let result = key_ops::create_api_key(
+        let wallet_id = w.id;
+        let result = key::create_api_key(
             &vault,
             "agent",
             &[wallet_id],

@@ -1,12 +1,10 @@
 //! CLI for OWX agent wallet toolkit.
 
-#![allow(clippy::missing_docs_in_private_items)]
-
 use std::future::Future;
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use owx::AgentWallet;
+use owx::Vault;
 
 #[derive(Parser)]
 #[command(
@@ -199,28 +197,28 @@ enum SignAction {
 fn main() {
     let cli = Cli::parse();
 
-    let agent_result = match &cli.vault {
-        Some(path) => AgentWallet::open(path),
-        None => AgentWallet::open_default(),
+    let vault = match &cli.vault {
+        Some(path) => Vault::open(path),
+        None => Vault::open_default(),
     };
 
-    let agent = match agent_result {
-        Ok(a) => a,
-        Err(e) => exit_with_error(&e),
+    let vault = match vault {
+        Ok(v) => v,
+        Err(e) => exit_with_error(&owx::OwxError::from(e)),
     };
 
-    if let Err(e) = run(cli.command, &agent) {
+    if let Err(e) = run(cli.command, &vault) {
         exit_with_error(&e);
     }
 }
 
 /// Dispatch CLI commands.
 #[allow(clippy::print_stdout)]
-fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
+fn run(cmd: Commands, vault: &Vault) -> Result<(), owx::OwxError> {
     match cmd {
-        Commands::Wallet { action } => run_wallet(action, agent),
-        Commands::Key { action } => run_key(action, agent),
-        Commands::Sign { action } => run_sign(action, agent),
+        Commands::Wallet { action } => run_wallet(action, vault),
+        Commands::Key { action } => run_key(action, vault),
+        Commands::Sign { action } => run_sign(action, vault),
         Commands::Send {
             wallet,
             chain,
@@ -228,7 +226,8 @@ fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
             rpc,
         } => {
             let cred = read_passphrase("Passphrase or API token: ");
-            let result = block_on(agent.signing().sign_and_send(
+            let result = block_on(owx::sign_and_send(
+                vault,
                 &wallet,
                 &chain,
                 &tx_hex,
@@ -254,7 +253,7 @@ fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
             print_json(&result)
         }
         Commands::Fund { chain, token } => {
-            let wallets = agent.wallets().list()?;
+            let wallets = owx::list_wallets(vault)?;
             let wallet_info = wallets.first().ok_or_else(|| {
                 owx::OwxError::InvalidInput("no wallets found; create one first".into())
             })?;
@@ -285,49 +284,45 @@ fn run(cmd: Commands, agent: &AgentWallet) -> Result<(), owx::OwxError> {
 
 /// Execute wallet subcommands.
 #[allow(clippy::print_stdout)]
-fn run_wallet(action: WalletAction, agent: &AgentWallet) -> Result<(), owx::OwxError> {
+fn run_wallet(action: WalletAction, vault: &Vault) -> Result<(), owx::OwxError> {
     match action {
         WalletAction::Create { name, words } => {
             let pass = read_passphrase("Passphrase: ");
-            let info = agent.wallets().create(&name, &pass, words)?;
+            let info = owx::create_wallet(vault, &name, &pass, words)?;
             print_json(&info)?;
         }
         WalletAction::Import { name, mnemonic } => {
             let pass = read_passphrase("Passphrase: ");
-            let info = agent
-                .wallets()
-                .import_mnemonic(&name, &mnemonic, &pass, 0)?;
+            let info = owx::import_mnemonic(vault, &name, &mnemonic, &pass, 0)?;
             print_json(&info)?;
         }
         WalletAction::ImportKey { name, key, chain } => {
             let pass = read_passphrase("Passphrase: ");
-            let info = agent
-                .wallets()
-                .import_private_key(&name, &key, &chain, &pass)?;
+            let info = owx::import_private_key(vault, &name, &key, &chain, &pass)?;
             print_json(&info)?;
         }
         WalletAction::List => {
-            let wallets = agent.wallets().list()?;
+            let wallets = owx::list_wallets(vault)?;
             print_json(&wallets)?;
         }
         WalletAction::Info { name } => {
-            let info = agent.wallets().get(&name)?;
+            let info = owx::get_wallet(vault, &name)?;
             print_json(&info)?;
         }
         WalletAction::Export { name } => {
             let pass = read_passphrase("Passphrase: ");
-            let secret = agent.wallets().export(&name, &pass)?;
+            let secret = owx::export_wallet(vault, &name, &pass)?;
             print_json(&secret)?;
         }
         WalletAction::Rename { name, new_name } => {
-            agent.wallets().rename(&name, &new_name)?;
+            owx::rename_wallet(vault, &name, &new_name)?;
             print_json(&serde_json::json!({
                 "status": "renamed",
                 "name": new_name,
             }))?;
         }
         WalletAction::Delete { name } => {
-            agent.wallets().delete(&name)?;
+            owx::delete_wallet(vault, &name)?;
             print_json(&serde_json::json!({
                 "status": "deleted",
                 "name": name,
@@ -339,7 +334,7 @@ fn run_wallet(action: WalletAction, agent: &AgentWallet) -> Result<(), owx::OwxE
 
 /// Execute API key subcommands.
 #[allow(clippy::print_stdout)]
-fn run_key(action: KeyAction, agent: &AgentWallet) -> Result<(), owx::OwxError> {
+fn run_key(action: KeyAction, vault: &Vault) -> Result<(), owx::OwxError> {
     match action {
         KeyAction::Create {
             name,
@@ -349,17 +344,15 @@ fn run_key(action: KeyAction, agent: &AgentWallet) -> Result<(), owx::OwxError> 
         } => {
             let pass = read_passphrase("Owner passphrase: ");
             let result =
-                agent
-                    .api_keys()
-                    .create(&name, &wallet, &policy, &pass, expires.as_deref())?;
+                owx::create_api_key(vault, &name, &wallet, &policy, &pass, expires.as_deref())?;
             print_json(&result)?;
         }
         KeyAction::List => {
-            let keys = agent.api_keys().list()?;
+            let keys = owx::list_api_keys(vault)?;
             print_json(&keys)?;
         }
         KeyAction::Revoke { id } => {
-            agent.api_keys().revoke(&id)?;
+            owx::revoke_api_key(vault, &id)?;
             print_json(&serde_json::json!({
                 "status": "revoked",
                 "id": id,
@@ -371,7 +364,7 @@ fn run_key(action: KeyAction, agent: &AgentWallet) -> Result<(), owx::OwxError> 
 
 /// Execute signing subcommands.
 #[allow(clippy::print_stdout)]
-fn run_sign(action: SignAction, agent: &AgentWallet) -> Result<(), owx::OwxError> {
+fn run_sign(action: SignAction, vault: &Vault) -> Result<(), owx::OwxError> {
     let cred = read_passphrase("Passphrase or API token: ");
     match action {
         SignAction::Message {
@@ -380,9 +373,7 @@ fn run_sign(action: SignAction, agent: &AgentWallet) -> Result<(), owx::OwxError
             message,
         } => {
             let result =
-                agent
-                    .signing()
-                    .sign_message(&wallet, &chain, message.as_bytes(), &cred, None)?;
+                owx::sign_message(vault, &wallet, &chain, message.as_bytes(), &cred, None)?;
             print_json(&result)?;
         }
         SignAction::Transaction {
@@ -390,9 +381,7 @@ fn run_sign(action: SignAction, agent: &AgentWallet) -> Result<(), owx::OwxError
             chain,
             tx_hex,
         } => {
-            let result = agent
-                .signing()
-                .sign_transaction(&wallet, &chain, &tx_hex, &cred, None)?;
+            let result = owx::sign_transaction(vault, &wallet, &chain, &tx_hex, &cred, None)?;
             print_json(&result)?;
         }
     }

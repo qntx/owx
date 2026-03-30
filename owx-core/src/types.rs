@@ -44,6 +44,8 @@ pub struct ApiKeyCreateResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignResult {
     pub signature: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery_id: Option<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

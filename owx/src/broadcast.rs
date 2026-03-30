@@ -1,7 +1,7 @@
 //! Sign and broadcast transactions to chain RPCs.
 
 use owx_core::{SendResult, parse_chain};
-use owx_vault::store::Vault;
+use owx_vault::Vault;
 
 use crate::error::OwxError;
 use crate::signing;

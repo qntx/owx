@@ -1,17 +1,15 @@
-#![allow(clippy::missing_docs_in_private_items)]
-
-//! Wallet CRUD operations: create, import, export, delete.
+//! Wallet CRUD operations: create, import, export, delete, derive.
 
 use owx_core::chain::{ALL_CHAIN_TYPES, default_chain_for_type};
 use owx_core::wallet_file::{EncryptedWallet, WalletAccount};
 use owx_core::{AccountInfo, WalletInfo};
+use owx_vault::Vault;
 use owx_vault::crypto;
-use owx_vault::store::Vault;
 use zeroize::Zeroize;
 
 use crate::derivation;
 use crate::error::OwxError;
-use crate::wallet_secret::{WalletSecret, decrypt_wallet_secret};
+use crate::secret::{WalletSecret, decrypt_wallet_secret};
 
 /// Convert an encrypted wallet to a public-facing info struct.
 fn wallet_to_info(w: &EncryptedWallet) -> WalletInfo {
@@ -188,6 +186,17 @@ pub fn rename_wallet(vault: &Vault, name_or_id: &str, new_name: &str) -> Result<
     Ok(())
 }
 
+/// Generate a new BIP-39 mnemonic phrase.
+pub fn generate_mnemonic(words: u32) -> Result<String, OwxError> {
+    let w = match words {
+        12 | 24 => words as usize,
+        _ => return Err(OwxError::InvalidInput("words must be 12 or 24".into())),
+    };
+    let wallet =
+        kobe::Wallet::generate(w, None).map_err(|e| OwxError::Derivation(e.to_string()))?;
+    Ok(wallet.mnemonic().to_owned())
+}
+
 /// Derive an address from a mnemonic for a specific chain.
 pub fn derive_address(
     mnemonic_phrase: &str,
@@ -205,16 +214,17 @@ pub fn derive_address(
         })
 }
 
-/// Export a wallet's secret.
+/// Export a wallet's secret as a string.
 ///
-/// Mnemonic wallets return the phrase. Private key wallets return JSON with both keys.
+/// Mnemonic wallets return the phrase. Private key wallets return JSON `{"secp256k1":"hex","ed25519":"hex"}`.
 pub fn export_wallet(
     vault: &Vault,
     name_or_id: &str,
     passphrase: &str,
-) -> Result<WalletSecret, OwxError> {
+) -> Result<String, OwxError> {
     let wallet = vault.wallets().load(name_or_id)?;
-    decrypt_wallet_secret(&wallet, passphrase)
+    let secret = decrypt_wallet_secret(&wallet, passphrase)?;
+    secret.export_string()
 }
 
 #[cfg(test)]
@@ -248,7 +258,7 @@ mod tests {
         assert_eq!(info.accounts.len(), 3);
 
         let exported = export_wallet(&vault, "imported", "pass").unwrap();
-        assert_eq!(exported.phrase(), Some(TEST_MNEMONIC));
+        assert_eq!(exported, TEST_MNEMONIC);
     }
 
     #[test]
@@ -295,13 +305,8 @@ mod tests {
         );
 
         let exported = export_wallet(&vault, "pk-wallet", "pass").unwrap();
-        assert!(matches!(
-            exported,
-            WalletSecret::PrivateKeys {
-                secp256k1: Some(_),
-                ed25519: None,
-            }
-        ));
+        assert!(exported.contains("secp256k1"));
+        assert!(!exported.contains("ed25519"));
     }
 
     #[test]
@@ -327,5 +332,22 @@ mod tests {
         let addr = derive_address(TEST_MNEMONIC, "ethereum", Some(0)).unwrap();
         assert!(addr.starts_with("0x"));
         assert_eq!(addr.len(), 42);
+    }
+
+    #[test]
+    fn generate_mnemonic_12_words() {
+        let phrase = generate_mnemonic(12).unwrap();
+        assert_eq!(phrase.split_whitespace().count(), 12);
+    }
+
+    #[test]
+    fn generate_mnemonic_24_words() {
+        let phrase = generate_mnemonic(24).unwrap();
+        assert_eq!(phrase.split_whitespace().count(), 24);
+    }
+
+    #[test]
+    fn generate_mnemonic_invalid_words() {
+        assert!(generate_mnemonic(15).is_err());
     }
 }

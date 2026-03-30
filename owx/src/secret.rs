@@ -1,4 +1,4 @@
-#![allow(clippy::missing_docs_in_private_items, missing_docs)]
+//! Internal wallet secret types for encryption/decryption.
 
 use owx_core::chain::ChainType;
 use owx_core::wallet_file::{EncryptedWallet, KeyType};

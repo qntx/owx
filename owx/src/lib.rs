@@ -1,28 +1,31 @@
 //! Agent-native, self-custodial, policy-gated, multi-chain wallet toolkit.
 //!
-//! `owx` is the orchestration layer that combines:
-//! - [`owx_core`] for shared types and chain registry
-//! - [`kobe`] for HD key derivation
-//! - [`signer`] for chain-specific signing
-//! - [`owx_vault`] for encrypted storage and process hardening
-//! - [`owx_policy`] for policy enforcement
-//! - [`owx_pay`] for x402 payments
+//! Flat public API over [`owx_vault::Vault`]. All operations take a `&Vault` handle.
+//!
+//! ```ignore
+//! let vault = owx::Vault::open("~/.owx")?;
+//! let info  = owx::create_wallet(&vault, "my-wallet", "pass", 12)?;
+//! let sig   = owx::sign_message(&vault, "my-wallet", "ethereum", b"hello", "pass", None)?;
+//! ```
 
-mod agent;
 mod broadcast;
 mod derivation;
 mod error;
-mod key_ops;
-mod services;
+mod key;
+mod secret;
 mod signing;
-mod wallet_ops;
-mod wallet_secret;
+mod wallet;
 
-pub use agent::AgentWallet;
+pub use broadcast::sign_and_send;
 pub use error::{OwxError, OwxErrorCode};
+pub use key::{create_api_key, list_api_keys, revoke_api_key};
 pub use owx_core::{
     AccountInfo, ApiKeyCreateResult, ApiKeyInfo, SendResult, SignResult, TransactionSignResult,
     WalletInfo,
 };
-pub use services::{ApiKeyService, SigningService, WalletService, derive_address};
-pub use wallet_secret::WalletSecret;
+pub use owx_vault::Vault;
+pub use signing::{sign_message, sign_transaction, sign_typed_data};
+pub use wallet::{
+    create_wallet, delete_wallet, derive_address, export_wallet, generate_mnemonic, get_wallet,
+    import_mnemonic, import_private_key, list_wallets, rename_wallet,
+};

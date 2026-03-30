@@ -1,20 +1,16 @@
-#![allow(clippy::missing_docs_in_private_items, missing_docs)]
-
-//! API key creation and token-based signing flows.
+//! API key creation, listing, revocation, and token-based signing flows.
 
 use std::collections::HashMap;
 
 use owx_core::policy::{PolicyContext, SpendingContext, TransactionContext};
 use owx_core::{ApiKeyCreateResult, ApiKeyInfo};
+use owx_vault::Vault;
 use owx_vault::api_key::{self, ApiKeyFile};
 use owx_vault::crypto;
-use owx_vault::store::Vault;
 use zeroize::Zeroize;
 
 use crate::error::OwxError;
-use crate::wallet_secret::{
-    WalletSecret, decrypt_wallet_secret, decrypt_wallet_secret_from_envelope,
-};
+use crate::secret::{WalletSecret, decrypt_wallet_secret, decrypt_wallet_secret_from_envelope};
 
 #[derive(Debug, Clone)]
 pub struct AccessRequest {
@@ -112,6 +108,7 @@ pub fn create_api_key(
     })
 }
 
+/// List all API keys in the vault.
 pub fn list_api_keys(vault: &Vault) -> Result<Vec<ApiKeyInfo>, OwxError> {
     Ok(vault
         .api_keys()
@@ -119,6 +116,12 @@ pub fn list_api_keys(vault: &Vault) -> Result<Vec<ApiKeyInfo>, OwxError> {
         .iter()
         .map(api_key_to_info)
         .collect())
+}
+
+/// Revoke (delete) an API key by ID.
+pub fn revoke_api_key(vault: &Vault, id: &str) -> Result<(), OwxError> {
+    vault.api_keys().delete(id)?;
+    Ok(())
 }
 
 /// Resolve a mnemonic from an API token (agent mode).
@@ -211,12 +214,12 @@ fn load_policies(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::wallet_ops;
+    use crate::wallet;
 
     const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
     fn setup(vault: &Vault) -> String {
-        wallet_ops::import_mnemonic(vault, "test-wallet", TEST_MNEMONIC, "pass", 0)
+        wallet::import_mnemonic(vault, "test-wallet", TEST_MNEMONIC, "pass", 0)
             .unwrap()
             .id
     }
