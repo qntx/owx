@@ -69,14 +69,15 @@ impl KeyCache {
         };
         self.evict_expired_inner(&mut map);
 
-        if map.len() >= self.max_entries && !map.contains_key(id)
+        if map.len() >= self.max_entries
+            && !map.contains_key(id)
             && let Some(lru_key) = map
                 .iter()
                 .min_by_key(|(_, e)| e.last_accessed)
                 .map(|(k, _)| k.clone())
-            {
-                map.remove(&lru_key);
-            }
+        {
+            map.remove(&lru_key);
+        }
 
         map.insert(
             id.to_owned(),
@@ -136,6 +137,7 @@ impl Drop for KeyCache {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use std::thread;
 

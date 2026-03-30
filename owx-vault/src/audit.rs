@@ -96,13 +96,15 @@ impl AuditLog {
             .open(&self.path)
             .and_then(|mut f| writeln!(f, "{json}"));
 
-        if let Err(_e) = result {
-            #[cfg(debug_assertions)]
+        #[cfg(debug_assertions)]
+        if let Err(e) = result {
             #[allow(clippy::print_stderr)]
             {
-                eprintln!("warning: audit log write failed: {_e}");
+                eprintln!("warning: audit log write failed: {e}");
             }
         }
+        #[cfg(not(debug_assertions))]
+        let _ = result;
     }
 
     /// Convenience: log a successful operation.
@@ -144,9 +146,8 @@ impl AuditLog {
     /// Returns an empty vec if the file does not exist.
     /// Malformed lines are silently skipped.
     pub fn read_all(&self) -> Vec<AuditEntry> {
-        let contents = match fs::read_to_string(&self.path) {
-            Ok(c) => c,
-            Err(_) => return Vec::new(),
+        let Ok(contents) = fs::read_to_string(&self.path) else {
+            return Vec::new();
         };
         contents
             .lines()
