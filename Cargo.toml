@@ -24,7 +24,7 @@ owx-pay = { version = "0.2", path = "owx-pay" }
 # HD wallet (kobe)
 kobe = { version = "0.5.4", default-features = false, features = ["std", "rand"] }
 kobe-btc = { version = "0.5.4", default-features = false, features = ["std"] }
-kobe-evm = { version = "0.5.4", default-features = false, features = ["std"] }
+kobe-evm = { version = "0.7.2", default-features = false, features = ["std"] }
 kobe-svm = { version = "0.5.4", default-features = false, features = ["std"] }
 
 # Signing (signer)

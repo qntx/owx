@@ -2287,6 +2287,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "kobe-core"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a472c9c2ea9235276a98774accb5c2e3c64be32cc5f4df0f40596f4affd6bcc"
+dependencies = [
+ "bip32",
+ "bip39",
+ "hex",
+ "k256",
+ "thiserror 2.0.18",
+ "zeroize",
+]
+
+[[package]]
 name = "kobe-evm"
 version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2297,6 +2311,18 @@ dependencies = [
  "hex",
  "k256",
  "kobe",
+ "thiserror 2.0.18",
+ "zeroize",
+]
+
+[[package]]
+name = "kobe-evm"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49503eb22b8fd17160cf53f8f62c8880f670bc8246c889c570d4656a097e0253"
+dependencies = [
+ "alloy-primitives",
+ "kobe-core",
  "thiserror 2.0.18",
  "zeroize",
 ]
@@ -2480,7 +2506,7 @@ dependencies = [
  "hex",
  "kobe",
  "kobe-btc",
- "kobe-evm",
+ "kobe-evm 0.7.2",
  "kobe-svm",
  "owx-core",
  "owx-pay",
@@ -3589,7 +3615,7 @@ dependencies = [
  "alloy-signer",
  "alloy-signer-local",
  "hex",
- "kobe-evm",
+ "kobe-evm 0.5.4",
  "thiserror 2.0.18",
 ]
 
