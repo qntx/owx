@@ -2287,6 +2287,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "kobe-btc"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90426b6b45ae46de9412a6e3c7006bb5298b005d7dafca5f9ca12db4c52e3508"
+dependencies = [
+ "bitcoin",
+ "hex",
+ "kobe-core",
+ "thiserror 2.0.18",
+ "zeroize",
+]
+
+[[package]]
+name = "kobe-core"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a472c9c2ea9235276a98774accb5c2e3c64be32cc5f4df0f40596f4affd6bcc"
+dependencies = [
+ "bip39",
+ "thiserror 2.0.18",
+ "zeroize",
+]
+
+[[package]]
 name = "kobe-evm"
 version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2479,7 +2503,7 @@ dependencies = [
  "getrandom 0.4.2",
  "hex",
  "kobe",
- "kobe-btc",
+ "kobe-btc 0.7.2",
  "kobe-evm",
  "kobe-svm",
  "owx-core",
@@ -3573,7 +3597,7 @@ checksum = "ea17e3ad1c7b9bc607c19a6b1812ebe3c973ff7b015aaa3448ee091ff9e03c9f"
 dependencies = [
  "bitcoin",
  "hex",
- "kobe-btc",
+ "kobe-btc 0.5.4",
  "thiserror 2.0.18",
 ]
 
