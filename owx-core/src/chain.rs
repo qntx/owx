@@ -55,22 +55,86 @@ pub struct Chain {
 
 /// Known chains registry.
 pub const KNOWN_CHAINS: &[Chain] = &[
-    Chain { name: "ethereum",  chain_type: ChainType::Evm,      chain_id: "eip155:1" },
-    Chain { name: "polygon",   chain_type: ChainType::Evm,      chain_id: "eip155:137" },
-    Chain { name: "arbitrum",  chain_type: ChainType::Evm,      chain_id: "eip155:42161" },
-    Chain { name: "optimism",  chain_type: ChainType::Evm,      chain_id: "eip155:10" },
-    Chain { name: "base",      chain_type: ChainType::Evm,      chain_id: "eip155:8453" },
-    Chain { name: "plasma",    chain_type: ChainType::Evm,      chain_id: "eip155:9745" },
-    Chain { name: "bsc",       chain_type: ChainType::Evm,      chain_id: "eip155:56" },
-    Chain { name: "avalanche", chain_type: ChainType::Evm,      chain_id: "eip155:43114" },
-    Chain { name: "solana",    chain_type: ChainType::Solana,   chain_id: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp" },
-    Chain { name: "bitcoin",   chain_type: ChainType::Bitcoin,  chain_id: "bip122:000000000019d6689c085ae165831e93" },
-    Chain { name: "cosmos",    chain_type: ChainType::Cosmos,   chain_id: "cosmos:cosmoshub-4" },
-    Chain { name: "tron",      chain_type: ChainType::Tron,     chain_id: "tron:mainnet" },
-    Chain { name: "ton",       chain_type: ChainType::Ton,      chain_id: "ton:mainnet" },
-    Chain { name: "spark",     chain_type: ChainType::Spark,    chain_id: "spark:mainnet" },
-    Chain { name: "filecoin",  chain_type: ChainType::Filecoin, chain_id: "fil:mainnet" },
-    Chain { name: "sui",       chain_type: ChainType::Sui,      chain_id: "sui:mainnet" },
+    Chain {
+        name: "ethereum",
+        chain_type: ChainType::Evm,
+        chain_id: "eip155:1",
+    },
+    Chain {
+        name: "polygon",
+        chain_type: ChainType::Evm,
+        chain_id: "eip155:137",
+    },
+    Chain {
+        name: "arbitrum",
+        chain_type: ChainType::Evm,
+        chain_id: "eip155:42161",
+    },
+    Chain {
+        name: "optimism",
+        chain_type: ChainType::Evm,
+        chain_id: "eip155:10",
+    },
+    Chain {
+        name: "base",
+        chain_type: ChainType::Evm,
+        chain_id: "eip155:8453",
+    },
+    Chain {
+        name: "plasma",
+        chain_type: ChainType::Evm,
+        chain_id: "eip155:9745",
+    },
+    Chain {
+        name: "bsc",
+        chain_type: ChainType::Evm,
+        chain_id: "eip155:56",
+    },
+    Chain {
+        name: "avalanche",
+        chain_type: ChainType::Evm,
+        chain_id: "eip155:43114",
+    },
+    Chain {
+        name: "solana",
+        chain_type: ChainType::Solana,
+        chain_id: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+    },
+    Chain {
+        name: "bitcoin",
+        chain_type: ChainType::Bitcoin,
+        chain_id: "bip122:000000000019d6689c085ae165831e93",
+    },
+    Chain {
+        name: "cosmos",
+        chain_type: ChainType::Cosmos,
+        chain_id: "cosmos:cosmoshub-4",
+    },
+    Chain {
+        name: "tron",
+        chain_type: ChainType::Tron,
+        chain_id: "tron:mainnet",
+    },
+    Chain {
+        name: "ton",
+        chain_type: ChainType::Ton,
+        chain_id: "ton:mainnet",
+    },
+    Chain {
+        name: "spark",
+        chain_type: ChainType::Spark,
+        chain_id: "spark:mainnet",
+    },
+    Chain {
+        name: "filecoin",
+        chain_type: ChainType::Filecoin,
+        chain_id: "fil:mainnet",
+    },
+    Chain {
+        name: "sui",
+        chain_type: ChainType::Sui,
+        chain_id: "sui:mainnet",
+    },
 ];
 
 /// Parse a chain string into a [`Chain`].
@@ -274,7 +338,10 @@ mod tests {
         assert_eq!(ChainType::from_namespace("eip155"), Some(ChainType::Evm));
         assert_eq!(ChainType::from_namespace("solana"), Some(ChainType::Solana));
         assert_eq!(ChainType::from_namespace("cosmos"), Some(ChainType::Cosmos));
-        assert_eq!(ChainType::from_namespace("bip122"), Some(ChainType::Bitcoin));
+        assert_eq!(
+            ChainType::from_namespace("bip122"),
+            Some(ChainType::Bitcoin)
+        );
         assert_eq!(ChainType::from_namespace("tron"), Some(ChainType::Tron));
         assert_eq!(ChainType::from_namespace("ton"), Some(ChainType::Ton));
         assert_eq!(ChainType::from_namespace("spark"), Some(ChainType::Spark));

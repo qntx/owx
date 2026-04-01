@@ -21,9 +21,7 @@ pub mod store;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-pub use crypto::{
-    CryptoEnvelope, decrypt, encrypt, encrypt_hkdf, generate_token, hash_token,
-};
+pub use crypto::{CryptoEnvelope, decrypt, encrypt, encrypt_hkdf, generate_token, hash_token};
 pub use error::VaultError;
 pub use key_cache::KeyCache;
 pub use owx_core::api_key::{ApiKeyFile, TOKEN_PREFIX, is_api_token};

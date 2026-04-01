@@ -15,24 +15,55 @@ use crate::types::SignResult;
 macro_rules! with_signer {
     ($ct:expr, $key_hex:expr, $s:ident => $body:expr) => {
         match $ct {
-            ChainType::Evm      => { let $s = signer::evm::Signer::from_hex($key_hex).map_err(s_err)?; $body }
-            ChainType::Bitcoin   => { let $s = signer::btc::Signer::from_hex($key_hex).map_err(s_err)?; $body }
-            ChainType::Solana    => { let $s = signer::svm::Signer::from_hex($key_hex).map_err(s_err)?; $body }
-            ChainType::Cosmos    => { let $s = signer::cosmos::Signer::from_hex($key_hex).map_err(s_err)?; $body }
-            ChainType::Tron      => { let $s = signer::tron::Signer::from_hex($key_hex).map_err(s_err)?; $body }
-            ChainType::Ton       => { let $s = signer::ton::Signer::from_hex($key_hex).map_err(s_err)?; $body }
-            ChainType::Spark     => { let $s = signer::spark::Signer::from_hex($key_hex).map_err(s_err)?; $body }
-            ChainType::Filecoin  => { let $s = signer::fil::Signer::from_hex($key_hex).map_err(s_err)?; $body }
-            ChainType::Sui       => { let $s = signer::sui::Signer::from_hex($key_hex).map_err(s_err)?; $body }
+            ChainType::Evm => {
+                let $s = signer::evm::Signer::from_hex($key_hex).map_err(s_err)?;
+                $body
+            }
+            ChainType::Bitcoin => {
+                let $s = signer::btc::Signer::from_hex($key_hex).map_err(s_err)?;
+                $body
+            }
+            ChainType::Solana => {
+                let $s = signer::svm::Signer::from_hex($key_hex).map_err(s_err)?;
+                $body
+            }
+            ChainType::Cosmos => {
+                let $s = signer::cosmos::Signer::from_hex($key_hex).map_err(s_err)?;
+                $body
+            }
+            ChainType::Tron => {
+                let $s = signer::tron::Signer::from_hex($key_hex).map_err(s_err)?;
+                $body
+            }
+            ChainType::Ton => {
+                let $s = signer::ton::Signer::from_hex($key_hex).map_err(s_err)?;
+                $body
+            }
+            ChainType::Spark => {
+                let $s = signer::spark::Signer::from_hex($key_hex).map_err(s_err)?;
+                $body
+            }
+            ChainType::Filecoin => {
+                let $s = signer::fil::Signer::from_hex($key_hex).map_err(s_err)?;
+                $body
+            }
+            ChainType::Sui => {
+                let $s = signer::sui::Signer::from_hex($key_hex).map_err(s_err)?;
+                $body
+            }
         }
     };
 }
 
 /// Convert a derivation error into [`OwxError::Derivation`].
-fn d_err(e: impl std::fmt::Display) -> OwxError { OwxError::Derivation(e.to_string()) }
+fn d_err(e: impl std::fmt::Display) -> OwxError {
+    OwxError::Derivation(e.to_string())
+}
 
 /// Convert a signing error into [`OwxError::Signing`].
-fn s_err(e: impl std::fmt::Display) -> OwxError { OwxError::Signing(e.to_string()) }
+fn s_err(e: impl std::fmt::Display) -> OwxError {
+    OwxError::Signing(e.to_string())
+}
 
 /// Build a [`WalletAccount`] from chain ID, address, and derivation path.
 fn make_account(chain_id: &str, address: &str, path: &str) -> WalletAccount {
@@ -47,14 +78,14 @@ fn make_account(chain_id: &str, address: &str, path: &str) -> WalletAccount {
 /// Convert a signer [`SignOutput`](signer::SignOutput) into our [`SignResult`].
 #[allow(clippy::needless_pass_by_value)]
 fn to_sign_result(out: signer::SignOutput) -> SignResult {
-    SignResult { signature: hex::encode(&out.signature), recovery_id: out.recovery_id }
+    SignResult {
+        signature: hex::encode(&out.signature),
+        recovery_id: out.recovery_id,
+    }
 }
 
 /// Derive accounts for all 9 chain families from a mnemonic.
-pub fn derive_all_accounts(
-    mnemonic: &str,
-    index: u32,
-) -> Result<Vec<WalletAccount>, OwxError> {
+pub fn derive_all_accounts(mnemonic: &str, index: u32) -> Result<Vec<WalletAccount>, OwxError> {
     let wallet = kobe::Wallet::from_mnemonic(mnemonic, None).map_err(d_err)?;
     let mut accounts = Vec::with_capacity(ALL_CHAIN_TYPES.len());
     for ct in &ALL_CHAIN_TYPES {
@@ -79,7 +110,8 @@ fn derive_one(
             Ok(make_account(chain_id, &d.address, &d.path))
         }
         ChainType::Bitcoin => {
-            let deriver = kobe_btc::Deriver::new(wallet, kobe_btc::Network::Mainnet).map_err(d_err)?;
+            let deriver =
+                kobe_btc::Deriver::new(wallet, kobe_btc::Network::Mainnet).map_err(d_err)?;
             let d = Derive::derive(&deriver, index).map_err(d_err)?;
             Ok(make_account(chain_id, &d.address, &d.path))
         }
@@ -114,33 +146,6 @@ fn derive_one(
     }
 }
 
-/// Sign a message with a hex private key. Uses the `Sign` trait uniformly.
-pub fn sign_message_hex(ct: ChainType, key_hex: &str, message: &[u8]) -> Result<SignResult, OwxError> {
-    with_signer!(ct, key_hex, s => Ok(to_sign_result(Sign::sign_message(&s, message).map_err(s_err)?)))
-}
-
-/// Sign a transaction with a hex private key. Uses the `Sign` trait uniformly.
-pub fn sign_transaction_hex(ct: ChainType, key_hex: &str, tx_bytes: &[u8]) -> Result<SignResult, OwxError> {
-    with_signer!(ct, key_hex, s => Ok(to_sign_result(Sign::sign_transaction(&s, tx_bytes).map_err(s_err)?)))
-}
-
-/// Encode a signed EVM transaction for broadcasting.
-pub fn encode_signed_evm_tx(unsigned_tx: &[u8], signature: &[u8]) -> Result<Vec<u8>, OwxError> {
-    signer::evm::Signer::encode_signed_transaction(unsigned_tx, signature).map_err(s_err)
-}
-
-/// Derive an address from a hex private key (EVM/Solana/Sui only).
-pub fn derive_address_from_hex(ct: ChainType, key_hex: &str) -> Result<String, OwxError> {
-    match ct {
-        ChainType::Evm => Ok(signer::evm::Signer::from_hex(key_hex).map_err(s_err)?.address()),
-        ChainType::Solana => Ok(signer::svm::Signer::from_hex(key_hex).map_err(s_err)?.address()),
-        ChainType::Sui => Ok(signer::sui::Signer::from_hex(key_hex).map_err(s_err)?.address()),
-        _ => Err(OwxError::InvalidInput(format!(
-            "address derivation from private key not supported for {ct} — use mnemonic import"
-        ))),
-    }
-}
-
 /// Derive the hex private key for a chain type from a kobe wallet.
 pub fn derive_private_key_hex(
     wallet: &kobe::Wallet,
@@ -155,7 +160,8 @@ pub fn derive_private_key_hex(
             Ok(d.private_key.to_string())
         }
         ChainType::Bitcoin => {
-            let deriver = kobe_btc::Deriver::new(wallet, kobe_btc::Network::Mainnet).map_err(d_err)?;
+            let deriver =
+                kobe_btc::Deriver::new(wallet, kobe_btc::Network::Mainnet).map_err(d_err)?;
             let d = deriver.derive(index).map_err(d_err)?;
             Ok(d.private_key_hex.to_string())
         }
@@ -190,6 +196,47 @@ pub fn derive_private_key_hex(
     }
 }
 
+/// Derive an address from a hex private key (EVM/Solana/Sui only).
+pub fn derive_address_from_hex(ct: ChainType, key_hex: &str) -> Result<String, OwxError> {
+    match ct {
+        ChainType::Evm => Ok(signer::evm::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .address()),
+        ChainType::Solana => Ok(signer::svm::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .address()),
+        ChainType::Sui => Ok(signer::sui::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .address()),
+        _ => Err(OwxError::InvalidInput(format!(
+            "address derivation from private key not supported for {ct} — use mnemonic import"
+        ))),
+    }
+}
+
+/// Sign a message with a hex private key. Uses the `Sign` trait uniformly.
+pub fn sign_message_hex(
+    ct: ChainType,
+    key_hex: &str,
+    message: &[u8],
+) -> Result<SignResult, OwxError> {
+    with_signer!(ct, key_hex, s => Ok(to_sign_result(Sign::sign_message(&s, message).map_err(s_err)?)))
+}
+
+/// Sign a transaction with a hex private key. Uses the `Sign` trait uniformly.
+pub fn sign_transaction_hex(
+    ct: ChainType,
+    key_hex: &str,
+    tx_bytes: &[u8],
+) -> Result<SignResult, OwxError> {
+    with_signer!(ct, key_hex, s => Ok(to_sign_result(Sign::sign_transaction(&s, tx_bytes).map_err(s_err)?)))
+}
+
+/// Encode a signed EVM transaction for broadcasting.
+pub fn encode_signed_evm_tx(unsigned_tx: &[u8], signature: &[u8]) -> Result<Vec<u8>, OwxError> {
+    signer::evm::Signer::encode_signed_transaction(unsigned_tx, signature).map_err(s_err)
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -202,13 +249,22 @@ mod tests {
         let accounts = derive_all_accounts(MNEMONIC, 0).unwrap();
         assert_eq!(accounts.len(), 9);
 
-        let evm = accounts.iter().find(|a| a.chain_id.starts_with("eip155:")).unwrap();
+        let evm = accounts
+            .iter()
+            .find(|a| a.chain_id.starts_with("eip155:"))
+            .unwrap();
         assert!(evm.address.starts_with("0x"));
 
-        let btc = accounts.iter().find(|a| a.chain_id.starts_with("bip122:")).unwrap();
+        let btc = accounts
+            .iter()
+            .find(|a| a.chain_id.starts_with("bip122:"))
+            .unwrap();
         assert!(!btc.address.is_empty());
 
-        let sol = accounts.iter().find(|a| a.chain_id.starts_with("solana:")).unwrap();
+        let sol = accounts
+            .iter()
+            .find(|a| a.chain_id.starts_with("solana:"))
+            .unwrap();
         assert!(!sol.address.is_empty());
     }
 

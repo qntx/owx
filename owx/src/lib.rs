@@ -17,12 +17,11 @@ mod secret;
 pub mod types;
 
 pub use error::{OwxError, OwxErrorCode};
-pub use owx_vault::Vault;
-pub use types::{AccountInfo, SignResult, SendResult, WalletInfo};
-
-pub use ops::{
-    create_wallet, delete_wallet, derive_address, export_wallet, generate_mnemonic,
-    get_wallet, import_mnemonic, import_private_keys, list_wallets, rename_wallet,
-    sign_message, sign_transaction, sign_and_send,
-};
 pub use key_ops::{create_api_key, list_api_keys, revoke_api_key};
+pub use ops::{
+    create_wallet, delete_wallet, derive_address, export_wallet, generate_mnemonic, get_wallet,
+    import_mnemonic, import_private_keys, list_wallets, rename_wallet, sign_and_send, sign_message,
+    sign_transaction,
+};
+pub use owx_vault::Vault;
+pub use types::{AccountInfo, SendResult, SignResult, WalletInfo};

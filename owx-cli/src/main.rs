@@ -286,15 +286,8 @@ fn run(cmd: Commands, vault: &Vault) -> Result<(), owx::OwxError> {
             rpc,
         } => {
             let cred = read_passphrase("Passphrase or API token: ");
-            let result = owx::sign_and_send(
-                vault,
-                &wallet,
-                &chain,
-                &tx_hex,
-                &cred,
-                None,
-                rpc.as_deref(),
-            )?;
+            let result =
+                owx::sign_and_send(vault, &wallet, &chain, &tx_hex, &cred, None, rpc.as_deref())?;
             print_json(&result)
         }
         Commands::Pay { url, method, body } => print_json(&serde_json::json!({
@@ -362,7 +355,11 @@ fn run_wallet(action: WalletAction, vault: &Vault) -> Result<(), owx::OwxError> 
             let info = owx::import_mnemonic(vault, &name, &mnemonic, &pass, 0)?;
             print_json(&info)?;
         }
-        WalletAction::ImportKey { name, key, chain: _ } => {
+        WalletAction::ImportKey {
+            name,
+            key,
+            chain: _,
+        } => {
             let pass = read_passphrase("Passphrase: ");
             let dummy_ed = "0".repeat(64);
             let info = owx::import_private_keys(vault, &name, &key, &dummy_ed, &pass)?;

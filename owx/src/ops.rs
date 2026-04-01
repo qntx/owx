@@ -19,11 +19,15 @@ fn wallet_to_info(w: &EncryptedWallet) -> WalletInfo {
     WalletInfo {
         id: w.id.clone(),
         name: w.name.clone(),
-        accounts: w.accounts.iter().map(|a| AccountInfo {
-            chain_id: a.chain_id.clone(),
-            address: a.address.clone(),
-            derivation_path: a.derivation_path.clone(),
-        }).collect(),
+        accounts: w
+            .accounts
+            .iter()
+            .map(|a| AccountInfo {
+                chain_id: a.chain_id.clone(),
+                address: a.address.clone(),
+                derivation_path: a.derivation_path.clone(),
+            })
+            .collect(),
         created_at: w.created_at.clone(),
     }
 }
@@ -38,8 +42,8 @@ fn encrypt_secret(secret: &WalletSecret, passphrase: &str) -> Result<serde_json:
 
 /// Generate a new BIP-39 mnemonic phrase.
 pub fn generate_mnemonic(words: usize) -> Result<String, OwxError> {
-    let wallet = kobe::Wallet::generate(words, None)
-        .map_err(|e| OwxError::Derivation(e.to_string()))?;
+    let wallet =
+        kobe::Wallet::generate(words, None).map_err(|e| OwxError::Derivation(e.to_string()))?;
     Ok(wallet.mnemonic().to_owned())
 }
 
@@ -51,11 +55,13 @@ pub fn create_wallet(
     words: usize,
 ) -> Result<WalletInfo, OwxError> {
     if vault.wallet_name_exists(name)? {
-        return Err(OwxError::Vault(owx_vault::VaultError::WalletNameExists(name.to_owned())));
+        return Err(OwxError::Vault(owx_vault::VaultError::WalletNameExists(
+            name.to_owned(),
+        )));
     }
 
-    let kobe_wallet = kobe::Wallet::generate(words, None)
-        .map_err(|e| OwxError::Derivation(e.to_string()))?;
+    let kobe_wallet =
+        kobe::Wallet::generate(words, None).map_err(|e| OwxError::Derivation(e.to_string()))?;
     let phrase = kobe_wallet.mnemonic();
     let accounts = chains::derive_all_accounts(phrase, 0)?;
     let secret = WalletSecret::mnemonic(phrase);
@@ -81,7 +87,9 @@ pub fn import_mnemonic(
     index: u32,
 ) -> Result<WalletInfo, OwxError> {
     if vault.wallet_name_exists(name)? {
-        return Err(OwxError::Vault(owx_vault::VaultError::WalletNameExists(name.to_owned())));
+        return Err(OwxError::Vault(owx_vault::VaultError::WalletNameExists(
+            name.to_owned(),
+        )));
     }
     let accounts = chains::derive_all_accounts(mnemonic_phrase, index)?;
     let secret = WalletSecret::mnemonic(mnemonic_phrase);
@@ -107,7 +115,9 @@ pub fn import_private_keys(
     passphrase: &str,
 ) -> Result<WalletInfo, OwxError> {
     if vault.wallet_name_exists(name)? {
-        return Err(OwxError::Vault(owx_vault::VaultError::WalletNameExists(name.to_owned())));
+        return Err(OwxError::Vault(owx_vault::VaultError::WalletNameExists(
+            name.to_owned(),
+        )));
     }
     let secret = WalletSecret::dual_keys(secp256k1_hex.to_owned(), ed25519_hex.to_owned());
 
@@ -137,7 +147,6 @@ pub fn import_private_keys(
     Ok(wallet_to_info(&wallet))
 }
 
-
 /// List all wallets.
 pub fn list_wallets(vault: &Vault) -> Result<Vec<WalletInfo>, OwxError> {
     Ok(vault.list_wallets()?.iter().map(wallet_to_info).collect())
@@ -162,7 +171,11 @@ pub fn rename_wallet(vault: &Vault, name_or_id: &str, new_name: &str) -> Result<
 }
 
 /// Export a wallet's secret.
-pub fn export_wallet(vault: &Vault, name_or_id: &str, passphrase: &str) -> Result<String, OwxError> {
+pub fn export_wallet(
+    vault: &Vault,
+    name_or_id: &str,
+    passphrase: &str,
+) -> Result<String, OwxError> {
     let wallet = vault.load_wallet(name_or_id)?;
     let secret = decrypt_secret(&wallet, passphrase)?;
     secret.export_string()
@@ -185,19 +198,25 @@ pub fn derive_address(
         let kw = kobe::Wallet::from_mnemonic(phrase, None)
             .map_err(|e| OwxError::Derivation(e.to_string()))?;
         let key_hex = chains::derive_private_key_hex(&kw, chain_info.chain_type, idx)?;
-        chains::derive_address_from_hex(chain_info.chain_type, &key_hex)
-            .or_else(|_| {
-                let accounts = chains::derive_all_accounts(phrase, idx)?;
-                accounts.iter()
-                    .find(|a| a.chain_id == chain_info.chain_id)
-                    .map(|a| a.address.clone())
-                    .ok_or_else(|| OwxError::InvalidInput(format!("no account for chain {}", chain_info.chain_id)))
-            })
+        chains::derive_address_from_hex(chain_info.chain_type, &key_hex).or_else(|_| {
+            let accounts = chains::derive_all_accounts(phrase, idx)?;
+            accounts
+                .iter()
+                .find(|a| a.chain_id == chain_info.chain_id)
+                .map(|a| a.address.clone())
+                .ok_or_else(|| {
+                    OwxError::InvalidInput(format!("no account for chain {}", chain_info.chain_id))
+                })
+        })
     } else {
-        let h = secret.private_key_hex(chain_info.chain_type)
-            .ok_or_else(|| OwxError::InvalidInput(format!(
-                "no private key for chain type {}", chain_info.chain_type
-            )))?;
+        let h = secret
+            .private_key_hex(chain_info.chain_type)
+            .ok_or_else(|| {
+                OwxError::InvalidInput(format!(
+                    "no private key for chain type {}",
+                    chain_info.chain_type
+                ))
+            })?;
         chains::derive_address_from_hex(chain_info.chain_type, h)
     }
 }
@@ -213,7 +232,13 @@ pub fn sign_message(
 ) -> Result<SignResult, OwxError> {
     let chain_info = parse_chain(chain).map_err(OwxError::InvalidInput)?;
     let idx = index.unwrap_or(0);
-    let key_hex = resolve_signing_key(vault, wallet_name_or_id, credential, chain_info.chain_type, idx)?;
+    let key_hex = resolve_signing_key(
+        vault,
+        wallet_name_or_id,
+        credential,
+        chain_info.chain_type,
+        idx,
+    )?;
     chains::sign_message_hex(chain_info.chain_type, &key_hex, message)
 }
 
@@ -231,7 +256,13 @@ pub fn sign_transaction(
     let tx_bytes = hex::decode(tx_hex_clean)
         .map_err(|e| OwxError::InvalidInput(format!("invalid hex: {e}")))?;
     let idx = index.unwrap_or(0);
-    let key_hex = resolve_signing_key(vault, wallet_name_or_id, credential, chain_info.chain_type, idx)?;
+    let key_hex = resolve_signing_key(
+        vault,
+        wallet_name_or_id,
+        credential,
+        chain_info.chain_type,
+        idx,
+    )?;
     chains::sign_transaction_hex(chain_info.chain_type, &key_hex, &tx_bytes)
 }
 
@@ -250,7 +281,13 @@ pub fn sign_and_send(
     let tx_bytes = hex::decode(tx_hex_clean)
         .map_err(|e| OwxError::InvalidInput(format!("invalid hex: {e}")))?;
     let idx = index.unwrap_or(0);
-    let key_hex = resolve_signing_key(vault, wallet_name_or_id, credential, chain_info.chain_type, idx)?;
+    let key_hex = resolve_signing_key(
+        vault,
+        wallet_name_or_id,
+        credential,
+        chain_info.chain_type,
+        idx,
+    )?;
 
     let sig_result = chains::sign_transaction_hex(chain_info.chain_type, &key_hex, &tx_bytes)?;
     let sig_bytes = hex::decode(&sig_result.signature)
@@ -270,7 +307,8 @@ pub fn sign_and_send(
             extract_json_field(&resp, "result").map(|h| SendResult { tx_hash: h })
         }
         _ => Err(OwxError::BroadcastFailed(format!(
-            "broadcast not yet implemented for {}", chain_info.chain_type
+            "broadcast not yet implemented for {}",
+            chain_info.chain_type
         ))),
     }
 }
@@ -324,7 +362,9 @@ fn resolve_signing_key_agent(
     }
 
     let chain = owx_core::default_chain_for_type(ct);
-    let policies: Vec<owx_core::Policy> = api_key.policy_ids.iter()
+    let policies: Vec<owx_core::Policy> = api_key
+        .policy_ids
+        .iter()
         .filter_map(|pid| vault.load_policy(pid).ok())
         .collect();
 
@@ -354,31 +394,28 @@ fn resolve_signing_key_agent(
         }
     }
 
-    let envelope_value = api_key.wallet_secrets.get(&wallet.id)
-        .ok_or_else(|| OwxError::InvalidInput(format!(
-            "API key has no encrypted secret for wallet '{}'", wallet.id
-        )))?;
+    let envelope_value = api_key.wallet_secrets.get(&wallet.id).ok_or_else(|| {
+        OwxError::InvalidInput(format!(
+            "API key has no encrypted secret for wallet '{}'",
+            wallet.id
+        ))
+    })?;
     let envelope: crypto::CryptoEnvelope = serde_json::from_value(envelope_value.clone())?;
     let secret = crate::secret::decrypt_from_envelope(&envelope, token, wallet.key_type)?;
     extract_key_hex(&secret, ct, index)
 }
 
 /// Extract the hex private key from a decrypted wallet secret.
-fn extract_key_hex(
-    secret: &WalletSecret,
-    ct: ChainType,
-    index: u32,
-) -> Result<String, OwxError> {
+fn extract_key_hex(secret: &WalletSecret, ct: ChainType, index: u32) -> Result<String, OwxError> {
     if let Some(phrase) = secret.phrase() {
         let kw = kobe::Wallet::from_mnemonic(phrase, None)
             .map_err(|e| OwxError::Derivation(e.to_string()))?;
         chains::derive_private_key_hex(&kw, ct, index)
     } else {
-        secret.private_key_hex(ct)
+        secret
+            .private_key_hex(ct)
             .map(ToOwned::to_owned)
-            .ok_or_else(|| OwxError::InvalidInput(format!(
-                "no private key for chain type {ct}"
-            )))
+            .ok_or_else(|| OwxError::InvalidInput(format!("no private key for chain type {ct}")))
     }
 }
 
@@ -397,18 +434,33 @@ fn resolve_rpc(chain_id: &str, ct: ChainType, explicit: Option<&str>) -> Result<
     }
     let ns = ct.namespace();
     for (k, v) in &config.rpc {
-        if k.starts_with(ns) { return Ok(v.clone()); }
+        if k.starts_with(ns) {
+            return Ok(v.clone());
+        }
     }
     for (k, v) in &defaults {
-        if k.starts_with(ns) { return Ok(v.clone()); }
+        if k.starts_with(ns) {
+            return Ok(v.clone());
+        }
     }
-    Err(OwxError::InvalidInput(format!("no RPC URL for chain '{chain_id}'")))
+    Err(OwxError::InvalidInput(format!(
+        "no RPC URL for chain '{chain_id}'"
+    )))
 }
 
 /// POST JSON to a URL via `curl` subprocess.
 fn curl_post_json(url: &str, body: &str) -> Result<String, OwxError> {
     let output = std::process::Command::new("curl")
-        .args(["-fsSL", "-X", "POST", "-H", "Content-Type: application/json", "-d", body, url])
+        .args([
+            "-fsSL",
+            "-X",
+            "POST",
+            "-H",
+            "Content-Type: application/json",
+            "-d",
+            body,
+            url,
+        ])
         .output()
         .map_err(|e| OwxError::BroadcastFailed(format!("curl: {e}")))?;
 
@@ -425,7 +477,9 @@ fn extract_json_field(json_str: &str, field: &str) -> Result<String, OwxError> {
     if let Some(error) = parsed.get("error") {
         return Err(OwxError::BroadcastFailed(format!("RPC error: {error}")));
     }
-    parsed[field].as_str().map(ToOwned::to_owned)
+    parsed[field]
+        .as_str()
+        .map(ToOwned::to_owned)
         .ok_or_else(|| OwxError::BroadcastFailed(format!("no '{field}' in response")))
 }
 

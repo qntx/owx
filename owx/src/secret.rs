@@ -55,9 +55,15 @@ impl WalletSecret {
     pub fn private_key(chain_type: ChainType, key_hex: impl Into<String>) -> Self {
         let h = key_hex.into();
         if is_ed25519_chain(chain_type) {
-            Self::PrivateKeys { secp256k1: None, ed25519: Some(h) }
+            Self::PrivateKeys {
+                secp256k1: None,
+                ed25519: Some(h),
+            }
         } else {
-            Self::PrivateKeys { secp256k1: Some(h), ed25519: None }
+            Self::PrivateKeys {
+                secp256k1: Some(h),
+                ed25519: None,
+            }
         }
     }
 
@@ -130,7 +136,10 @@ impl WalletSecret {
 }
 
 /// Decrypt a wallet's secret using the given credential.
-pub fn decrypt_secret(wallet: &EncryptedWallet, credential: &str) -> Result<WalletSecret, OwxError> {
+pub fn decrypt_secret(
+    wallet: &EncryptedWallet,
+    credential: &str,
+) -> Result<WalletSecret, OwxError> {
     let envelope: CryptoEnvelope = serde_json::from_value(wallet.crypto.clone())?;
     decrypt_from_envelope(&envelope, credential, wallet.key_type)
 }

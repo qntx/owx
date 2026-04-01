@@ -16,7 +16,7 @@ pub mod wallet_file;
 pub use api_key::ApiKeyFile;
 pub use caip::ChainId;
 pub use chain::{
-    default_chain_for_type, parse_chain, Chain, ChainType, ALL_CHAIN_TYPES, KNOWN_CHAINS,
+    ALL_CHAIN_TYPES, Chain, ChainType, KNOWN_CHAINS, default_chain_for_type, parse_chain,
 };
 pub use config::Config;
 pub use error::{OwxError, OwxErrorCode};

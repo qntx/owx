@@ -116,7 +116,9 @@ mod tests {
             name: "Test".to_owned(),
             version: 1,
             created_at: "2026-01-01T00:00:00Z".to_owned(),
-            rules: vec![PolicyRule::AllowedChains { chain_ids: vec!["eip155:8453".into()] }],
+            rules: vec![PolicyRule::AllowedChains {
+                chain_ids: vec!["eip155:8453".into()],
+            }],
             executable: None,
             config: None,
             action: PolicyAction::Deny,
@@ -130,8 +132,14 @@ mod tests {
     fn create_and_list() {
         let (_dir, vault) = setup_vault();
         let result = create_api_key(
-            &vault, "agent", &["w1".into()], &["p1".into()], "pass", None,
-        ).unwrap();
+            &vault,
+            "agent",
+            &["w1".into()],
+            &["p1".into()],
+            "pass",
+            None,
+        )
+        .unwrap();
 
         assert!(result.token.starts_with("owx_key_"));
         assert_eq!(result.key.name, "agent");
@@ -144,8 +152,14 @@ mod tests {
     fn revoke_works() {
         let (_dir, vault) = setup_vault();
         let result = create_api_key(
-            &vault, "agent", &["w1".into()], &["p1".into()], "pass", None,
-        ).unwrap();
+            &vault,
+            "agent",
+            &["w1".into()],
+            &["p1".into()],
+            "pass",
+            None,
+        )
+        .unwrap();
 
         revoke_api_key(&vault, &result.key.id).unwrap();
         assert_eq!(list_api_keys(&vault).unwrap().len(), 0);
@@ -155,7 +169,12 @@ mod tests {
     fn wrong_passphrase_fails() {
         let (_dir, vault) = setup_vault();
         let result = create_api_key(
-            &vault, "agent", &["w1".into()], &["p1".into()], "wrong", None,
+            &vault,
+            "agent",
+            &["w1".into()],
+            &["p1".into()],
+            "wrong",
+            None,
         );
         assert!(result.is_err());
     }

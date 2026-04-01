@@ -140,9 +140,7 @@ mod tests {
 
     #[test]
     fn parse_bitcoin() {
-        let id: ChainId = "bip122:000000000019d6689c085ae165831e93"
-            .parse()
-            .unwrap();
+        let id: ChainId = "bip122:000000000019d6689c085ae165831e93".parse().unwrap();
         assert_eq!(id.namespace, "bip122");
     }
 

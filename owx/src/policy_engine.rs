@@ -57,7 +57,10 @@ fn evaluate_rule(rule: &PolicyRule, pid: &str, ctx: &PolicyContext) -> PolicyRes
         PolicyRule::DailyLimit { amount, .. } => {
             let total = &ctx.spending.daily_total;
             if exceeds(total, amount) {
-                PolicyResult::denied(pid, format!("daily spending {total} exceeds limit {amount}"))
+                PolicyResult::denied(
+                    pid,
+                    format!("daily spending {total} exceeds limit {amount}"),
+                )
             } else {
                 PolicyResult::allowed()
             }
@@ -148,7 +151,11 @@ fn wait_timeout(
                     let _ = e.read_to_end(&mut stderr);
                 }
                 let status = child.wait().map_err(|e| e.to_string())?;
-                return Ok(std::process::Output { status, stdout, stderr });
+                return Ok(std::process::Output {
+                    status,
+                    stdout,
+                    stderr,
+                });
             }
             Ok(None) => {
                 if start.elapsed() > timeout {
@@ -204,13 +211,23 @@ mod tests {
 
     #[test]
     fn allowed_chains_pass() {
-        let p = pol("c", vec![PolicyRule::AllowedChains { chain_ids: vec!["eip155:8453".into()] }]);
+        let p = pol(
+            "c",
+            vec![PolicyRule::AllowedChains {
+                chain_ids: vec!["eip155:8453".into()],
+            }],
+        );
         assert!(evaluate(&[p], &ctx()).allow);
     }
 
     #[test]
     fn allowed_chains_deny() {
-        let p = pol("c", vec![PolicyRule::AllowedChains { chain_ids: vec!["eip155:1".into()] }]);
+        let p = pol(
+            "c",
+            vec![PolicyRule::AllowedChains {
+                chain_ids: vec!["eip155:1".into()],
+            }],
+        );
         assert!(!evaluate(&[p], &ctx()).allow);
     }
 
@@ -222,8 +239,18 @@ mod tests {
     #[test]
     fn short_circuits() {
         let policies = vec![
-            pol("pass", vec![PolicyRule::AllowedChains { chain_ids: vec!["eip155:8453".into()] }]),
-            pol("fail", vec![PolicyRule::AllowedChains { chain_ids: vec!["eip155:1".into()] }]),
+            pol(
+                "pass",
+                vec![PolicyRule::AllowedChains {
+                    chain_ids: vec!["eip155:8453".into()],
+                }],
+            ),
+            pol(
+                "fail",
+                vec![PolicyRule::AllowedChains {
+                    chain_ids: vec!["eip155:1".into()],
+                }],
+            ),
         ];
         let r = evaluate(&policies, &ctx());
         assert!(!r.allow);
@@ -232,7 +259,12 @@ mod tests {
 
     #[test]
     fn allowed_recipients_deny() {
-        let p = pol("r", vec![PolicyRule::AllowedRecipients { addresses: vec!["0xdef".into()] }]);
+        let p = pol(
+            "r",
+            vec![PolicyRule::AllowedRecipients {
+                addresses: vec!["0xdef".into()],
+            }],
+        );
         assert!(!evaluate(&[p], &ctx()).allow);
     }
 }

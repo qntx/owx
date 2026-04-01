@@ -42,16 +42,37 @@ impl Config {
             ("eip155:42161".into(), "https://arb1.arbitrum.io/rpc".into()),
             ("eip155:10".into(), "https://mainnet.optimism.io".into()),
             ("eip155:8453".into(), "https://mainnet.base.org".into()),
-            ("eip155:56".into(), "https://bsc-dataseed.binance.org".into()),
+            (
+                "eip155:56".into(),
+                "https://bsc-dataseed.binance.org".into(),
+            ),
             ("eip155:9745".into(), "https://rpc.plasma.to".into()),
-            ("eip155:43114".into(), "https://api.avax.network/ext/bc/C/rpc".into()),
-            ("solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp".into(), "https://api.mainnet-beta.solana.com".into()),
-            ("bip122:000000000019d6689c085ae165831e93".into(), "https://mempool.space/api".into()),
-            ("cosmos:cosmoshub-4".into(), "https://cosmos-rest.publicnode.com".into()),
+            (
+                "eip155:43114".into(),
+                "https://api.avax.network/ext/bc/C/rpc".into(),
+            ),
+            (
+                "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp".into(),
+                "https://api.mainnet-beta.solana.com".into(),
+            ),
+            (
+                "bip122:000000000019d6689c085ae165831e93".into(),
+                "https://mempool.space/api".into(),
+            ),
+            (
+                "cosmos:cosmoshub-4".into(),
+                "https://cosmos-rest.publicnode.com".into(),
+            ),
             ("tron:mainnet".into(), "https://api.trongrid.io".into()),
             ("ton:mainnet".into(), "https://toncenter.com/api/v2".into()),
-            ("fil:mainnet".into(), "https://api.node.glif.io/rpc/v1".into()),
-            ("sui:mainnet".into(), "https://fullnode.mainnet.sui.io:443".into()),
+            (
+                "fil:mainnet".into(),
+                "https://api.node.glif.io/rpc/v1".into(),
+            ),
+            (
+                "sui:mainnet".into(),
+                "https://fullnode.mainnet.sui.io:443".into(),
+            ),
         ])
     }
 
