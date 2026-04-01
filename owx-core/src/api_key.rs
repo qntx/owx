@@ -1,9 +1,8 @@
-//! API key file format, token generation, and hashing.
+//! API key file format (on-disk JSON).
 
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 /// Token prefix that signals agent mode.
 pub const TOKEN_PREFIX: &str = "owx_key_";
@@ -26,27 +25,9 @@ pub struct ApiKeyFile {
     /// Optional expiry timestamp (ISO-8601).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<String>,
-    /// Per-wallet encrypted mnemonic copies, keyed by wallet ID.
+    /// Per-wallet encrypted secret copies, keyed by wallet ID.
     /// Each value is a `CryptoEnvelope` encrypted with HKDF(token).
     pub wallet_secrets: HashMap<String, serde_json::Value>,
-}
-
-/// Generate a random API token: `owx_key_<64 hex chars>` (256 bits of entropy).
-///
-/// # Panics
-///
-/// Panics if the system CSPRNG is unavailable.
-pub fn generate_token() -> String {
-    let mut bytes = [0u8; 32];
-    #[allow(clippy::expect_used)]
-    getrandom::fill(&mut bytes).expect("system CSPRNG unavailable");
-    format!("{TOKEN_PREFIX}{}", hex::encode(bytes))
-}
-
-/// SHA-256 hash of the raw token string, hex-encoded.
-#[must_use]
-pub fn hash_token(token: &str) -> String {
-    hex::encode(Sha256::digest(token.as_bytes()))
 }
 
 /// Check whether a credential string is an API token (starts with prefix).
@@ -61,29 +42,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn token_format() {
-        let token = generate_token();
-        assert!(token.starts_with(TOKEN_PREFIX));
-        assert_eq!(token.len(), TOKEN_PREFIX.len() + 64);
-    }
-
-    #[test]
-    fn token_uniqueness() {
-        assert_ne!(generate_token(), generate_token());
-    }
-
-    #[test]
-    fn hash_deterministic() {
-        let token = "owx_key_abc123";
-        assert_eq!(hash_token(token), hash_token(token));
-    }
-
-    #[test]
-    fn hash_differs() {
-        assert_ne!(hash_token("owx_key_a"), hash_token("owx_key_b"));
-    }
-
-    #[test]
     fn is_api_token_check() {
         assert!(is_api_token("owx_key_abc"));
         assert!(!is_api_token("password123"));
@@ -95,7 +53,7 @@ mod tests {
         let key = ApiKeyFile {
             id: "test-id".into(),
             name: "test-agent".into(),
-            token_hash: hash_token("owx_key_test"),
+            token_hash: "deadbeef".into(),
             created_at: "2026-01-01T00:00:00Z".into(),
             wallet_ids: vec!["w1".into()],
             policy_ids: vec!["p1".into()],

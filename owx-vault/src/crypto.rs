@@ -107,7 +107,7 @@ const HKDF_DKLEN: u32 = 32;
 /// Panics if the system CSPRNG is unavailable.
 fn fill_random(buf: &mut [u8]) {
     #[allow(clippy::expect_used)]
-    getrandom::fill(buf).expect("system CSPRNG unavailable");
+    getrandom::getrandom(buf).expect("system CSPRNG unavailable");
 }
 
 /// Encrypt plaintext with a passphrase (scrypt KDF + AES-256-GCM).
@@ -323,6 +323,25 @@ fn aes_gcm_decrypt(
 /// Decode a hex string into bytes.
 fn hex_decode(s: &str) -> Result<Vec<u8>, VaultError> {
     hex::decode(s).map_err(|e| VaultError::InvalidParams(e.to_string()))
+}
+
+/// Generate a random API token: `owx_key_<64 hex chars>` (256 bits of entropy).
+///
+/// # Panics
+///
+/// Panics if the system CSPRNG is unavailable.
+pub fn generate_token() -> String {
+    use owx_core::api_key::TOKEN_PREFIX;
+    let mut bytes = [0u8; 32];
+    fill_random(&mut bytes);
+    format!("{TOKEN_PREFIX}{}", hex::encode(bytes))
+}
+
+/// SHA-256 hash of the raw token string, hex-encoded.
+#[must_use]
+pub fn hash_token(token: &str) -> String {
+    use sha2::{Digest, Sha256};
+    hex::encode(Sha256::digest(token.as_bytes()))
 }
 
 #[cfg(test)]

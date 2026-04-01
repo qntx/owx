@@ -1,12 +1,9 @@
 //! Chain registry and CAIP-2 helpers.
 
-use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-
-use crate::caip::ChainId;
 
 /// Supported chain families.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -14,66 +11,66 @@ use crate::caip::ChainId;
 pub enum ChainType {
     /// EVM-compatible chains (Ethereum, Base, Arbitrum, …).
     Evm,
-    /// Bitcoin.
-    Bitcoin,
     /// Solana.
     Solana,
+    /// Cosmos Hub.
+    Cosmos,
+    /// Bitcoin.
+    Bitcoin,
+    /// TRON.
+    Tron,
+    /// TON.
+    Ton,
+    /// Spark (Lightning).
+    Spark,
+    /// Filecoin.
+    Filecoin,
+    /// Sui.
+    Sui,
 }
 
-/// All supported chain types for universal wallet derivation.
-pub const ALL_CHAIN_TYPES: [ChainType; 3] = [ChainType::Evm, ChainType::Bitcoin, ChainType::Solana];
+/// All supported chain families for universal wallet derivation.
+pub const ALL_CHAIN_TYPES: [ChainType; 9] = [
+    ChainType::Evm,
+    ChainType::Solana,
+    ChainType::Bitcoin,
+    ChainType::Cosmos,
+    ChainType::Tron,
+    ChainType::Ton,
+    ChainType::Filecoin,
+    ChainType::Spark,
+    ChainType::Sui,
+];
 
-/// A specific chain with its family type and CAIP-2 identifier.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A specific chain (e.g. "ethereum", "arbitrum") with its family type and CAIP-2 ID.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Chain {
     /// Human-readable name (e.g. "ethereum", "base").
-    pub name: Cow<'static, str>,
+    pub name: &'static str,
     /// Chain family.
     pub chain_type: ChainType,
     /// CAIP-2 chain ID (e.g. "eip155:1").
-    pub chain_id: Cow<'static, str>,
-}
-
-#[allow(clippy::missing_docs_in_private_items)]
-impl Chain {
-    const fn known(name: &'static str, chain_type: ChainType, chain_id: &'static str) -> Self {
-        Self {
-            name: Cow::Borrowed(name),
-            chain_type,
-            chain_id: Cow::Borrowed(chain_id),
-        }
-    }
-
-    fn custom(chain_type: ChainType, chain_id: &ChainId) -> Self {
-        let chain_id_text = chain_id.to_string();
-        Self {
-            name: Cow::Owned(chain_id_text.clone()),
-            chain_type,
-            chain_id: Cow::Owned(chain_id_text),
-        }
-    }
+    pub chain_id: &'static str,
 }
 
 /// Known chains registry.
 pub const KNOWN_CHAINS: &[Chain] = &[
-    Chain::known("ethereum", ChainType::Evm, "eip155:1"),
-    Chain::known("polygon", ChainType::Evm, "eip155:137"),
-    Chain::known("arbitrum", ChainType::Evm, "eip155:42161"),
-    Chain::known("optimism", ChainType::Evm, "eip155:10"),
-    Chain::known("base", ChainType::Evm, "eip155:8453"),
-    Chain::known("bsc", ChainType::Evm, "eip155:56"),
-    Chain::known("plasma", ChainType::Evm, "eip155:9745"),
-    Chain::known("avalanche", ChainType::Evm, "eip155:43114"),
-    Chain::known(
-        "solana",
-        ChainType::Solana,
-        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
-    ),
-    Chain::known(
-        "bitcoin",
-        ChainType::Bitcoin,
-        "bip122:000000000019d6689c085ae165831e93",
-    ),
+    Chain { name: "ethereum",  chain_type: ChainType::Evm,      chain_id: "eip155:1" },
+    Chain { name: "polygon",   chain_type: ChainType::Evm,      chain_id: "eip155:137" },
+    Chain { name: "arbitrum",  chain_type: ChainType::Evm,      chain_id: "eip155:42161" },
+    Chain { name: "optimism",  chain_type: ChainType::Evm,      chain_id: "eip155:10" },
+    Chain { name: "base",      chain_type: ChainType::Evm,      chain_id: "eip155:8453" },
+    Chain { name: "plasma",    chain_type: ChainType::Evm,      chain_id: "eip155:9745" },
+    Chain { name: "bsc",       chain_type: ChainType::Evm,      chain_id: "eip155:56" },
+    Chain { name: "avalanche", chain_type: ChainType::Evm,      chain_id: "eip155:43114" },
+    Chain { name: "solana",    chain_type: ChainType::Solana,   chain_id: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp" },
+    Chain { name: "bitcoin",   chain_type: ChainType::Bitcoin,  chain_id: "bip122:000000000019d6689c085ae165831e93" },
+    Chain { name: "cosmos",    chain_type: ChainType::Cosmos,   chain_id: "cosmos:cosmoshub-4" },
+    Chain { name: "tron",      chain_type: ChainType::Tron,     chain_id: "tron:mainnet" },
+    Chain { name: "ton",       chain_type: ChainType::Ton,      chain_id: "ton:mainnet" },
+    Chain { name: "spark",     chain_type: ChainType::Spark,    chain_id: "spark:mainnet" },
+    Chain { name: "filecoin",  chain_type: ChainType::Filecoin, chain_id: "fil:mainnet" },
+    Chain { name: "sui",       chain_type: ChainType::Sui,      chain_id: "sui:mainnet" },
 ];
 
 /// Parse a chain string into a [`Chain`].
@@ -82,7 +79,7 @@ pub const KNOWN_CHAINS: &[Chain] = &[
 /// or CAIP-2 IDs ("eip155:1"). Unknown CAIP-2 IDs with a recognized namespace
 /// are accepted and mapped to the appropriate chain type.
 pub fn parse_chain(s: &str) -> Result<Chain, String> {
-    let lower = s.to_ascii_lowercase();
+    let lower = s.to_lowercase();
 
     let lookup = match lower.as_str() {
         "evm" => "ethereum",
@@ -90,16 +87,22 @@ pub fn parse_chain(s: &str) -> Result<Chain, String> {
     };
 
     if let Some(chain) = KNOWN_CHAINS.iter().find(|c| c.name == lookup) {
-        return Ok(chain.clone());
+        return Ok(*chain);
     }
 
     if let Some(chain) = KNOWN_CHAINS.iter().find(|c| c.chain_id == s) {
-        return Ok(chain.clone());
+        return Ok(*chain);
     }
 
-    let chain_id = ChainId::from_str(s).map_err(|error| error.to_string())?;
-    if let Some(chain_type) = ChainType::from_namespace(&chain_id.namespace) {
-        return Ok(Chain::custom(chain_type, &chain_id));
+    if let Some((namespace, _reference)) = s.split_once(':') {
+        if let Some(ct) = ChainType::from_namespace(namespace) {
+            let leaked: &'static str = Box::leak(s.to_string().into_boxed_str());
+            return Ok(Chain {
+                name: leaked,
+                chain_type: ct,
+                chain_id: leaked,
+            });
+        }
     }
 
     Err(format!(
@@ -107,18 +110,17 @@ pub fn parse_chain(s: &str) -> Result<Chain, String> {
     ))
 }
 
-/// Returns the default [`Chain`] for a given [`ChainType`].
+/// Returns the default [`Chain`] for a given [`ChainType`] (first match in registry).
 ///
 /// # Panics
 ///
-/// Panics if no known chain exists for the given type (should never happen).
+/// Panics if no known chain exists for the given type.
 #[must_use]
 pub fn default_chain_for_type(ct: ChainType) -> Chain {
     #[allow(clippy::expect_used)]
-    KNOWN_CHAINS
+    *KNOWN_CHAINS
         .iter()
         .find(|c| c.chain_type == ct)
-        .cloned()
         .expect("all chain types have a default chain")
 }
 
@@ -129,7 +131,13 @@ impl ChainType {
         match self {
             Self::Evm => "eip155",
             Self::Solana => "solana",
+            Self::Cosmos => "cosmos",
             Self::Bitcoin => "bip122",
+            Self::Tron => "tron",
+            Self::Ton => "ton",
+            Self::Spark => "spark",
+            Self::Filecoin => "fil",
+            Self::Sui => "sui",
         }
     }
 
@@ -139,7 +147,13 @@ impl ChainType {
         match self {
             Self::Evm => 60,
             Self::Solana => 501,
+            Self::Cosmos => 118,
             Self::Bitcoin => 0,
+            Self::Tron => 195,
+            Self::Ton => 607,
+            Self::Spark => 0,
+            Self::Filecoin => 461,
+            Self::Sui => 784,
         }
     }
 
@@ -149,7 +163,13 @@ impl ChainType {
         match ns {
             "eip155" => Some(Self::Evm),
             "solana" => Some(Self::Solana),
+            "cosmos" => Some(Self::Cosmos),
             "bip122" => Some(Self::Bitcoin),
+            "tron" => Some(Self::Tron),
+            "ton" => Some(Self::Ton),
+            "spark" => Some(Self::Spark),
+            "fil" => Some(Self::Filecoin),
+            "sui" => Some(Self::Sui),
             _ => None,
         }
     }
@@ -160,7 +180,13 @@ impl fmt::Display for ChainType {
         let s = match self {
             Self::Evm => "evm",
             Self::Solana => "solana",
+            Self::Cosmos => "cosmos",
             Self::Bitcoin => "bitcoin",
+            Self::Tron => "tron",
+            Self::Ton => "ton",
+            Self::Spark => "spark",
+            Self::Filecoin => "filecoin",
+            Self::Sui => "sui",
         };
         f.write_str(s)
     }
@@ -173,7 +199,13 @@ impl FromStr for ChainType {
         match s.to_lowercase().as_str() {
             "evm" => Ok(Self::Evm),
             "solana" => Ok(Self::Solana),
+            "cosmos" => Ok(Self::Cosmos),
             "bitcoin" => Ok(Self::Bitcoin),
+            "tron" => Ok(Self::Tron),
+            "ton" => Ok(Self::Ton),
+            "spark" => Ok(Self::Spark),
+            "filecoin" => Ok(Self::Filecoin),
+            "sui" => Ok(Self::Sui),
             _ => Err(format!("unknown chain type: {s}")),
         }
     }
@@ -199,9 +231,17 @@ mod tests {
             (ChainType::Evm, "\"evm\""),
             (ChainType::Solana, "\"solana\""),
             (ChainType::Bitcoin, "\"bitcoin\""),
+            (ChainType::Cosmos, "\"cosmos\""),
+            (ChainType::Tron, "\"tron\""),
+            (ChainType::Ton, "\"ton\""),
+            (ChainType::Spark, "\"spark\""),
+            (ChainType::Filecoin, "\"filecoin\""),
+            (ChainType::Sui, "\"sui\""),
         ] {
             let json = serde_json::to_string(&ct).unwrap();
             assert_eq!(json, expected);
+            let restored: ChainType = serde_json::from_str(&json).unwrap();
+            assert_eq!(ct, restored);
         }
     }
 
@@ -209,27 +249,46 @@ mod tests {
     fn namespace_mapping() {
         assert_eq!(ChainType::Evm.namespace(), "eip155");
         assert_eq!(ChainType::Solana.namespace(), "solana");
+        assert_eq!(ChainType::Cosmos.namespace(), "cosmos");
         assert_eq!(ChainType::Bitcoin.namespace(), "bip122");
+        assert_eq!(ChainType::Tron.namespace(), "tron");
+        assert_eq!(ChainType::Ton.namespace(), "ton");
+        assert_eq!(ChainType::Spark.namespace(), "spark");
+        assert_eq!(ChainType::Filecoin.namespace(), "fil");
+        assert_eq!(ChainType::Sui.namespace(), "sui");
     }
 
     #[test]
     fn coin_type_mapping() {
         assert_eq!(ChainType::Evm.default_coin_type(), 60);
         assert_eq!(ChainType::Solana.default_coin_type(), 501);
+        assert_eq!(ChainType::Cosmos.default_coin_type(), 118);
         assert_eq!(ChainType::Bitcoin.default_coin_type(), 0);
+        assert_eq!(ChainType::Tron.default_coin_type(), 195);
+        assert_eq!(ChainType::Ton.default_coin_type(), 607);
+        assert_eq!(ChainType::Filecoin.default_coin_type(), 461);
+        assert_eq!(ChainType::Sui.default_coin_type(), 784);
     }
 
     #[test]
-    fn from_namespace() {
+    fn from_namespace_all() {
         assert_eq!(ChainType::from_namespace("eip155"), Some(ChainType::Evm));
         assert_eq!(ChainType::from_namespace("solana"), Some(ChainType::Solana));
+        assert_eq!(ChainType::from_namespace("cosmos"), Some(ChainType::Cosmos));
+        assert_eq!(ChainType::from_namespace("bip122"), Some(ChainType::Bitcoin));
+        assert_eq!(ChainType::from_namespace("tron"), Some(ChainType::Tron));
+        assert_eq!(ChainType::from_namespace("ton"), Some(ChainType::Ton));
+        assert_eq!(ChainType::from_namespace("spark"), Some(ChainType::Spark));
+        assert_eq!(ChainType::from_namespace("fil"), Some(ChainType::Filecoin));
+        assert_eq!(ChainType::from_namespace("sui"), Some(ChainType::Sui));
         assert_eq!(ChainType::from_namespace("unknown"), None);
     }
 
     #[test]
-    fn from_str() {
+    fn from_str_all() {
         assert_eq!("evm".parse::<ChainType>().unwrap(), ChainType::Evm);
         assert_eq!("Solana".parse::<ChainType>().unwrap(), ChainType::Solana);
+        assert_eq!("BITCOIN".parse::<ChainType>().unwrap(), ChainType::Bitcoin);
         assert!("unknown".parse::<ChainType>().is_err());
     }
 
@@ -237,6 +296,7 @@ mod tests {
     fn display() {
         assert_eq!(ChainType::Evm.to_string(), "evm");
         assert_eq!(ChainType::Bitcoin.to_string(), "bitcoin");
+        assert_eq!(ChainType::Sui.to_string(), "sui");
     }
 
     #[test]
@@ -268,6 +328,12 @@ mod tests {
     }
 
     #[test]
+    fn parse_chain_solana() {
+        let c = parse_chain("solana").unwrap();
+        assert_eq!(c.chain_type, ChainType::Solana);
+    }
+
+    #[test]
     fn parse_chain_unknown_fails() {
         assert!(parse_chain("foobar").is_err());
     }
@@ -281,6 +347,6 @@ mod tests {
 
     #[test]
     fn all_chain_types_count() {
-        assert_eq!(ALL_CHAIN_TYPES.len(), 3);
+        assert_eq!(ALL_CHAIN_TYPES.len(), 9);
     }
 }

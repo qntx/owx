@@ -381,7 +381,7 @@ mod tests {
     fn api_key_crud() {
         use std::collections::HashMap;
 
-        use owx_core::api_key::{generate_token, hash_token};
+        use crate::crypto::{generate_token, hash_token};
 
         let (_dir, vault) = temp_vault();
         let token = generate_token();

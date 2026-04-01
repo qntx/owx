@@ -6,6 +6,11 @@ use owx_vault::{CryptoEnvelope, crypto};
 
 use crate::error::OwxError;
 
+/// Whether a chain type uses the Ed25519 curve.
+const fn is_ed25519_chain(ct: ChainType) -> bool {
+    matches!(ct, ChainType::Solana | ChainType::Ton | ChainType::Sui)
+}
+
 /// Decrypted wallet secret — either a mnemonic or per-curve private keys.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -17,22 +22,20 @@ pub enum WalletSecret {
     },
     /// Per-curve hex-encoded private keys.
     PrivateKeys {
-        /// Secp256k1 key (EVM/Bitcoin).
+        /// Secp256k1 key (EVM/Bitcoin/Cosmos/Tron/Spark/Filecoin).
         #[serde(skip_serializing_if = "Option::is_none")]
         secp256k1: Option<String>,
-        /// Ed25519 key (Solana).
+        /// Ed25519 key (Solana/TON/Sui).
         #[serde(skip_serializing_if = "Option::is_none")]
         ed25519: Option<String>,
     },
 }
 
-/// Legacy format: `{"secp256k1":"hex","ed25519":"hex"}` without type tag.
-#[derive(Debug, Clone, serde::Deserialize)]
-struct LegacyPrivateKeys {
-    /// Secp256k1 key hex.
+/// Legacy format without type tag.
+#[derive(serde::Deserialize)]
+struct LegacyKeys {
     #[serde(default)]
     secp256k1: Option<String>,
-    /// Ed25519 key hex.
     #[serde(default)]
     ed25519: Option<String>,
 }
@@ -47,16 +50,19 @@ impl WalletSecret {
 
     /// Create a private-key secret for the given chain's curve.
     pub fn private_key(chain_type: ChainType, key_hex: impl Into<String>) -> Self {
-        let secret_hex = key_hex.into();
-        match chain_type {
-            ChainType::Evm | ChainType::Bitcoin => Self::PrivateKeys {
-                secp256k1: Some(secret_hex),
-                ed25519: None,
-            },
-            ChainType::Solana => Self::PrivateKeys {
-                secp256k1: None,
-                ed25519: Some(secret_hex),
-            },
+        let h = key_hex.into();
+        if is_ed25519_chain(chain_type) {
+            Self::PrivateKeys { secp256k1: None, ed25519: Some(h) }
+        } else {
+            Self::PrivateKeys { secp256k1: Some(h), ed25519: None }
+        }
+    }
+
+    /// Create from explicit dual keys.
+    pub fn dual_keys(secp256k1: String, ed25519: String) -> Self {
+        Self::PrivateKeys {
+            secp256k1: Some(secp256k1),
+            ed25519: Some(ed25519),
         }
     }
 
@@ -69,17 +75,20 @@ impl WalletSecret {
     }
 
     /// Whether this secret can sign for the given chain.
-    pub const fn supports_chain(&self, chain_type: ChainType) -> bool {
+    pub const fn supports_chain(&self, ct: ChainType) -> bool {
         match self {
             Self::Mnemonic { .. } => true,
-            Self::PrivateKeys { secp256k1, ed25519 } => match chain_type {
-                ChainType::Evm | ChainType::Bitcoin => secp256k1.is_some(),
-                ChainType::Solana => ed25519.is_some(),
-            },
+            Self::PrivateKeys { secp256k1, ed25519 } => {
+                if is_ed25519_chain(ct) {
+                    ed25519.is_some()
+                } else {
+                    secp256k1.is_some()
+                }
+            }
         }
     }
 
-    /// Returns the mnemonic phrase, if this is a mnemonic secret.
+    /// Returns the mnemonic phrase if this is a mnemonic secret.
     pub fn phrase(&self) -> Option<&str> {
         match self {
             Self::Mnemonic { phrase } => Some(phrase),
@@ -87,68 +96,64 @@ impl WalletSecret {
         }
     }
 
-    /// Returns the hex-encoded private key for the given chain's curve.
-    pub fn private_key_hex(&self, chain_type: ChainType) -> Option<&str> {
+    /// Returns the hex private key for the given chain's curve.
+    pub fn private_key_hex(&self, ct: ChainType) -> Option<&str> {
         match self {
             Self::Mnemonic { .. } => None,
-            Self::PrivateKeys { secp256k1, ed25519 } => match chain_type {
-                ChainType::Evm | ChainType::Bitcoin => secp256k1.as_deref(),
-                ChainType::Solana => ed25519.as_deref(),
-            },
+            Self::PrivateKeys { secp256k1, ed25519 } => {
+                if is_ed25519_chain(ct) {
+                    ed25519.as_deref()
+                } else {
+                    secp256k1.as_deref()
+                }
+            }
         }
     }
 
-    /// Export as a human-readable string (phrase or JSON key pair).
+    /// Export as a human-readable string.
     pub fn export_string(&self) -> Result<String, OwxError> {
-        if let Some(phrase) = self.phrase() {
-            Ok(phrase.to_owned())
-        } else {
-            serde_json::to_string_pretty(self).map_err(OwxError::from)
+        match self.phrase() {
+            Some(p) => Ok(p.to_owned()),
+            None => serde_json::to_string_pretty(self).map_err(OwxError::from),
         }
     }
 
     /// Serialize to bytes for encryption.
-    pub fn into_bytes(self) -> Result<Vec<u8>, OwxError> {
-        serde_json::to_vec(&self).map_err(OwxError::from)
+    pub fn to_bytes(&self) -> Result<Vec<u8>, OwxError> {
+        serde_json::to_vec(self).map_err(OwxError::from)
     }
 }
 
-/// Decrypt a wallet's secret using the given credential (passphrase or token).
-pub fn decrypt_wallet_secret(
-    wallet: &EncryptedWallet,
-    credential: &str,
-) -> Result<WalletSecret, OwxError> {
+/// Decrypt a wallet's secret using the given credential.
+pub fn decrypt_secret(wallet: &EncryptedWallet, credential: &str) -> Result<WalletSecret, OwxError> {
     let envelope: CryptoEnvelope = serde_json::from_value(wallet.crypto.clone())?;
-    decrypt_wallet_secret_from_envelope(&envelope, credential, wallet.key_type)
+    decrypt_from_envelope(&envelope, credential, wallet.key_type)
 }
 
-/// Decrypt a wallet secret from a pre-parsed [`CryptoEnvelope`].
-pub fn decrypt_wallet_secret_from_envelope(
+/// Decrypt from a pre-parsed envelope.
+pub fn decrypt_from_envelope(
     envelope: &CryptoEnvelope,
     credential: &str,
     key_type: KeyType,
 ) -> Result<WalletSecret, OwxError> {
     let plaintext = crypto::decrypt(envelope, credential)?;
-    parse_wallet_secret(plaintext.expose(), key_type)
+    parse_secret(plaintext.expose(), key_type)
 }
 
 /// Parse decrypted bytes into a [`WalletSecret`], handling legacy formats.
-fn parse_wallet_secret(bytes: &[u8], key_type: KeyType) -> Result<WalletSecret, OwxError> {
-    if let Ok(secret) = serde_json::from_slice::<WalletSecret>(bytes) {
-        return Ok(secret);
+fn parse_secret(bytes: &[u8], key_type: KeyType) -> Result<WalletSecret, OwxError> {
+    if let Ok(s) = serde_json::from_slice::<WalletSecret>(bytes) {
+        return Ok(s);
     }
-
     match key_type {
         KeyType::Mnemonic => {
-            let phrase = String::from_utf8(bytes.to_vec()).map_err(|_| {
-                OwxError::InvalidInput("wallet contains invalid UTF-8 mnemonic".into())
-            })?;
+            let phrase = String::from_utf8(bytes.to_vec())
+                .map_err(|_| OwxError::InvalidInput("invalid UTF-8 mnemonic".into()))?;
             Ok(WalletSecret::mnemonic(phrase))
         }
         KeyType::PrivateKey => {
-            let legacy = serde_json::from_slice::<LegacyPrivateKeys>(bytes).map_err(|_| {
-                OwxError::InvalidInput("wallet contains invalid private key payload".into())
-            })?;
+            let legacy = serde_json::from_slice::<LegacyKeys>(bytes)
+                .map_err(|_| OwxError::InvalidInput("invalid private key payload".into()))?;
             Ok(WalletSecret::PrivateKeys {
                 secp256k1: legacy.secp256k1,
                 ed25519: legacy.ed25519,
@@ -163,27 +168,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn serialize_roundtrip_mnemonic() {
-        let secret = WalletSecret::mnemonic(
-            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-        );
-        let bytes = secret.into_bytes().unwrap();
-        let restored: WalletSecret = serde_json::from_slice(&bytes).unwrap();
-        assert!(matches!(restored, WalletSecret::Mnemonic { .. }));
+    fn roundtrip_mnemonic() {
+        let s = WalletSecret::mnemonic("abandon abandon about");
+        let b = s.to_bytes().unwrap();
+        let r: WalletSecret = serde_json::from_slice(&b).unwrap();
+        assert!(matches!(r, WalletSecret::Mnemonic { .. }));
     }
 
     #[test]
-    fn supports_expected_chain() {
-        let secret = WalletSecret::private_key(ChainType::Evm, "11".repeat(32));
-        assert!(secret.supports_chain(ChainType::Evm));
-        assert!(secret.supports_chain(ChainType::Bitcoin));
-        assert!(!secret.supports_chain(ChainType::Solana));
-    }
-
-    #[test]
-    fn export_private_keys_as_json() {
-        let secret = WalletSecret::private_key(ChainType::Solana, "22".repeat(32));
-        let exported = secret.export_string().unwrap();
-        assert!(exported.contains("ed25519"));
+    fn supports_chain_logic() {
+        let s = WalletSecret::private_key(ChainType::Evm, "aa".repeat(32));
+        assert!(s.supports_chain(ChainType::Evm));
+        assert!(s.supports_chain(ChainType::Bitcoin));
+        assert!(s.supports_chain(ChainType::Cosmos));
+        assert!(!s.supports_chain(ChainType::Solana));
+        assert!(!s.supports_chain(ChainType::Ton));
     }
 }

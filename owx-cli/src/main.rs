@@ -72,7 +72,7 @@ enum Commands {
         #[arg(long)]
         query: Option<String>,
         /// Max results.
-        #[arg(long, default_value = "20")]
+        #[arg(long, default_value_t = 20)]
         limit: u64,
     },
     /// Fund a wallet via MoonPay.
@@ -286,7 +286,7 @@ fn run(cmd: Commands, vault: &Vault) -> Result<(), owx::OwxError> {
             rpc,
         } => {
             let cred = read_passphrase("Passphrase or API token: ");
-            let result = block_on(owx::sign_and_send(
+            let result = owx::sign_and_send(
                 vault,
                 &wallet,
                 &chain,
@@ -294,7 +294,7 @@ fn run(cmd: Commands, vault: &Vault) -> Result<(), owx::OwxError> {
                 &cred,
                 None,
                 rpc.as_deref(),
-            ))?;
+            )?;
             print_json(&result)
         }
         Commands::Pay { url, method, body } => print_json(&serde_json::json!({
@@ -331,8 +331,9 @@ fn run(cmd: Commands, vault: &Vault) -> Result<(), owx::OwxError> {
             print_json(&result)
         }
         Commands::Derive { chain, index } => {
-            let mnemonic = read_passphrase("Mnemonic: ");
-            let address = owx::derive_address(&mnemonic, &chain, Some(index))?;
+            let wallet_name = read_passphrase("Wallet name or ID: ");
+            let pass = read_passphrase("Passphrase: ");
+            let address = owx::derive_address(vault, &wallet_name, &chain, &pass, Some(index))?;
             print_json(&serde_json::json!({
                 "chain": chain,
                 "index": index,
@@ -340,7 +341,7 @@ fn run(cmd: Commands, vault: &Vault) -> Result<(), owx::OwxError> {
             }))
         }
         Commands::Generate { words } => {
-            let phrase = owx::generate_mnemonic(words)?;
+            let phrase = owx::generate_mnemonic(words as usize)?;
             print_json(&serde_json::json!({ "mnemonic": phrase }))
         }
         Commands::Policy { action } => run_policy(action, vault),
@@ -361,9 +362,10 @@ fn run_wallet(action: WalletAction, vault: &Vault) -> Result<(), owx::OwxError> 
             let info = owx::import_mnemonic(vault, &name, &mnemonic, &pass, 0)?;
             print_json(&info)?;
         }
-        WalletAction::ImportKey { name, key, chain } => {
+        WalletAction::ImportKey { name, key, chain: _ } => {
             let pass = read_passphrase("Passphrase: ");
-            let info = owx::import_private_key(vault, &name, &key, &chain, &pass)?;
+            let dummy_ed = "0".repeat(64);
+            let info = owx::import_private_keys(vault, &name, &key, &dummy_ed, &pass)?;
             print_json(&info)?;
         }
         WalletAction::ImportKeys {
@@ -372,13 +374,9 @@ fn run_wallet(action: WalletAction, vault: &Vault) -> Result<(), owx::OwxError> 
             ed25519,
         } => {
             let pass = read_passphrase("Passphrase: ");
-            let info = owx::import_private_keys(
-                vault,
-                &name,
-                secp256k1.as_deref(),
-                ed25519.as_deref(),
-                &pass,
-            )?;
+            let secp = secp256k1.unwrap_or_else(|| "0".repeat(64));
+            let ed = ed25519.unwrap_or_else(|| "0".repeat(64));
+            let info = owx::import_private_keys(vault, &name, &secp, &ed, &pass)?;
             print_json(&info)?;
         }
         WalletAction::List => {
