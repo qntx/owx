@@ -5,7 +5,7 @@ use serde::{Serialize, Serializer};
 /// Structured error codes for API consumers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum OwxErrorCode {
+pub enum CoreErrorCode {
     /// Wallet not found by name or ID.
     WalletNotFound,
     /// Chain not supported.
@@ -26,7 +26,7 @@ pub enum OwxErrorCode {
 
 /// Unified error type for OWX operations.
 #[derive(Debug, Clone, thiserror::Error)]
-pub enum OwxError {
+pub enum CoreError {
     /// Wallet not found by name or ID.
     #[error("wallet not found: {id}")]
     WalletNotFound {
@@ -80,19 +80,19 @@ pub enum OwxError {
     },
 }
 
-impl OwxError {
+impl CoreError {
     /// Returns the structured error code for this error.
     #[must_use]
-    pub const fn code(&self) -> OwxErrorCode {
+    pub const fn code(&self) -> CoreErrorCode {
         match self {
-            Self::WalletNotFound { .. } => OwxErrorCode::WalletNotFound,
-            Self::ChainNotSupported { .. } => OwxErrorCode::ChainNotSupported,
-            Self::InvalidPassphrase => OwxErrorCode::InvalidPassphrase,
-            Self::InvalidInput { .. } => OwxErrorCode::InvalidInput,
-            Self::CaipParseError { .. } => OwxErrorCode::CaipParseError,
-            Self::PolicyDenied { .. } => OwxErrorCode::PolicyDenied,
-            Self::ApiKeyNotFound => OwxErrorCode::ApiKeyNotFound,
-            Self::ApiKeyExpired { .. } => OwxErrorCode::ApiKeyExpired,
+            Self::WalletNotFound { .. } => CoreErrorCode::WalletNotFound,
+            Self::ChainNotSupported { .. } => CoreErrorCode::ChainNotSupported,
+            Self::InvalidPassphrase => CoreErrorCode::InvalidPassphrase,
+            Self::InvalidInput { .. } => CoreErrorCode::InvalidInput,
+            Self::CaipParseError { .. } => CoreErrorCode::CaipParseError,
+            Self::PolicyDenied { .. } => CoreErrorCode::PolicyDenied,
+            Self::ApiKeyNotFound => CoreErrorCode::ApiKeyNotFound,
+            Self::ApiKeyExpired { .. } => CoreErrorCode::ApiKeyExpired,
         }
     }
 }
@@ -101,12 +101,12 @@ impl OwxError {
 #[derive(Serialize)]
 struct ErrorPayload {
     /// Structured error code.
-    code: OwxErrorCode,
+    code: CoreErrorCode,
     /// Human-readable message.
     message: String,
 }
 
-impl Serialize for OwxError {
+impl Serialize for CoreError {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let payload = ErrorPayload {
             code: self.code(),
@@ -124,52 +124,52 @@ mod tests {
     #[test]
     fn code_mapping() {
         assert_eq!(
-            OwxError::WalletNotFound { id: "x".into() }.code(),
-            OwxErrorCode::WalletNotFound
+            CoreError::WalletNotFound { id: "x".into() }.code(),
+            CoreErrorCode::WalletNotFound
         );
         assert_eq!(
-            OwxError::ChainNotSupported { chain: "x".into() }.code(),
-            OwxErrorCode::ChainNotSupported
+            CoreError::ChainNotSupported { chain: "x".into() }.code(),
+            CoreErrorCode::ChainNotSupported
         );
         assert_eq!(
-            OwxError::InvalidPassphrase.code(),
-            OwxErrorCode::InvalidPassphrase
+            CoreError::InvalidPassphrase.code(),
+            CoreErrorCode::InvalidPassphrase
         );
         assert_eq!(
-            OwxError::InvalidInput {
+            CoreError::InvalidInput {
                 message: "x".into()
             }
             .code(),
-            OwxErrorCode::InvalidInput
+            CoreErrorCode::InvalidInput
         );
         assert_eq!(
-            OwxError::CaipParseError {
+            CoreError::CaipParseError {
                 message: "x".into()
             }
             .code(),
-            OwxErrorCode::CaipParseError
+            CoreErrorCode::CaipParseError
         );
         assert_eq!(
-            OwxError::PolicyDenied {
+            CoreError::PolicyDenied {
                 policy_id: "x".into(),
                 reason: "x".into()
             }
             .code(),
-            OwxErrorCode::PolicyDenied
+            CoreErrorCode::PolicyDenied
         );
         assert_eq!(
-            OwxError::ApiKeyNotFound.code(),
-            OwxErrorCode::ApiKeyNotFound
+            CoreError::ApiKeyNotFound.code(),
+            CoreErrorCode::ApiKeyNotFound
         );
         assert_eq!(
-            OwxError::ApiKeyExpired { id: "x".into() }.code(),
-            OwxErrorCode::ApiKeyExpired
+            CoreError::ApiKeyExpired { id: "x".into() }.code(),
+            CoreErrorCode::ApiKeyExpired
         );
     }
 
     #[test]
     fn display_output() {
-        let err = OwxError::WalletNotFound {
+        let err = CoreError::WalletNotFound {
             id: "abc-123".into(),
         };
         assert_eq!(err.to_string(), "wallet not found: abc-123");
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn json_serialization_shape() {
-        let err = OwxError::WalletNotFound {
+        let err = CoreError::WalletNotFound {
             id: "abc-123".into(),
         };
         let json = serde_json::to_value(&err).unwrap();
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn policy_denied_serialization() {
-        let err = OwxError::PolicyDenied {
+        let err = CoreError::PolicyDenied {
             policy_id: "spending-limit".into(),
             reason: "exceeded daily limit".into(),
         };

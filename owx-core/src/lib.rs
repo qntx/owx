@@ -19,7 +19,7 @@ pub use chain::{
     ALL_CHAIN_TYPES, Chain, ChainType, KNOWN_CHAINS, default_chain_for_type, parse_chain,
 };
 pub use config::Config;
-pub use error::{OwxError, OwxErrorCode};
+pub use error::{CoreError, CoreErrorCode};
 pub use policy::{
     Policy, PolicyAction, PolicyContext, PolicyResult, PolicyRule, SpendingContext,
     TransactionContext,

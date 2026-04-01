@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
-use crate::error::OwxError;
+use crate::error::CoreError;
 
 /// CAIP-2 Chain ID: `namespace:reference`.
 ///
@@ -23,9 +23,9 @@ pub struct ChainId {
 
 impl ChainId {
     /// Validate that a namespace conforms to CAIP-2 (3-8 lowercase alphanumeric).
-    fn validate_namespace(ns: &str) -> Result<(), OwxError> {
+    fn validate_namespace(ns: &str) -> Result<(), CoreError> {
         if ns.len() < 3 || ns.len() > 8 {
-            return Err(OwxError::CaipParseError {
+            return Err(CoreError::CaipParseError {
                 message: format!(
                     "namespace must be 3-8 characters, got {} ('{ns}')",
                     ns.len(),
@@ -36,7 +36,7 @@ impl ChainId {
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
         {
-            return Err(OwxError::CaipParseError {
+            return Err(CoreError::CaipParseError {
                 message: format!("namespace must be [a-z0-9], got '{ns}'"),
             });
         }
@@ -44,9 +44,9 @@ impl ChainId {
     }
 
     /// Validate that a reference conforms to CAIP-2 (1-64 alphanumeric/hyphen/underscore).
-    fn validate_reference(reference: &str) -> Result<(), OwxError> {
+    fn validate_reference(reference: &str) -> Result<(), CoreError> {
         if reference.is_empty() || reference.len() > 64 {
-            return Err(OwxError::CaipParseError {
+            return Err(CoreError::CaipParseError {
                 message: format!(
                     "reference must be 1-64 characters, got {} ('{reference}')",
                     reference.len(),
@@ -57,7 +57,7 @@ impl ChainId {
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
         {
-            return Err(OwxError::CaipParseError {
+            return Err(CoreError::CaipParseError {
                 message: format!("reference contains invalid characters: '{reference}'"),
             });
         }
@@ -66,10 +66,10 @@ impl ChainId {
 }
 
 impl FromStr for ChainId {
-    type Err = OwxError;
+    type Err = CoreError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (ns, ref_part) = s.split_once(':').ok_or_else(|| OwxError::CaipParseError {
+        let (ns, ref_part) = s.split_once(':').ok_or_else(|| CoreError::CaipParseError {
             message: format!("expected 'namespace:reference', got '{s}'"),
         })?;
         Self::validate_namespace(ns)?;

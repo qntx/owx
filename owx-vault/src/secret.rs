@@ -8,8 +8,13 @@ use crate::hardening::{mlock_slice, munlock_slice};
 ///
 /// On Unix, the buffer is mlocked to prevent swapping to disk.
 /// The inner key material is securely wiped from memory on [`Drop`].
-#[derive(Clone)]
 pub struct SecretBytes(Vec<u8>);
+
+impl Clone for SecretBytes {
+    fn clone(&self) -> Self {
+        Self::new(self.0.clone())
+    }
+}
 
 impl SecretBytes {
     /// Wrap raw bytes. On Unix, the buffer is mlocked immediately.

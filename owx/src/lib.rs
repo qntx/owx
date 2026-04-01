@@ -24,4 +24,4 @@ pub use ops::{
     sign_transaction,
 };
 pub use owx_vault::Vault;
-pub use types::{AccountInfo, SendResult, SignResult, WalletInfo};
+pub use types::{AccountInfo, ApiKeyCreateResult, ApiKeyInfo, SendResult, SignResult, WalletInfo};

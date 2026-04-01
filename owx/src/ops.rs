@@ -40,6 +40,20 @@ fn encrypt_secret(secret: &WalletSecret, passphrase: &str) -> Result<serde_json:
     serde_json::to_value(&envelope).map_err(OwxError::from)
 }
 
+/// Validate that a hex string decodes to exactly 32 bytes.
+fn validate_hex_key(hex_str: &str, label: &str) -> Result<(), OwxError> {
+    let clean = hex_str.strip_prefix("0x").unwrap_or(hex_str);
+    let bytes = hex::decode(clean)
+        .map_err(|e| OwxError::InvalidInput(format!("invalid {label} hex: {e}")))?;
+    if bytes.len() != 32 {
+        return Err(OwxError::InvalidInput(format!(
+            "{label} key must be 32 bytes, got {}",
+            bytes.len()
+        )));
+    }
+    Ok(())
+}
+
 /// Generate a new BIP-39 mnemonic phrase.
 pub fn generate_mnemonic(words: usize) -> Result<String, OwxError> {
     let wallet =
@@ -119,6 +133,8 @@ pub fn import_private_keys(
             name.to_owned(),
         )));
     }
+    validate_hex_key(secp256k1_hex, "secp256k1")?;
+    validate_hex_key(ed25519_hex, "ed25519")?;
     let secret = WalletSecret::dual_keys(secp256k1_hex.to_owned(), ed25519_hex.to_owned());
 
     let mut accounts = Vec::new();
@@ -561,5 +577,118 @@ mod tests {
         rename_wallet(&vault, "old", "new").unwrap();
         assert!(get_wallet(&vault, "new").is_ok());
         assert!(get_wallet(&vault, "old").is_err());
+    }
+
+    #[test]
+    fn agent_mode_sign_message_end_to_end() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        import_mnemonic(&vault, "agent-wallet", phrase, "owner-pass", 0).unwrap();
+
+        let api_key_result = crate::key_ops::create_api_key(
+            &vault,
+            "test-agent",
+            &["agent-wallet".into()],
+            &[],
+            "owner-pass",
+            None,
+        )
+        .unwrap();
+        let token = &api_key_result.token;
+
+        let sig = sign_message(
+            &vault,
+            "agent-wallet",
+            "ethereum",
+            b"hello agent",
+            token,
+            None,
+        )
+        .unwrap();
+        assert!(!sig.signature.is_empty());
+        assert!(sig.recovery_id.is_some());
+    }
+
+    #[test]
+    fn agent_mode_policy_denies() {
+        use owx_core::policy::{Policy, PolicyAction, PolicyRule};
+
+        let dir = tempfile::tempdir().unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        import_mnemonic(&vault, "policy-wallet", phrase, "pass", 0).unwrap();
+
+        let policy = Policy {
+            id: "only-base".to_owned(),
+            name: "Base only".to_owned(),
+            version: 1,
+            created_at: "2026-01-01T00:00:00Z".to_owned(),
+            rules: vec![PolicyRule::AllowedChains {
+                chain_ids: vec!["eip155:8453".into()],
+            }],
+            executable: None,
+            config: None,
+            action: PolicyAction::Deny,
+        };
+        vault.save_policy(&policy).unwrap();
+
+        let api_key_result = crate::key_ops::create_api_key(
+            &vault,
+            "restricted",
+            &["policy-wallet".into()],
+            &["only-base".into()],
+            "pass",
+            None,
+        )
+        .unwrap();
+
+        let result = sign_message(
+            &vault,
+            "policy-wallet",
+            "ethereum",
+            b"should be denied",
+            &api_key_result.token,
+            None,
+        );
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, OwxError::PolicyDenied { .. }),
+            "expected PolicyDenied, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn agent_mode_expired_key_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        import_mnemonic(&vault, "exp-wallet", phrase, "pass", 0).unwrap();
+
+        let api_key_result = crate::key_ops::create_api_key(
+            &vault,
+            "expired-key",
+            &["exp-wallet".into()],
+            &[],
+            "pass",
+            Some("2020-01-01T00:00:00Z"),
+        )
+        .unwrap();
+
+        let result = sign_message(
+            &vault,
+            "exp-wallet",
+            "ethereum",
+            b"expired",
+            &api_key_result.token,
+            None,
+        );
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, OwxError::ApiKeyExpired { .. }),
+            "expected ApiKeyExpired, got {err:?}"
+        );
     }
 }

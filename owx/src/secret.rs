@@ -3,6 +3,7 @@
 use owx_core::chain::ChainType;
 use owx_core::wallet_file::{EncryptedWallet, KeyType};
 use owx_vault::{CryptoEnvelope, crypto};
+use zeroize::Zeroize;
 
 use crate::error::OwxError;
 
@@ -12,7 +13,10 @@ const fn is_ed25519_chain(ct: ChainType) -> bool {
 }
 
 /// Decrypted wallet secret — either a mnemonic or per-curve private keys.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+///
+/// All secret material is zeroized on [`Drop`]. Do not `Clone` unless
+/// necessary — each clone is an additional copy of key material in memory.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WalletSecret {
     /// BIP-39 mnemonic phrase.
@@ -132,6 +136,22 @@ impl WalletSecret {
     /// Serialize to bytes for encryption.
     pub fn to_bytes(&self) -> Result<Vec<u8>, OwxError> {
         serde_json::to_vec(self).map_err(OwxError::from)
+    }
+}
+
+impl Drop for WalletSecret {
+    fn drop(&mut self) {
+        match self {
+            Self::Mnemonic { phrase } => phrase.zeroize(),
+            Self::PrivateKeys { secp256k1, ed25519 } => {
+                if let Some(k) = secp256k1 {
+                    k.zeroize();
+                }
+                if let Some(k) = ed25519 {
+                    k.zeroize();
+                }
+            }
+        }
     }
 }
 

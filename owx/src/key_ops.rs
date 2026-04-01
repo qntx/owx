@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use owx_core::api_key::ApiKeyFile;
 use owx_vault::Vault;
 use owx_vault::crypto;
+use zeroize::Zeroize;
 
 use crate::error::OwxError;
 use crate::secret::decrypt_secret;
@@ -38,8 +39,9 @@ pub fn create_api_key(
     for wid in wallet_ids {
         let wallet = vault.load_wallet(wid)?;
         let secret = decrypt_secret(&wallet, passphrase)?;
-        let secret_bytes = secret.to_bytes()?;
+        let mut secret_bytes = secret.to_bytes()?;
         let hkdf_envelope = crypto::encrypt_hkdf(&secret_bytes, &token)?;
+        secret_bytes.zeroize();
         let envelope_json = serde_json::to_value(&hkdf_envelope)?;
         wallet_secrets.insert(wallet.id.clone(), envelope_json);
         resolved_ids.push(wallet.id.clone());
