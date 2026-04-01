@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Core types, chain registry, and error definitions for OWX."
+keywords.workspace = true
+categories.workspace = true
 readme.workspace = true
 
 [dependencies]

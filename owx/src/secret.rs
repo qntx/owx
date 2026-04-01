@@ -34,8 +34,10 @@ pub enum WalletSecret {
 /// Legacy format without type tag.
 #[derive(serde::Deserialize)]
 struct LegacyKeys {
+    /// Secp256k1 hex key.
     #[serde(default)]
     secp256k1: Option<String>,
+    /// Ed25519 hex key.
     #[serde(default)]
     ed25519: Option<String>,
 }
@@ -49,6 +51,7 @@ impl WalletSecret {
     }
 
     /// Create a private-key secret for the given chain's curve.
+    #[allow(dead_code)]
     pub fn private_key(chain_type: ChainType, key_hex: impl Into<String>) -> Self {
         let h = key_hex.into();
         if is_ed25519_chain(chain_type) {
@@ -59,7 +62,8 @@ impl WalletSecret {
     }
 
     /// Create from explicit dual keys.
-    pub fn dual_keys(secp256k1: String, ed25519: String) -> Self {
+    #[must_use]
+    pub const fn dual_keys(secp256k1: String, ed25519: String) -> Self {
         Self::PrivateKeys {
             secp256k1: Some(secp256k1),
             ed25519: Some(ed25519),
@@ -75,6 +79,7 @@ impl WalletSecret {
     }
 
     /// Whether this secret can sign for the given chain.
+    #[allow(dead_code)]
     pub const fn supports_chain(&self, ct: ChainType) -> bool {
         match self {
             Self::Mnemonic { .. } => true,

@@ -10,6 +10,7 @@ use crate::error::OwxError;
 use crate::secret::decrypt_secret;
 use crate::types::{ApiKeyCreateResult, ApiKeyInfo};
 
+/// Convert an [`ApiKeyFile`] to the public-facing [`ApiKeyInfo`].
 fn key_to_info(k: &ApiKeyFile) -> ApiKeyInfo {
     ApiKeyInfo {
         id: k.id.clone(),

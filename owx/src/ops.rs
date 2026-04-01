@@ -14,6 +14,7 @@ use crate::error::OwxError;
 use crate::secret::{WalletSecret, decrypt_secret};
 use crate::types::{AccountInfo, SendResult, SignResult, WalletInfo};
 
+/// Convert an [`EncryptedWallet`] to the public-facing [`WalletInfo`].
 fn wallet_to_info(w: &EncryptedWallet) -> WalletInfo {
     WalletInfo {
         id: w.id.clone(),
@@ -27,6 +28,7 @@ fn wallet_to_info(w: &EncryptedWallet) -> WalletInfo {
     }
 }
 
+/// Encrypt a wallet secret and return the envelope as a JSON value.
 fn encrypt_secret(secret: &WalletSecret, passphrase: &str) -> Result<serde_json::Value, OwxError> {
     let mut bytes = secret.to_bytes()?;
     let envelope = crypto::encrypt(&bytes, passphrase)?;
@@ -113,7 +115,7 @@ pub fn import_private_keys(
     for ct in &owx_core::chain::ALL_CHAIN_TYPES {
         if let Some(key_hex) = secret.private_key_hex(*ct) {
             let chain = owx_core::chain::default_chain_for_type(*ct);
-            let addr = derive_address_from_hex(*ct, key_hex)?;
+            let addr = chains::derive_address_from_hex(*ct, key_hex)?;
             accounts.push(owx_core::wallet_file::WalletAccount {
                 account_id: format!("{}:{addr}", chain.chain_id),
                 address: addr,
@@ -135,29 +137,6 @@ pub fn import_private_keys(
     Ok(wallet_to_info(&wallet))
 }
 
-/// Derive an address from a hex private key for a given chain type.
-fn derive_address_from_hex(ct: ChainType, key_hex: &str) -> Result<String, OwxError> {
-    match ct {
-        ChainType::Evm => {
-            let s = signer::evm::Signer::from_hex(key_hex)
-                .map_err(|e| OwxError::Derivation(e.to_string()))?;
-            Ok(s.address())
-        }
-        ChainType::Solana => {
-            let s = signer::svm::Signer::from_hex(key_hex)
-                .map_err(|e| OwxError::Derivation(e.to_string()))?;
-            Ok(s.address())
-        }
-        ChainType::Sui => {
-            let s = signer::sui::Signer::from_hex(key_hex)
-                .map_err(|e| OwxError::Derivation(e.to_string()))?;
-            Ok(s.address())
-        }
-        _ => Err(OwxError::InvalidInput(format!(
-            "address derivation from private key not supported for {ct} — use mnemonic import"
-        ))),
-    }
-}
 
 /// List all wallets.
 pub fn list_wallets(vault: &Vault) -> Result<Vec<WalletInfo>, OwxError> {
@@ -202,27 +181,24 @@ pub fn derive_address(
     let secret = decrypt_secret(&wallet, passphrase)?;
     let idx = index.unwrap_or(0);
 
-    match secret.phrase() {
-        Some(phrase) => {
-            let kw = kobe::Wallet::from_mnemonic(phrase, None)
-                .map_err(|e| OwxError::Derivation(e.to_string()))?;
-            let key_hex = chains::derive_private_key_hex(&kw, chain_info.chain_type, idx)?;
-            derive_address_from_hex(chain_info.chain_type, &key_hex)
-                .or_else(|_| {
-                    let accounts = chains::derive_all_accounts(phrase, idx)?;
-                    accounts.iter()
-                        .find(|a| a.chain_id == chain_info.chain_id)
-                        .map(|a| a.address.clone())
-                        .ok_or_else(|| OwxError::InvalidInput(format!("no account for chain {}", chain_info.chain_id)))
-                })
-        }
-        None => {
-            let h = secret.private_key_hex(chain_info.chain_type)
-                .ok_or_else(|| OwxError::InvalidInput(format!(
-                    "no private key for chain type {}", chain_info.chain_type
-                )))?;
-            derive_address_from_hex(chain_info.chain_type, h)
-        }
+    if let Some(phrase) = secret.phrase() {
+        let kw = kobe::Wallet::from_mnemonic(phrase, None)
+            .map_err(|e| OwxError::Derivation(e.to_string()))?;
+        let key_hex = chains::derive_private_key_hex(&kw, chain_info.chain_type, idx)?;
+        chains::derive_address_from_hex(chain_info.chain_type, &key_hex)
+            .or_else(|_| {
+                let accounts = chains::derive_all_accounts(phrase, idx)?;
+                accounts.iter()
+                    .find(|a| a.chain_id == chain_info.chain_id)
+                    .map(|a| a.address.clone())
+                    .ok_or_else(|| OwxError::InvalidInput(format!("no account for chain {}", chain_info.chain_id)))
+            })
+    } else {
+        let h = secret.private_key_hex(chain_info.chain_type)
+            .ok_or_else(|| OwxError::InvalidInput(format!(
+                "no private key for chain type {}", chain_info.chain_type
+            )))?;
+        chains::derive_address_from_hex(chain_info.chain_type, h)
     }
 }
 
@@ -300,6 +276,11 @@ pub fn sign_and_send(
 }
 
 /// Resolve the hex private key for signing from a vault wallet + credential.
+///
+/// Supports two modes:
+/// - **Owner mode** (passphrase): decrypt wallet secret directly.
+/// - **Agent mode** (`owx_key_...` token): look up API key, enforce policies,
+///   decrypt the per-wallet HKDF-encrypted copy of the secret.
 fn resolve_signing_key(
     vault: &Vault,
     wallet_name_or_id: &str,
@@ -307,26 +288,101 @@ fn resolve_signing_key(
     ct: ChainType,
     index: u32,
 ) -> Result<String, OwxError> {
-    // TODO: API token (owx_key_...) path with policy evaluation
+    if owx_core::api_key::is_api_token(credential) {
+        return resolve_signing_key_agent(vault, wallet_name_or_id, credential, ct, index);
+    }
+
     let wallet = vault.load_wallet(wallet_name_or_id)?;
     let secret = decrypt_secret(&wallet, credential)?;
+    extract_key_hex(&secret, ct, index)
+}
 
-    match secret.phrase() {
-        Some(phrase) => {
-            let kw = kobe::Wallet::from_mnemonic(phrase, None)
-                .map_err(|e| OwxError::Derivation(e.to_string()))?;
-            chains::derive_private_key_hex(&kw, ct, index)
+/// Agent-mode key resolution: validate token → enforce policies → decrypt.
+fn resolve_signing_key_agent(
+    vault: &Vault,
+    wallet_name_or_id: &str,
+    token: &str,
+    ct: ChainType,
+    index: u32,
+) -> Result<String, OwxError> {
+    let token_hash = crypto::hash_token(token);
+    let api_key = vault.load_api_key_by_token_hash(&token_hash)?;
+
+    if let Some(ref exp) = api_key.expires_at {
+        let now = chrono::Utc::now().to_rfc3339();
+        if now.as_str() > exp.as_str() {
+            return Err(OwxError::ApiKeyExpired { id: api_key.id });
         }
-        None => {
-            secret.private_key_hex(ct)
-                .map(|h| h.to_owned())
-                .ok_or_else(|| OwxError::InvalidInput(format!(
-                    "no private key for chain type {ct}"
-                )))
+    }
+
+    let wallet = vault.load_wallet(wallet_name_or_id)?;
+    if !api_key.wallet_ids.contains(&wallet.id) {
+        return Err(OwxError::InvalidInput(format!(
+            "API key '{}' does not have access to wallet '{}'",
+            api_key.id, wallet.id
+        )));
+    }
+
+    let chain = owx_core::default_chain_for_type(ct);
+    let policies: Vec<owx_core::Policy> = api_key.policy_ids.iter()
+        .filter_map(|pid| vault.load_policy(pid).ok())
+        .collect();
+
+    if !policies.is_empty() {
+        let ctx = owx_core::PolicyContext {
+            chain_id: chain.chain_id.to_owned(),
+            wallet_id: wallet.id.clone(),
+            api_key_id: api_key.id.clone(),
+            transaction: owx_core::TransactionContext {
+                to: None,
+                value: None,
+                raw_hex: String::new(),
+                data: None,
+            },
+            spending: owx_core::SpendingContext {
+                daily_total: "0".to_owned(),
+                date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+            },
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        };
+        let result = crate::policy_engine::evaluate(&policies, &ctx);
+        if !result.allow {
+            return Err(OwxError::PolicyDenied {
+                policy_id: result.policy_id.unwrap_or_default(),
+                reason: result.reason.unwrap_or_default(),
+            });
         }
+    }
+
+    let envelope_value = api_key.wallet_secrets.get(&wallet.id)
+        .ok_or_else(|| OwxError::InvalidInput(format!(
+            "API key has no encrypted secret for wallet '{}'", wallet.id
+        )))?;
+    let envelope: crypto::CryptoEnvelope = serde_json::from_value(envelope_value.clone())?;
+    let secret = crate::secret::decrypt_from_envelope(&envelope, token, wallet.key_type)?;
+    extract_key_hex(&secret, ct, index)
+}
+
+/// Extract the hex private key from a decrypted wallet secret.
+fn extract_key_hex(
+    secret: &WalletSecret,
+    ct: ChainType,
+    index: u32,
+) -> Result<String, OwxError> {
+    if let Some(phrase) = secret.phrase() {
+        let kw = kobe::Wallet::from_mnemonic(phrase, None)
+            .map_err(|e| OwxError::Derivation(e.to_string()))?;
+        chains::derive_private_key_hex(&kw, ct, index)
+    } else {
+        secret.private_key_hex(ct)
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| OwxError::InvalidInput(format!(
+                "no private key for chain type {ct}"
+            )))
     }
 }
 
+/// Resolve the RPC URL: explicit > user config > built-in default.
 fn resolve_rpc(chain_id: &str, ct: ChainType, explicit: Option<&str>) -> Result<String, OwxError> {
     if let Some(url) = explicit {
         return Ok(url.to_owned());
@@ -349,6 +405,7 @@ fn resolve_rpc(chain_id: &str, ct: ChainType, explicit: Option<&str>) -> Result<
     Err(OwxError::InvalidInput(format!("no RPC URL for chain '{chain_id}'")))
 }
 
+/// POST JSON to a URL via `curl` subprocess.
 fn curl_post_json(url: &str, body: &str) -> Result<String, OwxError> {
     let output = std::process::Command::new("curl")
         .args(["-fsSL", "-X", "POST", "-H", "Content-Type: application/json", "-d", body, url])
@@ -362,12 +419,13 @@ fn curl_post_json(url: &str, body: &str) -> Result<String, OwxError> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+/// Extract a string field from a JSON-RPC response.
 fn extract_json_field(json_str: &str, field: &str) -> Result<String, OwxError> {
     let parsed: serde_json::Value = serde_json::from_str(json_str)?;
     if let Some(error) = parsed.get("error") {
         return Err(OwxError::BroadcastFailed(format!("RPC error: {error}")));
     }
-    parsed[field].as_str().map(|s| s.to_owned())
+    parsed[field].as_str().map(ToOwned::to_owned)
         .ok_or_else(|| OwxError::BroadcastFailed(format!("no '{field}' in response")))
 }
 

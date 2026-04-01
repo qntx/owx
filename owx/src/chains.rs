@@ -1,19 +1,40 @@
-//! Unified 9-chain HD derivation and signing bridges to kobe/signer.
+//! Unified 9-chain HD derivation and signing via kobe + signer.
+//!
+//! Uses macros to eliminate per-chain match-arm repetition while keeping
+//! static dispatch for zero-cost abstraction.
 
 use owx_core::chain::{ALL_CHAIN_TYPES, ChainType, default_chain_for_type};
 use owx_core::wallet_file::WalletAccount;
+use signer::Sign;
 
 use crate::error::OwxError;
 use crate::types::SignResult;
 
-fn d_err<E: std::fmt::Display>(e: E) -> OwxError {
-    OwxError::Derivation(e.to_string())
+/// Dispatch to a chain-specific signer constructed from a hex key.
+/// All 9 signers implement the `Sign` trait so the body is uniform.
+macro_rules! with_signer {
+    ($ct:expr, $key_hex:expr, $s:ident => $body:expr) => {
+        match $ct {
+            ChainType::Evm      => { let $s = signer::evm::Signer::from_hex($key_hex).map_err(s_err)?; $body }
+            ChainType::Bitcoin   => { let $s = signer::btc::Signer::from_hex($key_hex).map_err(s_err)?; $body }
+            ChainType::Solana    => { let $s = signer::svm::Signer::from_hex($key_hex).map_err(s_err)?; $body }
+            ChainType::Cosmos    => { let $s = signer::cosmos::Signer::from_hex($key_hex).map_err(s_err)?; $body }
+            ChainType::Tron      => { let $s = signer::tron::Signer::from_hex($key_hex).map_err(s_err)?; $body }
+            ChainType::Ton       => { let $s = signer::ton::Signer::from_hex($key_hex).map_err(s_err)?; $body }
+            ChainType::Spark     => { let $s = signer::spark::Signer::from_hex($key_hex).map_err(s_err)?; $body }
+            ChainType::Filecoin  => { let $s = signer::fil::Signer::from_hex($key_hex).map_err(s_err)?; $body }
+            ChainType::Sui       => { let $s = signer::sui::Signer::from_hex($key_hex).map_err(s_err)?; $body }
+        }
+    };
 }
 
-fn s_err<E: std::fmt::Display>(e: E) -> OwxError {
-    OwxError::Signing(e.to_string())
-}
+/// Convert a derivation error into [`OwxError::Derivation`].
+fn d_err(e: impl std::fmt::Display) -> OwxError { OwxError::Derivation(e.to_string()) }
 
+/// Convert a signing error into [`OwxError::Signing`].
+fn s_err(e: impl std::fmt::Display) -> OwxError { OwxError::Signing(e.to_string()) }
+
+/// Build a [`WalletAccount`] from chain ID, address, and derivation path.
 fn make_account(chain_id: &str, address: &str, path: &str) -> WalletAccount {
     WalletAccount {
         account_id: format!("{chain_id}:{address}"),
@@ -21,6 +42,12 @@ fn make_account(chain_id: &str, address: &str, path: &str) -> WalletAccount {
         chain_id: chain_id.to_owned(),
         derivation_path: path.to_owned(),
     }
+}
+
+/// Convert a signer [`SignOutput`](signer::SignOutput) into our [`SignResult`].
+#[allow(clippy::needless_pass_by_value)]
+fn to_sign_result(out: signer::SignOutput) -> SignResult {
+    SignResult { signature: hex::encode(&out.signature), recovery_id: out.recovery_id }
 }
 
 /// Derive accounts for all 9 chain families from a mnemonic.
@@ -87,137 +114,31 @@ fn derive_one(
     }
 }
 
-/// Sign a message with a mnemonic-derived key.
-pub fn sign_message_mnemonic(
-    mnemonic: &str,
-    ct: ChainType,
-    index: u32,
-    message: &[u8],
-) -> Result<SignResult, OwxError> {
-    let wallet = kobe::Wallet::from_mnemonic(mnemonic, None).map_err(d_err)?;
-    let key_hex = derive_private_key_hex(&wallet, ct, index)?;
-    sign_message_hex(ct, &key_hex, message)
+/// Sign a message with a hex private key. Uses the `Sign` trait uniformly.
+pub fn sign_message_hex(ct: ChainType, key_hex: &str, message: &[u8]) -> Result<SignResult, OwxError> {
+    with_signer!(ct, key_hex, s => Ok(to_sign_result(Sign::sign_message(&s, message).map_err(s_err)?)))
 }
 
-/// Sign a message with a hex private key.
-pub fn sign_message_hex(
-    ct: ChainType,
-    key_hex: &str,
-    message: &[u8],
-) -> Result<SignResult, OwxError> {
-    match ct {
-        ChainType::Evm => {
-            let s = signer::evm::Signer::from_hex(key_hex).map_err(s_err)?;
-            to_sign_result(s.sign_message(message).map_err(s_err)?)
-        }
-        ChainType::Bitcoin => {
-            let s = signer::btc::Signer::from_hex(key_hex).map_err(s_err)?;
-            to_sign_result(s.sign_message(message).map_err(s_err)?)
-        }
-        ChainType::Cosmos => {
-            let s = signer::cosmos::Signer::from_hex(key_hex).map_err(s_err)?;
-            to_sign_result(s.sign_message(message).map_err(s_err)?)
-        }
-        ChainType::Tron => {
-            let s = signer::tron::Signer::from_hex(key_hex).map_err(s_err)?;
-            to_sign_result(s.sign_message(message).map_err(s_err)?)
-        }
-        ChainType::Spark => {
-            let s = signer::spark::Signer::from_hex(key_hex).map_err(s_err)?;
-            to_sign_result(s.sign_message(message).map_err(s_err)?)
-        }
-        ChainType::Filecoin => {
-            let s = signer::fil::Signer::from_hex(key_hex).map_err(s_err)?;
-            to_sign_result(s.sign_message(message).map_err(s_err)?)
-        }
-        ChainType::Solana => {
-            let s = signer::svm::Signer::from_hex(key_hex).map_err(s_err)?;
-            let sig = s.sign_transaction_message(message);
-            Ok(SignResult {
-                signature: hex::encode(sig.to_bytes()),
-                recovery_id: None,
-            })
-        }
-        ChainType::Ton => {
-            let s = signer::ton::Signer::from_hex(key_hex).map_err(s_err)?;
-            let sig = s.sign_transaction(message);
-            Ok(SignResult {
-                signature: hex::encode(sig.to_bytes()),
-                recovery_id: None,
-            })
-        }
-        ChainType::Sui => {
-            let s = signer::sui::Signer::from_hex(key_hex).map_err(s_err)?;
-            let sig = s.sign_message(message);
-            Ok(SignResult {
-                signature: hex::encode(sig.to_bytes()),
-                recovery_id: None,
-            })
-        }
-    }
-}
-
-/// Sign a transaction with a hex private key.
-pub fn sign_transaction_hex(
-    ct: ChainType,
-    key_hex: &str,
-    tx_bytes: &[u8],
-) -> Result<SignResult, OwxError> {
-    match ct {
-        ChainType::Evm => {
-            let s = signer::evm::Signer::from_hex(key_hex).map_err(s_err)?;
-            to_sign_result(s.sign_transaction(tx_bytes).map_err(s_err)?)
-        }
-        ChainType::Bitcoin => {
-            let s = signer::btc::Signer::from_hex(key_hex).map_err(s_err)?;
-            to_sign_result(s.sign_transaction(tx_bytes).map_err(s_err)?)
-        }
-        ChainType::Cosmos => {
-            let s = signer::cosmos::Signer::from_hex(key_hex).map_err(s_err)?;
-            to_sign_result(s.sign_transaction(tx_bytes).map_err(s_err)?)
-        }
-        ChainType::Tron => {
-            let s = signer::tron::Signer::from_hex(key_hex).map_err(s_err)?;
-            to_sign_result(s.sign_transaction(tx_bytes).map_err(s_err)?)
-        }
-        ChainType::Spark => {
-            let s = signer::spark::Signer::from_hex(key_hex).map_err(s_err)?;
-            to_sign_result(s.sign_transaction(tx_bytes).map_err(s_err)?)
-        }
-        ChainType::Filecoin => {
-            let s = signer::fil::Signer::from_hex(key_hex).map_err(s_err)?;
-            to_sign_result(s.sign_transaction(tx_bytes).map_err(s_err)?)
-        }
-        ChainType::Solana => {
-            let s = signer::svm::Signer::from_hex(key_hex).map_err(s_err)?;
-            let sig = s.sign_transaction_message(tx_bytes);
-            Ok(SignResult {
-                signature: hex::encode(sig.to_bytes()),
-                recovery_id: None,
-            })
-        }
-        ChainType::Ton => {
-            let s = signer::ton::Signer::from_hex(key_hex).map_err(s_err)?;
-            let sig = s.sign_transaction(tx_bytes);
-            Ok(SignResult {
-                signature: hex::encode(sig.to_bytes()),
-                recovery_id: None,
-            })
-        }
-        ChainType::Sui => {
-            let s = signer::sui::Signer::from_hex(key_hex).map_err(s_err)?;
-            let sig = s.sign_transaction(tx_bytes);
-            Ok(SignResult {
-                signature: hex::encode(sig.to_bytes()),
-                recovery_id: None,
-            })
-        }
-    }
+/// Sign a transaction with a hex private key. Uses the `Sign` trait uniformly.
+pub fn sign_transaction_hex(ct: ChainType, key_hex: &str, tx_bytes: &[u8]) -> Result<SignResult, OwxError> {
+    with_signer!(ct, key_hex, s => Ok(to_sign_result(Sign::sign_transaction(&s, tx_bytes).map_err(s_err)?)))
 }
 
 /// Encode a signed EVM transaction for broadcasting.
 pub fn encode_signed_evm_tx(unsigned_tx: &[u8], signature: &[u8]) -> Result<Vec<u8>, OwxError> {
     signer::evm::Signer::encode_signed_transaction(unsigned_tx, signature).map_err(s_err)
+}
+
+/// Derive an address from a hex private key (EVM/Solana/Sui only).
+pub fn derive_address_from_hex(ct: ChainType, key_hex: &str) -> Result<String, OwxError> {
+    match ct {
+        ChainType::Evm => Ok(signer::evm::Signer::from_hex(key_hex).map_err(s_err)?.address()),
+        ChainType::Solana => Ok(signer::svm::Signer::from_hex(key_hex).map_err(s_err)?.address()),
+        ChainType::Sui => Ok(signer::sui::Signer::from_hex(key_hex).map_err(s_err)?.address()),
+        _ => Err(OwxError::InvalidInput(format!(
+            "address derivation from private key not supported for {ct} — use mnemonic import"
+        ))),
+    }
 }
 
 /// Derive the hex private key for a chain type from a kobe wallet.
@@ -269,14 +190,6 @@ pub fn derive_private_key_hex(
     }
 }
 
-/// Convert a signer `SignOutput` to our `SignResult`.
-fn to_sign_result(out: signer::SignOutput) -> Result<SignResult, OwxError> {
-    Ok(SignResult {
-        signature: hex::encode(&out.signature),
-        recovery_id: out.recovery_id,
-    })
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -316,16 +229,50 @@ mod tests {
     }
 
     #[test]
-    fn sign_evm_message() {
-        let r = sign_message_mnemonic(MNEMONIC, ChainType::Evm, 0, b"hello").unwrap();
+    fn sign_evm_message_via_trait() {
+        let wallet = kobe::Wallet::from_mnemonic(MNEMONIC, None).unwrap();
+        let key_hex = derive_private_key_hex(&wallet, ChainType::Evm, 0).unwrap();
+        let r = sign_message_hex(ChainType::Evm, &key_hex, b"hello").unwrap();
         assert!(!r.signature.is_empty());
         assert!(r.recovery_id.is_some());
     }
 
     #[test]
-    fn sign_solana_message() {
-        let r = sign_message_mnemonic(MNEMONIC, ChainType::Solana, 0, b"hello").unwrap();
+    fn sign_solana_message_via_trait() {
+        let wallet = kobe::Wallet::from_mnemonic(MNEMONIC, None).unwrap();
+        let key_hex = derive_private_key_hex(&wallet, ChainType::Solana, 0).unwrap();
+        let r = sign_message_hex(ChainType::Solana, &key_hex, b"hello").unwrap();
         assert!(!r.signature.is_empty());
         assert!(r.recovery_id.is_none());
+    }
+
+    #[test]
+    fn sign_all_chains_message() {
+        let wallet = kobe::Wallet::from_mnemonic(MNEMONIC, None).unwrap();
+        for ct in &ALL_CHAIN_TYPES {
+            let key_hex = derive_private_key_hex(&wallet, *ct, 0).unwrap();
+            let r = sign_message_hex(*ct, &key_hex, b"test").unwrap();
+            assert!(!r.signature.is_empty(), "empty sig for {ct}");
+        }
+    }
+
+    #[test]
+    fn sign_all_chains_transaction() {
+        let wallet = kobe::Wallet::from_mnemonic(MNEMONIC, None).unwrap();
+        let tx = [0u8; 32];
+        for ct in &ALL_CHAIN_TYPES {
+            let key_hex = derive_private_key_hex(&wallet, *ct, 0).unwrap();
+            let r = sign_transaction_hex(*ct, &key_hex, &tx).unwrap();
+            assert!(!r.signature.is_empty(), "empty sig for {ct}");
+        }
+    }
+
+    #[test]
+    fn derive_address_evm() {
+        let wallet = kobe::Wallet::from_mnemonic(MNEMONIC, None).unwrap();
+        let key_hex = derive_private_key_hex(&wallet, ChainType::Evm, 0).unwrap();
+        let addr = derive_address_from_hex(ChainType::Evm, &key_hex).unwrap();
+        assert!(addr.starts_with("0x"));
+        assert_eq!(addr.len(), 42);
     }
 }

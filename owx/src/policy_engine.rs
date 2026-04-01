@@ -17,6 +17,7 @@ pub fn evaluate(policies: &[Policy], context: &PolicyContext) -> PolicyResult {
     PolicyResult::allowed()
 }
 
+/// Evaluate a single policy: declarative rules first, then executable.
 fn evaluate_one(policy: &Policy, context: &PolicyContext) -> PolicyResult {
     for rule in &policy.rules {
         let result = evaluate_rule(rule, &policy.id, context);
@@ -30,6 +31,7 @@ fn evaluate_one(policy: &Policy, context: &PolicyContext) -> PolicyResult {
     PolicyResult::allowed()
 }
 
+/// Evaluate one declarative rule.
 fn evaluate_rule(rule: &PolicyRule, pid: &str, ctx: &PolicyContext) -> PolicyResult {
     match rule {
         PolicyRule::AllowedChains { chain_ids } => {
@@ -69,12 +71,14 @@ fn evaluate_rule(rule: &PolicyRule, pid: &str, ctx: &PolicyContext) -> PolicyRes
     }
 }
 
+/// Compare two decimal-string amounts (returns true if value > max).
 fn exceeds(value: &str, max: &str) -> bool {
     let v: u128 = value.parse().unwrap_or(0);
     let m: u128 = max.parse().unwrap_or(u128::MAX);
     v > m
 }
 
+/// Run an executable policy subprocess and parse its JSON verdict.
 fn evaluate_executable(
     exe: &str,
     config: Option<&serde_json::Value>,
@@ -124,6 +128,7 @@ fn evaluate_executable(
     }
 }
 
+/// Wait for a child process with a timeout, killing it if exceeded.
 fn wait_timeout(
     child: &mut std::process::Child,
     timeout: Duration,
