@@ -6,8 +6,6 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 
-use crate::error::CoreError;
-
 /// CAIP-2 Chain ID: `namespace:reference`.
 ///
 /// Validates per the CAIP-2 spec:
@@ -21,57 +19,58 @@ pub struct ChainId {
     pub reference: String,
 }
 
+/// CAIP-2 parse error.
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("CAIP parse error: {0}")]
+pub struct CaipParseError(pub String);
+
 impl ChainId {
     /// Validate that a namespace conforms to CAIP-2 (3-8 lowercase alphanumeric).
-    fn validate_namespace(ns: &str) -> Result<(), CoreError> {
+    fn validate_namespace(ns: &str) -> Result<(), CaipParseError> {
         if ns.len() < 3 || ns.len() > 8 {
-            return Err(CoreError::CaipParseError {
-                message: format!(
-                    "namespace must be 3-8 characters, got {} ('{ns}')",
-                    ns.len(),
-                ),
-            });
+            return Err(CaipParseError(format!(
+                "namespace must be 3-8 characters, got {} ('{ns}')",
+                ns.len(),
+            )));
         }
         if !ns
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
         {
-            return Err(CoreError::CaipParseError {
-                message: format!("namespace must be [a-z0-9], got '{ns}'"),
-            });
+            return Err(CaipParseError(format!(
+                "namespace must be [a-z0-9], got '{ns}'"
+            )));
         }
         Ok(())
     }
 
     /// Validate that a reference conforms to CAIP-2 (1-64 alphanumeric/hyphen/underscore).
-    fn validate_reference(reference: &str) -> Result<(), CoreError> {
+    fn validate_reference(reference: &str) -> Result<(), CaipParseError> {
         if reference.is_empty() || reference.len() > 64 {
-            return Err(CoreError::CaipParseError {
-                message: format!(
-                    "reference must be 1-64 characters, got {} ('{reference}')",
-                    reference.len(),
-                ),
-            });
+            return Err(CaipParseError(format!(
+                "reference must be 1-64 characters, got {} ('{reference}')",
+                reference.len(),
+            )));
         }
         if !reference
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
         {
-            return Err(CoreError::CaipParseError {
-                message: format!("reference contains invalid characters: '{reference}'"),
-            });
+            return Err(CaipParseError(format!(
+                "reference contains invalid characters: '{reference}'"
+            )));
         }
         Ok(())
     }
 }
 
 impl FromStr for ChainId {
-    type Err = CoreError;
+    type Err = CaipParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (ns, ref_part) = s.split_once(':').ok_or_else(|| CoreError::CaipParseError {
-            message: format!("expected 'namespace:reference', got '{s}'"),
-        })?;
+        let (ns, ref_part) = s
+            .split_once(':')
+            .ok_or_else(|| CaipParseError(format!("expected 'namespace:reference', got '{s}'")))?;
         Self::validate_namespace(ns)?;
         Self::validate_reference(ref_part)?;
         Ok(Self {

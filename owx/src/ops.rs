@@ -135,13 +135,15 @@ pub fn import_private_keys(
     }
     validate_hex_key(secp256k1_hex, "secp256k1")?;
     validate_hex_key(ed25519_hex, "ed25519")?;
-    let secret = WalletSecret::dual_keys(secp256k1_hex.to_owned(), ed25519_hex.to_owned());
+    let secret = WalletSecret::key_pair(secp256k1_hex, ed25519_hex);
 
     let mut accounts = Vec::new();
     for ct in &owx_core::chain::ALL_CHAIN_TYPES {
-        if let Some(key_hex) = secret.private_key_hex(*ct) {
-            let chain = owx_core::chain::default_chain_for_type(*ct);
-            let addr = chains::derive_address_from_hex(*ct, key_hex)?;
+        let Some(key_hex) = secret.private_key_hex(*ct) else {
+            continue;
+        };
+        let chain = owx_core::chain::default_chain_for_type(*ct);
+        if let Ok(addr) = chains::derive_address_from_hex(*ct, key_hex) {
             accounts.push(owx_core::wallet_file::WalletAccount {
                 account_id: format!("{}:{addr}", chain.chain_id),
                 address: addr,
@@ -283,6 +285,8 @@ pub fn sign_transaction(
 }
 
 /// Sign a transaction and broadcast it.
+///
+/// Supports EVM, Solana, Bitcoin, Cosmos, Tron, and TON chains.
 pub fn sign_and_send(
     vault: &Vault,
     wallet_name_or_id: &str,
@@ -322,8 +326,62 @@ pub fn sign_and_send(
             let resp = curl_post_json(&rpc, &body.to_string())?;
             extract_json_field(&resp, "result").map(|h| SendResult { tx_hash: h })
         }
+        ChainType::Solana => {
+            use base64::Engine as _;
+            let b64_tx = base64::engine::general_purpose::STANDARD.encode(&sig_bytes);
+            let body = serde_json::json!({
+                "jsonrpc": "2.0", "method": "sendTransaction",
+                "params": [b64_tx, {"encoding": "base64"}], "id": 1
+            });
+            let resp = curl_post_json(&rpc, &body.to_string())?;
+            extract_json_field(&resp, "result").map(|h| SendResult { tx_hash: h })
+        }
+        ChainType::Bitcoin => {
+            let hex_tx = hex::encode(&sig_bytes);
+            let url = format!("{}/tx", rpc.trim_end_matches('/'));
+            let resp = curl_post_text(&url, &hex_tx)?;
+            if resp.is_empty() {
+                return Err(OwxError::BroadcastFailed("empty response".into()));
+            }
+            Ok(SendResult { tx_hash: resp })
+        }
+        ChainType::Cosmos => {
+            use base64::Engine as _;
+            let b64_tx = base64::engine::general_purpose::STANDARD.encode(&sig_bytes);
+            let url = format!("{}/cosmos/tx/v1beta1/txs", rpc.trim_end_matches('/'));
+            let body = serde_json::json!({"tx_bytes": b64_tx, "mode": "BROADCAST_MODE_SYNC"});
+            let resp = curl_post_json(&url, &body.to_string())?;
+            let parsed: serde_json::Value = serde_json::from_str(&resp)?;
+            parsed["tx_response"]["txhash"]
+                .as_str()
+                .map(|s| SendResult {
+                    tx_hash: s.to_owned(),
+                })
+                .ok_or_else(|| OwxError::BroadcastFailed(format!("no txhash: {resp}")))
+        }
+        ChainType::Tron => {
+            let hex_tx = hex::encode(&sig_bytes);
+            let url = format!("{}/wallet/broadcasthex", rpc.trim_end_matches('/'));
+            let body = serde_json::json!({"transaction": hex_tx});
+            let resp = curl_post_json(&url, &body.to_string())?;
+            extract_json_field(&resp, "txid").map(|h| SendResult { tx_hash: h })
+        }
+        ChainType::Ton => {
+            use base64::Engine as _;
+            let b64_boc = base64::engine::general_purpose::STANDARD.encode(&sig_bytes);
+            let url = format!("{}/sendBoc", rpc.trim_end_matches('/'));
+            let body = serde_json::json!({"boc": b64_boc});
+            let resp = curl_post_json(&url, &body.to_string())?;
+            let parsed: serde_json::Value = serde_json::from_str(&resp)?;
+            parsed["result"]["hash"]
+                .as_str()
+                .map(|s| SendResult {
+                    tx_hash: s.to_owned(),
+                })
+                .ok_or_else(|| OwxError::BroadcastFailed(format!("no hash: {resp}")))
+        }
         _ => Err(OwxError::BroadcastFailed(format!(
-            "broadcast not yet implemented for {}",
+            "broadcast not yet supported for {}",
             chain_info.chain_type
         ))),
     }
@@ -342,7 +400,7 @@ fn resolve_signing_key(
     ct: ChainType,
     index: u32,
 ) -> Result<String, OwxError> {
-    if owx_core::api_key::is_api_token(credential) {
+    if owx_vault::is_api_token(credential) {
         return resolve_signing_key_agent(vault, wallet_name_or_id, credential, ct, index);
     }
 
@@ -462,6 +520,28 @@ fn resolve_rpc(chain_id: &str, ct: ChainType, explicit: Option<&str>) -> Result<
     Err(OwxError::InvalidInput(format!(
         "no RPC URL for chain '{chain_id}'"
     )))
+}
+
+/// POST plain text to a URL via `curl` subprocess (used for Bitcoin mempool API).
+fn curl_post_text(url: &str, body: &str) -> Result<String, OwxError> {
+    let output = std::process::Command::new("curl")
+        .args([
+            "-fsSL",
+            "-X",
+            "POST",
+            "-H",
+            "Content-Type: text/plain",
+            "-d",
+            body,
+            url,
+        ])
+        .output()
+        .map_err(|e| OwxError::BroadcastFailed(format!("curl: {e}")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(OwxError::BroadcastFailed(format!("curl failed: {stderr}")));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
 /// POST JSON to a URL via `curl` subprocess.

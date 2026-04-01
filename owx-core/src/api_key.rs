@@ -4,9 +4,6 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-/// Token prefix that signals agent mode.
-pub const TOKEN_PREFIX: &str = "owx_key_";
-
 /// An API key file stored at `<vault>/keys/<id>.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiKeyFile {
@@ -30,26 +27,13 @@ pub struct ApiKeyFile {
     pub wallet_secrets: HashMap<String, serde_json::Value>,
 }
 
-/// Check whether a credential string is an API token (starts with prefix).
-#[must_use]
-pub fn is_api_token(credential: &str) -> bool {
-    credential.starts_with(TOKEN_PREFIX)
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
     #[test]
-    fn is_api_token_check() {
-        assert!(is_api_token("owx_key_abc"));
-        assert!(!is_api_token("password123"));
-        assert!(!is_api_token(""));
-    }
-
-    #[test]
-    fn api_key_serde_roundtrip() {
+    fn serde_roundtrip() {
         let key = ApiKeyFile {
             id: "test-id".into(),
             name: "test-agent".into(),
@@ -67,7 +51,7 @@ mod tests {
     }
 
     #[test]
-    fn api_key_with_expiry() {
+    fn with_expiry() {
         let key = ApiKeyFile {
             id: "test-id".into(),
             name: "expiring".into(),

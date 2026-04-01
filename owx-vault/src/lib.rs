@@ -21,12 +21,12 @@ pub mod store;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-pub use crypto::{CryptoEnvelope, decrypt, encrypt, encrypt_hkdf, generate_token, hash_token};
+pub use crypto::{
+    CryptoEnvelope, TOKEN_PREFIX, decrypt, encrypt, encrypt_hkdf, generate_token, hash_token,
+    is_api_token,
+};
 pub use error::VaultError;
 pub use key_cache::KeyCache;
-pub use owx_core::api_key::{ApiKeyFile, TOKEN_PREFIX, is_api_token};
-pub use owx_core::config::Config;
-pub use owx_core::wallet_file::{EncryptedWallet, KeyType, WalletAccount};
 pub use secret::SecretBytes;
 pub use store::Vault;
 

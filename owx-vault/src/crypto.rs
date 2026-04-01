@@ -325,13 +325,21 @@ fn hex_decode(s: &str) -> Result<Vec<u8>, VaultError> {
     hex::decode(s).map_err(|e| VaultError::InvalidParams(e.to_string()))
 }
 
+/// Token prefix that signals agent mode.
+pub const TOKEN_PREFIX: &str = "owx_key_";
+
+/// Check whether a credential string is an API token.
+#[must_use]
+pub fn is_api_token(credential: &str) -> bool {
+    credential.starts_with(TOKEN_PREFIX)
+}
+
 /// Generate a random API token: `owx_key_<64 hex chars>` (256 bits of entropy).
 ///
 /// # Panics
 ///
 /// Panics if the system CSPRNG is unavailable.
 pub fn generate_token() -> String {
-    use owx_core::api_key::TOKEN_PREFIX;
     let mut bytes = [0u8; 32];
     fill_random(&mut bytes);
     format!("{TOKEN_PREFIX}{}", hex::encode(bytes))

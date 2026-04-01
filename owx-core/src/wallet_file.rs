@@ -7,8 +7,9 @@ use serde::{Deserialize, Serialize};
 /// Written to `<vault>/wallets/<id>.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EncryptedWallet {
-    /// Format version (`2` for current).
-    pub version: u32,
+    /// Format version (`2` for current). Aliased from `lws_version` for OWS v1 compat.
+    #[serde(alias = "lws_version")]
+    pub ows_version: u32,
     /// Unique wallet identifier (UUID v4).
     pub id: String,
     /// Human-readable wallet name.
@@ -60,7 +61,7 @@ impl EncryptedWallet {
         key_type: KeyType,
     ) -> Self {
         Self {
-            version: 2,
+            ows_version: 2,
             id,
             name,
             created_at: chrono::Utc::now().to_rfc3339(),
@@ -98,7 +99,7 @@ mod tests {
         let json = serde_json::to_string_pretty(&wallet).unwrap();
         let restored: EncryptedWallet = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.id, "test-id");
-        assert_eq!(restored.version, 2);
+        assert_eq!(restored.ows_version, 2);
     }
 
     #[test]
@@ -125,7 +126,7 @@ mod tests {
         let wallet = dummy_wallet();
         let json = serde_json::to_value(&wallet).unwrap();
         for key in [
-            "version",
+            "ows_version",
             "id",
             "name",
             "created_at",

@@ -1,7 +1,8 @@
 //! Unified 9-chain HD derivation and signing via kobe + signer.
 //!
-//! Uses macros to eliminate per-chain match-arm repetition while keeping
-//! static dispatch for zero-cost abstraction.
+//! Two declarative macros eliminate all per-chain match-arm repetition:
+//! - `with_deriver!` — dispatches HD derivation via kobe
+//! - `with_signer!` — dispatches signing via signer
 
 use owx_core::chain::{ALL_CHAIN_TYPES, ChainType, default_chain_for_type};
 use owx_core::wallet_file::WalletAccount;
@@ -10,8 +11,63 @@ use signer::Sign;
 use crate::error::OwxError;
 use crate::types::SignResult;
 
-/// Dispatch to a chain-specific signer constructed from a hex key.
-/// All 9 signers implement the `Sign` trait so the body is uniform.
+/// Dispatch to the chain-specific kobe deriver. Bitcoin requires a
+/// `Network` parameter so it gets a dedicated arm; all other chains use
+/// the uniform `Deriver::new(wallet)` constructor.
+macro_rules! with_deriver {
+    ($ct:expr, $wallet:expr, $index:expr, $d:ident => $body:expr) => {
+        match $ct {
+            ChainType::Bitcoin => {
+                let deriver =
+                    kobe_btc::Deriver::new($wallet, kobe_btc::Network::Mainnet).map_err(d_err)?;
+                let $d = kobe::Derive::derive(&deriver, $index).map_err(d_err)?;
+                $body
+            }
+            ChainType::Evm => {
+                let $d = kobe::Derive::derive(&kobe_evm::Deriver::new($wallet), $index)
+                    .map_err(d_err)?;
+                $body
+            }
+            ChainType::Solana => {
+                let $d = kobe::Derive::derive(&kobe_svm::Deriver::new($wallet), $index)
+                    .map_err(d_err)?;
+                $body
+            }
+            ChainType::Cosmos => {
+                let $d = kobe::Derive::derive(&kobe_cosmos::Deriver::new($wallet), $index)
+                    .map_err(d_err)?;
+                $body
+            }
+            ChainType::Tron => {
+                let $d = kobe::Derive::derive(&kobe_tron::Deriver::new($wallet), $index)
+                    .map_err(d_err)?;
+                $body
+            }
+            ChainType::Ton => {
+                let $d = kobe::Derive::derive(&kobe_ton::Deriver::new($wallet), $index)
+                    .map_err(d_err)?;
+                $body
+            }
+            ChainType::Spark => {
+                let $d = kobe::Derive::derive(&kobe_spark::Deriver::new($wallet), $index)
+                    .map_err(d_err)?;
+                $body
+            }
+            ChainType::Filecoin => {
+                let $d = kobe::Derive::derive(&kobe_fil::Deriver::new($wallet), $index)
+                    .map_err(d_err)?;
+                $body
+            }
+            ChainType::Sui => {
+                let $d = kobe::Derive::derive(&kobe_sui::Deriver::new($wallet), $index)
+                    .map_err(d_err)?;
+                $body
+            }
+        }
+    };
+}
+
+/// Dispatch to the chain-specific signer constructed from a hex key.
 macro_rules! with_signer {
     ($ct:expr, $key_hex:expr, $s:ident => $body:expr) => {
         match $ct {
@@ -75,7 +131,7 @@ fn make_account(chain_id: &str, address: &str, path: &str) -> WalletAccount {
     }
 }
 
-/// Convert a signer [`SignOutput`](signer::SignOutput) into our [`SignResult`].
+/// Convert a signer [`SignOutput`] into our [`SignResult`].
 #[allow(clippy::needless_pass_by_value)]
 fn to_sign_result(out: signer::SignOutput) -> SignResult {
     SignResult {
@@ -90,60 +146,11 @@ pub fn derive_all_accounts(mnemonic: &str, index: u32) -> Result<Vec<WalletAccou
     let mut accounts = Vec::with_capacity(ALL_CHAIN_TYPES.len());
     for ct in &ALL_CHAIN_TYPES {
         let chain = default_chain_for_type(*ct);
-        accounts.push(derive_one(&wallet, *ct, chain.chain_id, index)?);
+        with_deriver!(*ct, &wallet, index, d => {
+            accounts.push(make_account(chain.chain_id, &d.address, &d.path));
+        });
     }
     Ok(accounts)
-}
-
-/// Derive a single account for one chain type.
-fn derive_one(
-    wallet: &kobe::Wallet,
-    ct: ChainType,
-    chain_id: &str,
-    index: u32,
-) -> Result<WalletAccount, OwxError> {
-    use kobe::Derive;
-
-    match ct {
-        ChainType::Evm => {
-            let d = Derive::derive(&kobe_evm::Deriver::new(wallet), index).map_err(d_err)?;
-            Ok(make_account(chain_id, &d.address, &d.path))
-        }
-        ChainType::Bitcoin => {
-            let deriver =
-                kobe_btc::Deriver::new(wallet, kobe_btc::Network::Mainnet).map_err(d_err)?;
-            let d = Derive::derive(&deriver, index).map_err(d_err)?;
-            Ok(make_account(chain_id, &d.address, &d.path))
-        }
-        ChainType::Solana => {
-            let d = Derive::derive(&kobe_svm::Deriver::new(wallet), index).map_err(d_err)?;
-            Ok(make_account(chain_id, &d.address, &d.path))
-        }
-        ChainType::Cosmos => {
-            let d = Derive::derive(&kobe_cosmos::Deriver::new(wallet), index).map_err(d_err)?;
-            Ok(make_account(chain_id, &d.address, &d.path))
-        }
-        ChainType::Tron => {
-            let d = Derive::derive(&kobe_tron::Deriver::new(wallet), index).map_err(d_err)?;
-            Ok(make_account(chain_id, &d.address, &d.path))
-        }
-        ChainType::Ton => {
-            let d = Derive::derive(&kobe_ton::Deriver::new(wallet), index).map_err(d_err)?;
-            Ok(make_account(chain_id, &d.address, &d.path))
-        }
-        ChainType::Spark => {
-            let d = Derive::derive(&kobe_spark::Deriver::new(wallet), index).map_err(d_err)?;
-            Ok(make_account(chain_id, &d.address, &d.path))
-        }
-        ChainType::Filecoin => {
-            let d = Derive::derive(&kobe_fil::Deriver::new(wallet), index).map_err(d_err)?;
-            Ok(make_account(chain_id, &d.address, &d.path))
-        }
-        ChainType::Sui => {
-            let d = Derive::derive(&kobe_sui::Deriver::new(wallet), index).map_err(d_err)?;
-            Ok(make_account(chain_id, &d.address, &d.path))
-        }
-    }
 }
 
 /// Derive the hex private key for a chain type from a kobe wallet.
@@ -152,51 +159,13 @@ pub fn derive_private_key_hex(
     ct: ChainType,
     index: u32,
 ) -> Result<String, OwxError> {
-    use kobe::Derive;
-
-    match ct {
-        ChainType::Evm => {
-            let d = Derive::derive(&kobe_evm::Deriver::new(wallet), index).map_err(d_err)?;
-            Ok(d.private_key.to_string())
-        }
-        ChainType::Bitcoin => {
-            let deriver =
-                kobe_btc::Deriver::new(wallet, kobe_btc::Network::Mainnet).map_err(d_err)?;
-            let d = deriver.derive(index).map_err(d_err)?;
-            Ok(d.private_key_hex.to_string())
-        }
-        ChainType::Solana => {
-            let d = Derive::derive(&kobe_svm::Deriver::new(wallet), index).map_err(d_err)?;
-            Ok(d.private_key.to_string())
-        }
-        ChainType::Cosmos => {
-            let d = Derive::derive(&kobe_cosmos::Deriver::new(wallet), index).map_err(d_err)?;
-            Ok(d.private_key.to_string())
-        }
-        ChainType::Tron => {
-            let d = Derive::derive(&kobe_tron::Deriver::new(wallet), index).map_err(d_err)?;
-            Ok(d.private_key.to_string())
-        }
-        ChainType::Ton => {
-            let d = Derive::derive(&kobe_ton::Deriver::new(wallet), index).map_err(d_err)?;
-            Ok(d.private_key.to_string())
-        }
-        ChainType::Spark => {
-            let d = Derive::derive(&kobe_spark::Deriver::new(wallet), index).map_err(d_err)?;
-            Ok(d.private_key.to_string())
-        }
-        ChainType::Filecoin => {
-            let d = Derive::derive(&kobe_fil::Deriver::new(wallet), index).map_err(d_err)?;
-            Ok(d.private_key.to_string())
-        }
-        ChainType::Sui => {
-            let d = Derive::derive(&kobe_sui::Deriver::new(wallet), index).map_err(d_err)?;
-            Ok(d.private_key.to_string())
-        }
-    }
+    with_deriver!(ct, wallet, index, d => {
+        Ok(d.private_key.to_string())
+    })
 }
 
-/// Derive an address from a hex private key (EVM/Solana/Sui only).
+/// Derive an address from a hex private key. Only chains whose signer
+/// exposes `.address()` are supported (EVM, Solana, Sui).
 pub fn derive_address_from_hex(ct: ChainType, key_hex: &str) -> Result<String, OwxError> {
     match ct {
         ChainType::Evm => Ok(signer::evm::Signer::from_hex(key_hex)
@@ -209,12 +178,12 @@ pub fn derive_address_from_hex(ct: ChainType, key_hex: &str) -> Result<String, O
             .map_err(s_err)?
             .address()),
         _ => Err(OwxError::InvalidInput(format!(
-            "address derivation from private key not supported for {ct} — use mnemonic import"
+            "address derivation from private key not supported for {ct}"
         ))),
     }
 }
 
-/// Sign a message with a hex private key. Uses the `Sign` trait uniformly.
+/// Sign a message with a hex private key.
 pub fn sign_message_hex(
     ct: ChainType,
     key_hex: &str,
@@ -223,7 +192,7 @@ pub fn sign_message_hex(
     with_signer!(ct, key_hex, s => Ok(to_sign_result(Sign::sign_message(&s, message).map_err(s_err)?)))
 }
 
-/// Sign a transaction with a hex private key. Uses the `Sign` trait uniformly.
+/// Sign a transaction with a hex private key.
 pub fn sign_transaction_hex(
     ct: ChainType,
     key_hex: &str,
@@ -285,7 +254,7 @@ mod tests {
     }
 
     #[test]
-    fn sign_evm_message_via_trait() {
+    fn sign_evm_message() {
         let wallet = kobe::Wallet::from_mnemonic(MNEMONIC, None).unwrap();
         let key_hex = derive_private_key_hex(&wallet, ChainType::Evm, 0).unwrap();
         let r = sign_message_hex(ChainType::Evm, &key_hex, b"hello").unwrap();
@@ -294,7 +263,7 @@ mod tests {
     }
 
     #[test]
-    fn sign_solana_message_via_trait() {
+    fn sign_solana_message() {
         let wallet = kobe::Wallet::from_mnemonic(MNEMONIC, None).unwrap();
         let key_hex = derive_private_key_hex(&wallet, ChainType::Solana, 0).unwrap();
         let r = sign_message_hex(ChainType::Solana, &key_hex, b"hello").unwrap();
