@@ -4,7 +4,7 @@ use std::io::Write as _;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use owx_core::policy::{Policy, PolicyContext, PolicyResult, PolicyRule};
+use owx_vault::{Policy, PolicyContext, PolicyResult, PolicyRule};
 
 /// Evaluate all policies against a context (AND semantics).
 pub fn evaluate(policies: &[Policy], context: &PolicyContext) -> PolicyResult {
@@ -173,7 +173,7 @@ fn wait_timeout(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use owx_core::policy::{PolicyAction, SpendingContext, TransactionContext};
+    use owx_vault::{PolicyAction, SpendingContext, TransactionContext};
 
     use super::*;
 

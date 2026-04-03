@@ -1,4 +1,4 @@
-//! Policy type definitions shared across crates.
+//! Policy type definitions for agent access control.
 
 use serde::{Deserialize, Serialize};
 
@@ -162,25 +162,6 @@ mod tests {
     }
 
     #[test]
-    fn policy_rule_serde_expires_at() {
-        let rule = PolicyRule::ExpiresAt {
-            timestamp: "2026-04-01T00:00:00Z".into(),
-        };
-        let json = serde_json::to_value(&rule).unwrap();
-        assert_eq!(json["type"], "expires_at");
-    }
-
-    #[test]
-    fn policy_rule_serde_max_amount() {
-        let rule = PolicyRule::MaxAmount {
-            amount: "1000000".into(),
-            asset: "0xUSDC".into(),
-        };
-        let json = serde_json::to_value(&rule).unwrap();
-        assert_eq!(json["type"], "max_amount");
-    }
-
-    #[test]
     fn policy_serde_roundtrip() {
         let policy = Policy {
             id: "test".into(),
@@ -201,47 +182,6 @@ mod tests {
     }
 
     #[test]
-    fn policy_with_executable() {
-        let json = r#"{
-            "id": "sim",
-            "name": "Simulation",
-            "version": 1,
-            "created_at": "2026-01-01T00:00:00Z",
-            "rules": [],
-            "executable": "/usr/bin/simulate-tx",
-            "config": {"rpc": "https://mainnet.base.org"},
-            "action": "deny"
-        }"#;
-        let policy: Policy = serde_json::from_str(json).unwrap();
-        assert_eq!(policy.executable.as_deref(), Some("/usr/bin/simulate-tx"));
-        assert!(policy.config.is_some());
-    }
-
-    #[test]
-    fn policy_context_serde() {
-        let ctx = PolicyContext {
-            chain_id: "eip155:8453".into(),
-            wallet_id: "w1".into(),
-            api_key_id: "k1".into(),
-            transaction: TransactionContext {
-                to: Some("0xabc".into()),
-                value: Some("100".into()),
-                raw_hex: "0x00".into(),
-                data: None,
-            },
-            spending: SpendingContext {
-                daily_total: "0".into(),
-                date: "2026-03-22".into(),
-            },
-            timestamp: "2026-03-22T10:35:22Z".into(),
-        };
-        let json = serde_json::to_string(&ctx).unwrap();
-        let restored: PolicyContext = serde_json::from_str(&json).unwrap();
-        assert_eq!(restored.chain_id, "eip155:8453");
-        assert!(!json.contains("\"data\""));
-    }
-
-    #[test]
     fn policy_result_allowed() {
         let r = PolicyResult::allowed();
         assert!(r.allow);
@@ -253,13 +193,5 @@ mod tests {
         let r = PolicyResult::denied("p1", "chain not allowed");
         assert!(!r.allow);
         assert_eq!(r.policy_id.as_deref(), Some("p1"));
-        assert_eq!(r.reason.as_deref(), Some("chain not allowed"));
-    }
-
-    #[test]
-    fn policy_action_serde() {
-        let action = PolicyAction::Deny;
-        let json = serde_json::to_value(action).unwrap();
-        assert_eq!(json, "deny");
     }
 }

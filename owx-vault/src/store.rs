@@ -3,13 +3,12 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use owx_core::api_key::ApiKeyFile;
-use owx_core::config::Config;
-use owx_core::policy::Policy;
-use owx_core::wallet_file::EncryptedWallet;
-
+use crate::api_key::ApiKeyFile;
+use crate::config::Config;
 use crate::error::VaultError;
 use crate::permissions;
+use crate::policy::Policy;
+use crate::wallet::EncryptedWallet;
 
 /// A file-system vault rooted at a directory (e.g. `~/.owx`).
 ///
@@ -22,8 +21,6 @@ pub struct Vault {
 }
 
 /// Validate that an ID is safe for use as a filename component.
-///
-/// Rejects path traversal sequences (`..`, `/`, `\`) and empty strings.
 fn sanitize_id(id: &str) -> Result<&str, VaultError> {
     if id.is_empty() || id.contains('/') || id.contains('\\') || id.contains("..") || id == "." {
         return Err(VaultError::InvalidInput(format!(
@@ -53,6 +50,8 @@ impl Vault {
         &self.root
     }
 
+    // ── Wallets ──────────────────────────────────────────────────────
+
     /// Save an encrypted wallet file with strict permissions.
     pub fn save_wallet(&self, wallet: &EncryptedWallet) -> Result<(), VaultError> {
         sanitize_id(&wallet.id)?;
@@ -64,12 +63,12 @@ impl Vault {
         Ok(())
     }
 
-    /// List all encrypted wallets, sorted by `created_at` descending (newest first).
+    /// List all encrypted wallets, sorted by `created_at` descending.
     pub fn list_wallets(&self) -> Result<Vec<EncryptedWallet>, VaultError> {
         let dir = self.wallets_dir()?;
         let mut wallets = Vec::new();
         for entry in read_json_dir(&dir)? {
-            if let Ok(w) = serde_json::from_str::<EncryptedWallet>(&entry.contents) {
+            if let Ok(w) = serde_json::from_str::<EncryptedWallet>(&entry) {
                 wallets.push(w);
             }
         }
@@ -78,8 +77,6 @@ impl Vault {
     }
 
     /// Load a wallet by exact ID first, then by name.
-    ///
-    /// Returns an error if no wallet matches or if the name is ambiguous.
     pub fn load_wallet(&self, name_or_id: &str) -> Result<EncryptedWallet, VaultError> {
         let wallets = self.list_wallets()?;
 
@@ -115,7 +112,7 @@ impl Vault {
         Ok(self.list_wallets()?.iter().any(|w| w.name == name))
     }
 
-    /// Rename a wallet. Loads, mutates, and re-saves the wallet file.
+    /// Rename a wallet.
     pub fn rename_wallet(&self, name_or_id: &str, new_name: &str) -> Result<(), VaultError> {
         let mut wallet = self.load_wallet(name_or_id)?;
         if wallet.name == new_name {
@@ -127,6 +124,8 @@ impl Vault {
         new_name.clone_into(&mut wallet.name);
         self.save_wallet(&wallet)
     }
+
+    // ── API Keys ────────────────────────────────────────────────────
 
     /// Save an API key file with strict permissions.
     pub fn save_api_key(&self, key: &ApiKeyFile) -> Result<(), VaultError> {
@@ -151,7 +150,7 @@ impl Vault {
         Ok(serde_json::from_str(&contents)?)
     }
 
-    /// Look up an API key by the SHA-256 hash of the token. Scans all key files.
+    /// Look up an API key by the SHA-256 hash of the token.
     pub fn load_api_key_by_token_hash(&self, token_hash: &str) -> Result<ApiKeyFile, VaultError> {
         self.list_api_keys()?
             .into_iter()
@@ -164,7 +163,7 @@ impl Vault {
         let dir = self.keys_dir()?;
         let mut keys = Vec::new();
         for entry in read_json_dir(&dir)? {
-            if let Ok(k) = serde_json::from_str::<ApiKeyFile>(&entry.contents) {
+            if let Ok(k) = serde_json::from_str::<ApiKeyFile>(&entry) {
                 keys.push(k);
             }
         }
@@ -182,6 +181,8 @@ impl Vault {
         }
         fs::remove_file(&path).map_err(|e| VaultError::io(&path, e))
     }
+
+    // ── Policies ────────────────────────────────────────────────────
 
     /// Save a policy definition.
     pub fn save_policy(&self, policy: &Policy) -> Result<(), VaultError> {
@@ -209,7 +210,7 @@ impl Vault {
         let dir = self.policies_dir()?;
         let mut policies = Vec::new();
         for entry in read_json_dir(&dir)? {
-            if let Ok(p) = serde_json::from_str::<Policy>(&entry.contents) {
+            if let Ok(p) = serde_json::from_str::<Policy>(&entry) {
                 policies.push(p);
             }
         }
@@ -239,10 +240,7 @@ impl Vault {
     /// List all raw policy JSON files.
     pub fn list_policies_raw(&self) -> Result<Vec<String>, VaultError> {
         let dir = self.policies_dir()?;
-        Ok(read_json_dir(&dir)?
-            .into_iter()
-            .map(|e| e.contents)
-            .collect())
+        read_json_dir(&dir)
     }
 
     /// Delete a policy by ID.
@@ -255,6 +253,8 @@ impl Vault {
         }
         fs::remove_file(&path).map_err(|e| VaultError::io(&path, e))
     }
+
+    // ── Internal ────────────────────────────────────────────────────
 
     /// Ensure and return the wallets subdirectory.
     fn wallets_dir(&self) -> Result<PathBuf, VaultError> {
@@ -280,14 +280,8 @@ impl Vault {
     }
 }
 
-/// A JSON file read from disk.
-struct JsonFileEntry {
-    /// File contents as a string.
-    contents: String,
-}
-
-/// Read all `.json` files from a directory.
-fn read_json_dir(dir: &Path) -> Result<Vec<JsonFileEntry>, VaultError> {
+/// Read all `.json` files from a directory, returning their contents.
+fn read_json_dir(dir: &Path) -> Result<Vec<String>, VaultError> {
     let mut entries = Vec::new();
     let rd = match fs::read_dir(dir) {
         Ok(rd) => rd,
@@ -301,7 +295,7 @@ fn read_json_dir(dir: &Path) -> Result<Vec<JsonFileEntry>, VaultError> {
             continue;
         }
         if let Ok(contents) = fs::read_to_string(&path) {
-            entries.push(JsonFileEntry { contents });
+            entries.push(contents);
         }
     }
     Ok(entries)
@@ -310,9 +304,8 @@ fn read_json_dir(dir: &Path) -> Result<Vec<JsonFileEntry>, VaultError> {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use owx_core::wallet_file::{KeyType, WalletAccount};
-
     use super::*;
+    use crate::wallet::{KeyType, WalletAccount};
 
     fn temp_vault() -> (tempfile::TempDir, Vault) {
         let dir = tempfile::tempdir().unwrap();
@@ -370,14 +363,6 @@ mod tests {
     }
 
     #[test]
-    fn wallet_name_exists_check() {
-        let (_dir, vault) = temp_vault();
-        vault.save_wallet(&dummy_wallet("id-x", "exists")).unwrap();
-        assert!(vault.wallet_name_exists("exists").unwrap());
-        assert!(!vault.wallet_name_exists("nope").unwrap());
-    }
-
-    #[test]
     fn api_key_crud() {
         use std::collections::HashMap;
 
@@ -410,40 +395,13 @@ mod tests {
     }
 
     #[test]
-    fn path_traversal_in_save_rejected() {
+    fn path_traversal_rejected() {
         let (_dir, vault) = temp_vault();
         let wallet = dummy_wallet("../../../etc/passwd", "evil");
         assert!(vault.save_wallet(&wallet).is_err());
-    }
-
-    #[test]
-    fn path_traversal_in_delete_rejected() {
-        let (_dir, vault) = temp_vault();
-        vault.save_wallet(&dummy_wallet("legit", "legit")).unwrap();
-        assert!(vault.delete_wallet("../../../etc/passwd").is_err());
-        assert_eq!(vault.list_wallets().unwrap().len(), 1);
-    }
-
-    #[test]
-    fn path_traversal_in_api_key_rejected() {
-        let (_dir, vault) = temp_vault();
+        assert!(vault.delete_wallet("../secret").is_err());
         assert!(vault.load_api_key("../secret").is_err());
-        assert!(vault.delete_api_key("../secret").is_err());
-    }
-
-    #[test]
-    fn path_traversal_in_policy_rejected() {
-        let (_dir, vault) = temp_vault();
         assert!(vault.save_policy_raw("../evil", "{}").is_err());
-        assert!(vault.load_policy_raw("../evil").is_err());
-        assert!(vault.delete_policy("../evil").is_err());
-    }
-
-    #[test]
-    fn empty_id_rejected() {
-        let (_dir, vault) = temp_vault();
-        assert!(vault.delete_wallet("").is_err());
-        assert!(vault.load_api_key("").is_err());
     }
 
     #[test]

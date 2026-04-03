@@ -4,7 +4,7 @@ default-members = ["owx"]
 resolver = "3"
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/qntx/owx"
@@ -14,10 +14,10 @@ categories = ["cryptography::cryptocurrencies"]
 readme = "README.md"
 
 [workspace.dependencies]
-owx = { version = "0.4", path = "owx" }
-owx-core = { version = "0.4", path = "owx-core" }
-owx-vault = { version = "0.4", path = "owx-vault" }
-owx-pay = { version = "0.4", path = "owx-pay" }
+owx = { version = "0.5", path = "owx" }
+owx-core = { version = "0.5", path = "owx-core" }
+owx-vault = { version = "0.5", path = "owx-vault" }
+owx-pay = { version = "0.5", path = "owx-pay" }
 
 # HD wallet derivation (all 9 chains)
 kobe = { version = "0.7.5", default-features = false, features = ["std", "rand"] }
@@ -60,7 +60,7 @@ hex = "0.4.3"
 base64 = "0.22.1"
 
 # Async / HTTP
-reqwest = { version = "0.13.2", features = ["json", "rustls"], default-features = false }
+reqwest = { version = "0.13.2", features = ["json", "rustls", "blocking"], default-features = false }
 tokio = { version = "1.50.0", features = ["rt-multi-thread", "macros"] }
 
 # Utility

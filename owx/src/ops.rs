@@ -2,15 +2,15 @@
 //!
 //! All functions take a `&Vault` handle — no facade structs.
 
-use owx_core::chain::ChainType;
+use owx_core::ChainType;
 use owx_core::parse_chain;
-use owx_core::wallet_file::EncryptedWallet;
-use owx_vault::Vault;
-use owx_vault::crypto;
+use owx_vault::{EncryptedWallet, Vault, crypto};
+use signer::SignOutput;
 use zeroize::Zeroize;
 
-use crate::chains;
+use crate::broadcast;
 use crate::error::OwxError;
+use crate::handler;
 use crate::secret::{WalletSecret, decrypt_secret};
 use crate::types::{AccountInfo, SendResult, SignResult, WalletInfo};
 
@@ -77,7 +77,7 @@ pub fn create_wallet(
     let kobe_wallet =
         kobe::Wallet::generate(words, None).map_err(|e| OwxError::Derivation(e.to_string()))?;
     let phrase = kobe_wallet.mnemonic();
-    let accounts = chains::derive_all_accounts(phrase, 0)?;
+    let accounts = handler::derive_all_accounts(phrase, 0)?;
     let secret = WalletSecret::mnemonic(phrase);
     let crypto_json = encrypt_secret(&secret, passphrase)?;
 
@@ -105,7 +105,7 @@ pub fn import_mnemonic(
             name.to_owned(),
         )));
     }
-    let accounts = chains::derive_all_accounts(mnemonic_phrase, index)?;
+    let accounts = handler::derive_all_accounts(mnemonic_phrase, index)?;
     let secret = WalletSecret::mnemonic(mnemonic_phrase);
     let crypto_json = encrypt_secret(&secret, passphrase)?;
 
@@ -138,13 +138,13 @@ pub fn import_private_keys(
     let secret = WalletSecret::key_pair(secp256k1_hex, ed25519_hex);
 
     let mut accounts = Vec::new();
-    for ct in &owx_core::chain::ALL_CHAIN_TYPES {
+    for ct in &owx_core::ALL_CHAIN_TYPES {
         let Some(key_hex) = secret.private_key_hex(*ct) else {
             continue;
         };
-        let chain = owx_core::chain::default_chain_for_type(*ct);
-        if let Ok(addr) = chains::derive_address_from_hex(*ct, key_hex) {
-            accounts.push(owx_core::wallet_file::WalletAccount {
+        let chain = owx_core::default_chain_for_type(*ct);
+        if let Ok(addr) = handler::handler(*ct).address_from_hex(key_hex) {
+            accounts.push(owx_vault::WalletAccount {
                 account_id: format!("{}:{addr}", chain.chain_id),
                 address: addr,
                 chain_id: chain.chain_id.to_owned(),
@@ -215,17 +215,22 @@ pub fn derive_address(
     if let Some(phrase) = secret.phrase() {
         let kw = kobe::Wallet::from_mnemonic(phrase, None)
             .map_err(|e| OwxError::Derivation(e.to_string()))?;
-        let key_hex = chains::derive_private_key_hex(&kw, chain_info.chain_type, idx)?;
-        chains::derive_address_from_hex(chain_info.chain_type, &key_hex).or_else(|_| {
-            let accounts = chains::derive_all_accounts(phrase, idx)?;
-            accounts
-                .iter()
-                .find(|a| a.chain_id == chain_info.chain_id)
-                .map(|a| a.address.clone())
-                .ok_or_else(|| {
-                    OwxError::InvalidInput(format!("no account for chain {}", chain_info.chain_id))
-                })
-        })
+        let key_hex = handler::derive_private_key_hex(&kw, chain_info.chain_type, idx)?;
+        handler::handler(chain_info.chain_type)
+            .address_from_hex(&key_hex)
+            .or_else(|_| {
+                let accounts = handler::derive_all_accounts(phrase, idx)?;
+                accounts
+                    .iter()
+                    .find(|a| a.chain_id == chain_info.chain_id)
+                    .map(|a| a.address.clone())
+                    .ok_or_else(|| {
+                        OwxError::InvalidInput(format!(
+                            "no account for chain {}",
+                            chain_info.chain_id
+                        ))
+                    })
+            })
     } else {
         let h = secret
             .private_key_hex(chain_info.chain_type)
@@ -235,7 +240,7 @@ pub fn derive_address(
                     chain_info.chain_type
                 ))
             })?;
-        chains::derive_address_from_hex(chain_info.chain_type, h)
+        handler::handler(chain_info.chain_type).address_from_hex(h)
     }
 }
 
@@ -257,7 +262,8 @@ pub fn sign_message(
         chain_info.chain_type,
         idx,
     )?;
-    chains::sign_message_hex(chain_info.chain_type, &key_hex, message)
+    let out = handler::handler(chain_info.chain_type).sign_message(&key_hex, message)?;
+    Ok(handler::to_sign_result(out))
 }
 
 /// Sign a transaction (hex-encoded).
@@ -281,7 +287,8 @@ pub fn sign_transaction(
         chain_info.chain_type,
         idx,
     )?;
-    chains::sign_transaction_hex(chain_info.chain_type, &key_hex, &tx_bytes)
+    let out = handler::handler(chain_info.chain_type).sign_transaction(&key_hex, &tx_bytes)?;
+    Ok(handler::to_sign_result(out))
 }
 
 /// Sign a transaction and broadcast it.
@@ -297,94 +304,26 @@ pub fn sign_and_send(
     rpc_url: Option<&str>,
 ) -> Result<SendResult, OwxError> {
     let chain_info = parse_chain(chain).map_err(OwxError::InvalidInput)?;
+    let ct = chain_info.chain_type;
     let tx_hex_clean = tx_hex.strip_prefix("0x").unwrap_or(tx_hex);
     let tx_bytes = hex::decode(tx_hex_clean)
         .map_err(|e| OwxError::InvalidInput(format!("invalid hex: {e}")))?;
     let idx = index.unwrap_or(0);
-    let key_hex = resolve_signing_key(
-        vault,
-        wallet_name_or_id,
-        credential,
-        chain_info.chain_type,
-        idx,
-    )?;
+    let key_hex = resolve_signing_key(vault, wallet_name_or_id, credential, ct, idx)?;
 
-    let sig_result = chains::sign_transaction_hex(chain_info.chain_type, &key_hex, &tx_bytes)?;
-    let sig_bytes = hex::decode(&sig_result.signature)
-        .map_err(|e| OwxError::Signing(format!("invalid sig hex: {e}")))?;
+    let h = handler::handler(ct);
+    let sig: SignOutput = h.sign_transaction(&key_hex, &tx_bytes)?;
 
-    let rpc = resolve_rpc(chain_info.chain_id, chain_info.chain_type, rpc_url)?;
+    // For EVM, encode the signed transaction; for others, use the raw signature.
+    let payload = if ct == ChainType::Evm {
+        h.encode_signed_tx(&tx_bytes, &sig)?
+    } else {
+        sig.signature
+    };
 
-    match chain_info.chain_type {
-        ChainType::Evm => {
-            let signed_tx = chains::encode_signed_evm_tx(&tx_bytes, &sig_bytes)?;
-            let hex_tx = format!("0x{}", hex::encode(&signed_tx));
-            let body = serde_json::json!({
-                "jsonrpc": "2.0", "method": "eth_sendRawTransaction",
-                "params": [hex_tx], "id": 1
-            });
-            let resp = curl_post_json(&rpc, &body.to_string())?;
-            extract_json_field(&resp, "result").map(|h| SendResult { tx_hash: h })
-        }
-        ChainType::Solana => {
-            use base64::Engine as _;
-            let b64_tx = base64::engine::general_purpose::STANDARD.encode(&sig_bytes);
-            let body = serde_json::json!({
-                "jsonrpc": "2.0", "method": "sendTransaction",
-                "params": [b64_tx, {"encoding": "base64"}], "id": 1
-            });
-            let resp = curl_post_json(&rpc, &body.to_string())?;
-            extract_json_field(&resp, "result").map(|h| SendResult { tx_hash: h })
-        }
-        ChainType::Bitcoin => {
-            let hex_tx = hex::encode(&sig_bytes);
-            let url = format!("{}/tx", rpc.trim_end_matches('/'));
-            let resp = curl_post_text(&url, &hex_tx)?;
-            if resp.is_empty() {
-                return Err(OwxError::BroadcastFailed("empty response".into()));
-            }
-            Ok(SendResult { tx_hash: resp })
-        }
-        ChainType::Cosmos => {
-            use base64::Engine as _;
-            let b64_tx = base64::engine::general_purpose::STANDARD.encode(&sig_bytes);
-            let url = format!("{}/cosmos/tx/v1beta1/txs", rpc.trim_end_matches('/'));
-            let body = serde_json::json!({"tx_bytes": b64_tx, "mode": "BROADCAST_MODE_SYNC"});
-            let resp = curl_post_json(&url, &body.to_string())?;
-            let parsed: serde_json::Value = serde_json::from_str(&resp)?;
-            parsed["tx_response"]["txhash"]
-                .as_str()
-                .map(|s| SendResult {
-                    tx_hash: s.to_owned(),
-                })
-                .ok_or_else(|| OwxError::BroadcastFailed(format!("no txhash: {resp}")))
-        }
-        ChainType::Tron => {
-            let hex_tx = hex::encode(&sig_bytes);
-            let url = format!("{}/wallet/broadcasthex", rpc.trim_end_matches('/'));
-            let body = serde_json::json!({"transaction": hex_tx});
-            let resp = curl_post_json(&url, &body.to_string())?;
-            extract_json_field(&resp, "txid").map(|h| SendResult { tx_hash: h })
-        }
-        ChainType::Ton => {
-            use base64::Engine as _;
-            let b64_boc = base64::engine::general_purpose::STANDARD.encode(&sig_bytes);
-            let url = format!("{}/sendBoc", rpc.trim_end_matches('/'));
-            let body = serde_json::json!({"boc": b64_boc});
-            let resp = curl_post_json(&url, &body.to_string())?;
-            let parsed: serde_json::Value = serde_json::from_str(&resp)?;
-            parsed["result"]["hash"]
-                .as_str()
-                .map(|s| SendResult {
-                    tx_hash: s.to_owned(),
-                })
-                .ok_or_else(|| OwxError::BroadcastFailed(format!("no hash: {resp}")))
-        }
-        _ => Err(OwxError::BroadcastFailed(format!(
-            "broadcast not yet supported for {}",
-            chain_info.chain_type
-        ))),
-    }
+    let rpc = broadcast::resolve_rpc(chain_info.chain_id, ct, rpc_url)?;
+    let tx_hash = broadcast::broadcast(ct, &rpc, &payload)?;
+    Ok(SendResult { tx_hash })
 }
 
 /// Resolve the hex private key for signing from a vault wallet + credential.
@@ -436,24 +375,24 @@ fn resolve_signing_key_agent(
     }
 
     let chain = owx_core::default_chain_for_type(ct);
-    let policies: Vec<owx_core::Policy> = api_key
+    let policies: Vec<owx_vault::Policy> = api_key
         .policy_ids
         .iter()
         .filter_map(|pid| vault.load_policy(pid).ok())
         .collect();
 
     if !policies.is_empty() {
-        let ctx = owx_core::PolicyContext {
+        let ctx = owx_vault::PolicyContext {
             chain_id: chain.chain_id.to_owned(),
             wallet_id: wallet.id.clone(),
             api_key_id: api_key.id.clone(),
-            transaction: owx_core::TransactionContext {
+            transaction: owx_vault::TransactionContext {
                 to: None,
                 value: None,
                 raw_hex: String::new(),
                 data: None,
             },
-            spending: owx_core::SpendingContext {
+            spending: owx_vault::SpendingContext {
                 daily_total: "0".to_owned(),
                 date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
             },
@@ -484,99 +423,13 @@ fn extract_key_hex(secret: &WalletSecret, ct: ChainType, index: u32) -> Result<S
     if let Some(phrase) = secret.phrase() {
         let kw = kobe::Wallet::from_mnemonic(phrase, None)
             .map_err(|e| OwxError::Derivation(e.to_string()))?;
-        chains::derive_private_key_hex(&kw, ct, index)
+        handler::derive_private_key_hex(&kw, ct, index)
     } else {
         secret
             .private_key_hex(ct)
             .map(ToOwned::to_owned)
             .ok_or_else(|| OwxError::InvalidInput(format!("no private key for chain type {ct}")))
     }
-}
-
-/// Resolve the RPC URL: explicit > user config > built-in default.
-fn resolve_rpc(chain_id: &str, ct: ChainType, explicit: Option<&str>) -> Result<String, OwxError> {
-    if let Some(url) = explicit {
-        return Ok(url.to_owned());
-    }
-    let config = owx_core::Config::load_or_default();
-    if let Some(url) = config.rpc_url(chain_id) {
-        return Ok(url.to_owned());
-    }
-    let defaults = owx_core::Config::default_rpc();
-    if let Some(url) = defaults.get(chain_id) {
-        return Ok(url.clone());
-    }
-    let ns = ct.namespace();
-    for (k, v) in &config.rpc {
-        if k.starts_with(ns) {
-            return Ok(v.clone());
-        }
-    }
-    for (k, v) in &defaults {
-        if k.starts_with(ns) {
-            return Ok(v.clone());
-        }
-    }
-    Err(OwxError::InvalidInput(format!(
-        "no RPC URL for chain '{chain_id}'"
-    )))
-}
-
-/// POST plain text to a URL via `curl` subprocess (used for Bitcoin mempool API).
-fn curl_post_text(url: &str, body: &str) -> Result<String, OwxError> {
-    let output = std::process::Command::new("curl")
-        .args([
-            "-fsSL",
-            "-X",
-            "POST",
-            "-H",
-            "Content-Type: text/plain",
-            "-d",
-            body,
-            url,
-        ])
-        .output()
-        .map_err(|e| OwxError::BroadcastFailed(format!("curl: {e}")))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(OwxError::BroadcastFailed(format!("curl failed: {stderr}")));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
-}
-
-/// POST JSON to a URL via `curl` subprocess.
-fn curl_post_json(url: &str, body: &str) -> Result<String, OwxError> {
-    let output = std::process::Command::new("curl")
-        .args([
-            "-fsSL",
-            "-X",
-            "POST",
-            "-H",
-            "Content-Type: application/json",
-            "-d",
-            body,
-            url,
-        ])
-        .output()
-        .map_err(|e| OwxError::BroadcastFailed(format!("curl: {e}")))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(OwxError::BroadcastFailed(format!("curl failed: {stderr}")));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
-}
-
-/// Extract a string field from a JSON-RPC response.
-fn extract_json_field(json_str: &str, field: &str) -> Result<String, OwxError> {
-    let parsed: serde_json::Value = serde_json::from_str(json_str)?;
-    if let Some(error) = parsed.get("error") {
-        return Err(OwxError::BroadcastFailed(format!("RPC error: {error}")));
-    }
-    parsed[field]
-        .as_str()
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| OwxError::BroadcastFailed(format!("no '{field}' in response")))
 }
 
 #[cfg(test)]
@@ -692,7 +545,7 @@ mod tests {
 
     #[test]
     fn agent_mode_policy_denies() {
-        use owx_core::policy::{Policy, PolicyAction, PolicyRule};
+        use owx_vault::{Policy, PolicyAction, PolicyRule};
 
         let dir = tempfile::tempdir().unwrap();
         let vault = Vault::open(dir.path()).unwrap();

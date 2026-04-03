@@ -8,8 +8,9 @@
 //! let sig   = owx::sign_message(&vault, "my-wallet", "ethereum", b"hello", "pass", None)?;
 //! ```
 
-mod chains;
+mod broadcast;
 mod error;
+mod handler;
 mod key_ops;
 mod ops;
 mod policy_engine;

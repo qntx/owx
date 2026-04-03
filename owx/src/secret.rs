@@ -4,9 +4,8 @@
 //! - **Mnemonic**: raw UTF-8 phrase bytes
 //! - **Private key pair**: `{"secp256k1":"hex","ed25519":"hex"}` JSON (no type tag)
 
-use owx_core::chain::ChainType;
-use owx_core::wallet_file::{EncryptedWallet, KeyType};
-use owx_vault::{CryptoEnvelope, crypto};
+use owx_core::ChainType;
+use owx_vault::{CryptoEnvelope, EncryptedWallet, KeyType, crypto};
 use zeroize::Zeroize;
 
 use crate::error::OwxError;

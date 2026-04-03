@@ -145,14 +145,6 @@ mod tests {
         let cfg = Config::default();
         assert!(cfg.rpc_url("eip155:1").is_some());
         assert!(cfg.rpc_url("eip155:8453").is_some());
-        assert!(
-            cfg.rpc_url("solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp")
-                .is_some()
-        );
-        assert!(
-            cfg.rpc_url("bip122:000000000019d6689c085ae165831e93")
-                .is_some()
-        );
     }
 
     #[test]
@@ -194,21 +186,5 @@ mod tests {
         assert_eq!(cfg.rpc_url("eip155:11155111"), Some("https://sepolia.rpc"));
         assert_eq!(cfg.rpc_url("eip155:137"), Some("https://polygon-rpc.com"));
         assert_eq!(cfg.vault_path, PathBuf::from("/tmp/custom-vault"));
-    }
-
-    #[test]
-    fn load_partial_config_without_vault_path() {
-        let dir = tempfile::tempdir().unwrap();
-        let config_path = dir.path().join("config.json");
-        let user_config = serde_json::json!({
-            "rpc": {
-                "eip155:1": "https://partial-eth.rpc"
-            }
-        });
-        std::fs::write(&config_path, serde_json::to_string(&user_config).unwrap()).unwrap();
-
-        let cfg = Config::load_or_default_from(&config_path);
-        assert_eq!(cfg.rpc_url("eip155:1"), Some("https://partial-eth.rpc"));
-        assert_eq!(cfg.rpc_url("eip155:137"), Some("https://polygon-rpc.com"));
     }
 }

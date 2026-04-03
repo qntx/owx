@@ -4,21 +4,17 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Core types, chain registry, and error definitions for OWX."
+description = "Minimal core types: chain registry and CAIP-2 identifiers for OWX."
 keywords.workspace = true
 categories.workspace = true
 readme.workspace = true
 
 [dependencies]
-chrono.workspace = true
-serde.workspace = true
-serde_json.workspace = true
+serde = { workspace = true }
 thiserror.workspace = true
-uuid.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
-tempfile.workspace = true
 
 [lints]
 workspace = true

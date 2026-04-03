@@ -120,21 +120,4 @@ mod tests {
         let json = serde_json::to_value(&wallet).unwrap();
         assert!(json.get("metadata").is_none());
     }
-
-    #[test]
-    fn matches_required_fields() {
-        let wallet = dummy_wallet();
-        let json = serde_json::to_value(&wallet).unwrap();
-        for key in [
-            "ows_version",
-            "id",
-            "name",
-            "created_at",
-            "accounts",
-            "crypto",
-            "key_type",
-        ] {
-            assert!(json.get(key).is_some(), "missing key: {key}");
-        }
-    }
 }

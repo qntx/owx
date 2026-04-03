@@ -1,24 +1,12 @@
-//! Core types and chain registry for OWX.
+//! Minimal core types for OWX: chain registry and CAIP-2 identifiers.
 //!
-//! This crate contains **zero business logic** — only shared types,
-//! the chain registry, configuration, policy definitions, and on-disk
-//! file formats.
+//! This crate is intentionally **zero-logic** and **dependency-minimal**.
+//! All storage formats, configuration, and policy types live in [`owx_vault`].
 
-pub mod api_key;
 pub mod caip;
 pub mod chain;
-pub mod config;
-pub mod policy;
-pub mod wallet_file;
 
-pub use api_key::ApiKeyFile;
-pub use caip::ChainId;
+pub use caip::{CaipParseError, ChainId};
 pub use chain::{
     ALL_CHAIN_TYPES, Chain, ChainType, KNOWN_CHAINS, default_chain_for_type, parse_chain,
 };
-pub use config::Config;
-pub use policy::{
-    Policy, PolicyAction, PolicyContext, PolicyResult, PolicyRule, SpendingContext,
-    TransactionContext,
-};
-pub use wallet_file::{EncryptedWallet, KeyType, WalletAccount};

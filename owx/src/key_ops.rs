@@ -2,9 +2,8 @@
 
 use std::collections::HashMap;
 
-use owx_core::api_key::ApiKeyFile;
-use owx_vault::Vault;
 use owx_vault::crypto;
+use owx_vault::{ApiKeyFile, Vault};
 use zeroize::Zeroize;
 
 use crate::error::OwxError;
@@ -84,8 +83,7 @@ pub fn revoke_api_key(vault: &Vault, id: &str) -> Result<(), OwxError> {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use owx_core::policy::{Policy, PolicyAction, PolicyRule};
-    use owx_core::wallet_file::{EncryptedWallet, KeyType, WalletAccount};
+    use owx_vault::{EncryptedWallet, KeyType, Policy, PolicyAction, PolicyRule, WalletAccount};
 
     use super::*;
 
