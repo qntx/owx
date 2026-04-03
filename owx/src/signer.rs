@@ -112,9 +112,21 @@ pub fn sign_typed_data(key_hex: &str, typed_data_json: &str) -> Result<SignOutpu
     s.sign_typed_data(typed_data_json).map_err(s_err)
 }
 
-/// Encode a signed EVM transaction for broadcasting.
-pub fn encode_signed_evm_tx(tx_bytes: &[u8], sig: &SignOutput) -> Result<Vec<u8>, Error> {
-    signer::evm::Signer::encode_signed_transaction(tx_bytes, &sig.signature).map_err(s_err)
+/// Encode a signed transaction for broadcasting.
+///
+/// EVM: RLP-encodes the full signed tx. Other chains: returns the raw
+/// signature bytes (most non-EVM chains embed the signature directly).
+pub fn encode_signed_tx(
+    family: ChainFamily,
+    tx_bytes: &[u8],
+    sig: &SignOutput,
+) -> Result<Vec<u8>, Error> {
+    match family {
+        ChainFamily::Evm => {
+            signer::evm::Signer::encode_signed_transaction(tx_bytes, &sig.signature).map_err(s_err)
+        }
+        _ => Ok(sig.signature.clone()),
+    }
 }
 
 /// Derive an address from a hex private key (not all families support this).

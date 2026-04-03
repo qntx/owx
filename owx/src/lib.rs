@@ -6,9 +6,14 @@
 //! let sig   = owx::sign_message(&vault, "my-wallet", "ethereum", b"hello", "pass", None)?;
 //! ```
 
+pub mod audit;
+pub mod bridge;
+pub mod broadcast;
 pub mod chain;
+pub mod config;
 mod error;
 pub mod key;
+pub mod pay;
 pub mod policy;
 pub mod secret;
 pub mod signer;
@@ -109,6 +114,30 @@ pub fn sign_typed_data(
         key::resolve_signing_key(vault, wallet_name_or_id, credential, chain_info.family, idx)?;
     let out = signer::sign_typed_data(&key_hex, typed_data_json)?;
     Ok(signer::to_sign_result(out))
+}
+
+/// Sign a transaction and broadcast it to the network.
+pub fn sign_and_send(
+    vault: &Vault,
+    wallet_name_or_id: &str,
+    chain: &str,
+    tx_hex: &str,
+    credential: &str,
+    index: Option<u32>,
+    rpc_url: Option<&str>,
+) -> Result<SendResult, Error> {
+    let chain_info = chain::resolve_chain(chain)?;
+    let ct = chain_info.family;
+    let tx_hex_clean = tx_hex.strip_prefix("0x").unwrap_or(tx_hex);
+    let tx_bytes =
+        hex::decode(tx_hex_clean).map_err(|e| Error::InvalidInput(format!("invalid hex: {e}")))?;
+    let idx = index.unwrap_or(0);
+    let key_hex = key::resolve_signing_key(vault, wallet_name_or_id, credential, ct, idx)?;
+    let sig = signer::sign_transaction(ct, &key_hex, &tx_bytes)?;
+    let payload = signer::encode_signed_tx(ct, &tx_bytes, &sig)?;
+    let rpc = broadcast::resolve_rpc(&chain_info.chain_id, ct, rpc_url)?;
+    let tx_hash = broadcast::broadcast(ct, &rpc, &payload)?;
+    Ok(SendResult { tx_hash })
 }
 
 /// Best-effort default vault path.

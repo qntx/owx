@@ -56,6 +56,36 @@ enum Commands {
         #[arg(long, default_value = "12")]
         words: u32,
     },
+    /// Send a signed transaction to the chain RPC.
+    Send {
+        wallet: String,
+        chain: String,
+        tx_hex: String,
+        #[arg(long)]
+        rpc: Option<String>,
+    },
+    /// Make an HTTP request with automatic x402 payment.
+    Pay {
+        url: String,
+        #[arg(long, default_value = "GET")]
+        method: String,
+        #[arg(long)]
+        body: Option<String>,
+    },
+    /// Discover payable services.
+    Discover {
+        #[arg(long)]
+        query: Option<String>,
+        #[arg(long, default_value_t = 20)]
+        limit: u64,
+    },
+    /// Fund a wallet via MoonPay.
+    Fund {
+        #[arg(long, default_value = "base")]
+        chain: String,
+        #[arg(long, default_value = "USDC")]
+        token: String,
+    },
     /// Policy management.
     Policy {
         #[command(subcommand)]
@@ -188,6 +218,41 @@ fn run(cmd: Commands, vault: &Vault) -> Result<(), owx::Error> {
         Commands::Generate { words } => {
             let phrase = owx::generate_mnemonic(words as usize)?;
             print_json(&serde_json::json!({ "mnemonic": phrase }))
+        }
+        Commands::Send {
+            wallet,
+            chain,
+            tx_hex,
+            rpc,
+        } => {
+            let cred = read_passphrase("Passphrase or API token: ");
+            let result =
+                owx::sign_and_send(vault, &wallet, &chain, &tx_hex, &cred, None, rpc.as_deref())?;
+            print_json(&result)
+        }
+        Commands::Pay { url, method, body } => {
+            let wallet_name = read_passphrase("Wallet name or ID: ");
+            let cred = read_passphrase("Passphrase or API token: ");
+            let bridge = owx::bridge::VaultBridge::new(vault, &wallet_name, &cred, 0);
+            let result = owx::pay::pay(&bridge, &url, &method, body.as_deref())?;
+            print_json(&result)
+        }
+        Commands::Discover { query, limit } => {
+            let result = owx::pay::discover(query.as_deref(), Some(limit), None)?;
+            print_json(&result)
+        }
+        Commands::Fund { chain, token } => {
+            let wallets = owx::list_wallets(vault)?;
+            let wallet_info = wallets.first().ok_or_else(|| {
+                owx::Error::InvalidInput("no wallets found; create one first".into())
+            })?;
+            let evm_account = wallet_info
+                .accounts
+                .iter()
+                .find(|a| a.chain_id.starts_with("eip155:"))
+                .ok_or_else(|| owx::Error::InvalidInput("no EVM account found".into()))?;
+            let result = owx::pay::fund(&evm_account.address, Some(&chain), Some(&token))?;
+            print_json(&result)
         }
         Commands::Policy { action } => run_policy(action, vault),
     }
