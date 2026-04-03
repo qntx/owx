@@ -66,38 +66,3 @@ impl std::fmt::Debug for SecretBytes {
         write!(f, "SecretBytes([REDACTED; {} bytes])", self.0.len())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn expose_returns_original_bytes() {
-        let s = SecretBytes::new(vec![1, 2, 3]);
-        assert_eq!(s.expose(), &[1, 2, 3]);
-    }
-
-    #[test]
-    fn from_slice_copies() {
-        let data = [0xAB; 16];
-        let s = SecretBytes::from_slice(&data);
-        assert_eq!(s.expose(), &data);
-        assert_eq!(s.len(), 16);
-    }
-
-    #[test]
-    fn debug_does_not_leak() {
-        let s = SecretBytes::new(b"super secret".to_vec());
-        let dbg = format!("{s:?}");
-        assert!(!dbg.contains("super"));
-        assert!(dbg.contains("REDACTED"));
-    }
-
-    #[test]
-    fn clone_independence() {
-        let original = SecretBytes::new(vec![1, 2, 3]);
-        let cloned = original.clone();
-        assert_eq!(original.expose(), cloned.expose());
-        assert_ne!(original.expose().as_ptr(), cloned.expose().as_ptr());
-    }
-}

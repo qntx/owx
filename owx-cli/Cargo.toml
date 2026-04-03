@@ -15,13 +15,10 @@ path = "src/main.rs"
 
 [dependencies]
 owx.workspace = true
-owx-pay.workspace = true
-owx-vault.workspace = true
 clap.workspace = true
 hex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tokio.workspace = true
 
 [lints]
 workspace = true

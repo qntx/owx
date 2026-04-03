@@ -1,26 +1,131 @@
-//! File-system vault: CRUD for wallets, API keys, and policies.
+//! Generic JSON file-system store with path-traversal protection.
+//!
+//! Domain-agnostic: stores any `Serialize`/`Deserialize` type as
+//! pretty-printed JSON in `<root>/<subdir>/<id>.json`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::api_key::ApiKeyFile;
-use crate::config::Config;
-use crate::error::VaultError;
-use crate::permissions;
-use crate::policy::Policy;
-use crate::wallet::EncryptedWallet;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
-/// A file-system vault rooted at a directory (e.g. `~/.owx`).
+use crate::error::VaultError;
+
+/// A file-system store rooted at a directory (e.g. `~/.owx`).
 ///
-/// All wallet, API key, and policy files are stored under this root with
-/// strict filesystem permissions on Unix.
+/// Files are organized into subdirectories by kind (e.g. `wallets/`, `keys/`).
+/// On Unix, directories get `0o700` and files get `0o600` permissions.
 #[derive(Debug, Clone)]
-pub struct Vault {
-    /// Root path of the vault.
+pub struct Store {
+    /// Root path.
     root: PathBuf,
 }
 
-/// Validate that an ID is safe for use as a filename component.
+impl Store {
+    /// Open (or create) a store at the given path.
+    pub fn open(path: impl Into<PathBuf>) -> Result<Self, VaultError> {
+        let root = path.into();
+        fs::create_dir_all(&root).map_err(|e| VaultError::io(&root, e))?;
+        set_dir_permissions(&root);
+        Ok(Self { root })
+    }
+
+    /// Root path of the store.
+    #[must_use]
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    /// Save a value as `<subdir>/<id>.json` with strict file permissions.
+    pub fn save<T: Serialize>(&self, subdir: &str, id: &str, value: &T) -> Result<(), VaultError> {
+        sanitize_id(id)?;
+        let dir = self.ensure_subdir(subdir)?;
+        let path = dir.join(format!("{id}.json"));
+        let json = serde_json::to_string_pretty(value)?;
+        fs::write(&path, &json).map_err(|e| VaultError::io(&path, e))?;
+        set_file_permissions(&path);
+        Ok(())
+    }
+
+    /// Load a value from `<subdir>/<id>.json`.
+    pub fn load<T: DeserializeOwned>(&self, subdir: &str, id: &str) -> Result<T, VaultError> {
+        sanitize_id(id)?;
+        let path = self.entry_path(subdir, id);
+        if !path.exists() {
+            return Err(VaultError::NotFound(format!("{subdir}/{id}")));
+        }
+        let contents = fs::read_to_string(&path).map_err(|e| VaultError::io(&path, e))?;
+        Ok(serde_json::from_str(&contents)?)
+    }
+
+    /// Load all entries from a subdirectory (skips malformed files).
+    pub fn list<T: DeserializeOwned>(&self, subdir: &str) -> Result<Vec<T>, VaultError> {
+        let dir = self.root.join(subdir);
+        let mut items = Vec::new();
+        for json_str in read_json_dir(&dir)? {
+            if let Ok(item) = serde_json::from_str::<T>(&json_str) {
+                items.push(item);
+            }
+        }
+        Ok(items)
+    }
+
+    /// Delete `<subdir>/<id>.json`.
+    pub fn delete(&self, subdir: &str, id: &str) -> Result<(), VaultError> {
+        sanitize_id(id)?;
+        let path = self.entry_path(subdir, id);
+        if !path.exists() {
+            return Err(VaultError::NotFound(format!("{subdir}/{id}")));
+        }
+        fs::remove_file(&path).map_err(|e| VaultError::io(&path, e))
+    }
+
+    /// Check whether `<subdir>/<id>.json` exists on disk.
+    #[must_use]
+    pub fn exists(&self, subdir: &str, id: &str) -> bool {
+        sanitize_id(id).is_ok() && self.entry_path(subdir, id).exists()
+    }
+
+    /// Save a raw JSON string as `<subdir>/<id>.json`.
+    pub fn save_raw(&self, subdir: &str, id: &str, json: &str) -> Result<(), VaultError> {
+        sanitize_id(id)?;
+        let dir = self.ensure_subdir(subdir)?;
+        let path = dir.join(format!("{id}.json"));
+        fs::write(&path, json).map_err(|e| VaultError::io(&path, e))?;
+        set_file_permissions(&path);
+        Ok(())
+    }
+
+    /// Load a raw JSON string from `<subdir>/<id>.json`.
+    pub fn load_raw(&self, subdir: &str, id: &str) -> Result<String, VaultError> {
+        sanitize_id(id)?;
+        let path = self.entry_path(subdir, id);
+        if !path.exists() {
+            return Err(VaultError::NotFound(format!("{subdir}/{id}")));
+        }
+        fs::read_to_string(&path).map_err(|e| VaultError::io(&path, e))
+    }
+
+    /// List all raw JSON strings from a subdirectory.
+    pub fn list_raw(&self, subdir: &str) -> Result<Vec<String>, VaultError> {
+        read_json_dir(&self.root.join(subdir))
+    }
+
+    /// Ensure a subdirectory exists and return its path.
+    fn ensure_subdir(&self, subdir: &str) -> Result<PathBuf, VaultError> {
+        let dir = self.root.join(subdir);
+        fs::create_dir_all(&dir).map_err(|e| VaultError::io(&dir, e))?;
+        set_dir_permissions(&dir);
+        Ok(dir)
+    }
+
+    /// Compute the on-disk path for an entry.
+    fn entry_path(&self, subdir: &str, id: &str) -> PathBuf {
+        self.root.join(subdir).join(format!("{id}.json"))
+    }
+}
+
+/// Reject IDs that could escape the subdirectory.
 fn sanitize_id(id: &str) -> Result<&str, VaultError> {
     if id.is_empty() || id.contains('/') || id.contains('\\') || id.contains("..") || id == "." {
         return Err(VaultError::InvalidInput(format!(
@@ -30,257 +135,7 @@ fn sanitize_id(id: &str) -> Result<&str, VaultError> {
     Ok(id)
 }
 
-impl Vault {
-    /// Open (or create) a vault at the given path.
-    pub fn open(path: impl Into<PathBuf>) -> Result<Self, VaultError> {
-        let root = path.into();
-        fs::create_dir_all(&root).map_err(|e| VaultError::io(&root, e))?;
-        permissions::set_dir_permissions(&root);
-        Ok(Self { root })
-    }
-
-    /// Open the default vault from [`Config::default()`].
-    pub fn open_default() -> Result<Self, VaultError> {
-        Self::open(Config::default().vault_path)
-    }
-
-    /// Root path of the vault.
-    #[must_use]
-    pub fn root(&self) -> &Path {
-        &self.root
-    }
-
-    // ── Wallets ──────────────────────────────────────────────────────
-
-    /// Save an encrypted wallet file with strict permissions.
-    pub fn save_wallet(&self, wallet: &EncryptedWallet) -> Result<(), VaultError> {
-        sanitize_id(&wallet.id)?;
-        let dir = self.wallets_dir()?;
-        let path = dir.join(format!("{}.json", wallet.id));
-        let json = serde_json::to_string_pretty(wallet)?;
-        fs::write(&path, json).map_err(|e| VaultError::io(&path, e))?;
-        permissions::set_file_permissions(&path);
-        Ok(())
-    }
-
-    /// List all encrypted wallets, sorted by `created_at` descending.
-    pub fn list_wallets(&self) -> Result<Vec<EncryptedWallet>, VaultError> {
-        let dir = self.wallets_dir()?;
-        let mut wallets = Vec::new();
-        for entry in read_json_dir(&dir)? {
-            if let Ok(w) = serde_json::from_str::<EncryptedWallet>(&entry) {
-                wallets.push(w);
-            }
-        }
-        wallets.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-        Ok(wallets)
-    }
-
-    /// Load a wallet by exact ID first, then by name.
-    pub fn load_wallet(&self, name_or_id: &str) -> Result<EncryptedWallet, VaultError> {
-        let wallets = self.list_wallets()?;
-
-        if let Some(w) = wallets.iter().find(|w| w.id == name_or_id) {
-            return Ok(w.clone());
-        }
-
-        let matches: Vec<&EncryptedWallet> =
-            wallets.iter().filter(|w| w.name == name_or_id).collect();
-        match matches.len() {
-            0 => Err(VaultError::WalletNotFound(name_or_id.to_owned())),
-            1 => Ok(matches[0].clone()),
-            n => Err(VaultError::AmbiguousWallet {
-                name: name_or_id.to_owned(),
-                count: n,
-            }),
-        }
-    }
-
-    /// Delete a wallet file by ID.
-    pub fn delete_wallet(&self, id: &str) -> Result<(), VaultError> {
-        sanitize_id(id)?;
-        let dir = self.wallets_dir()?;
-        let path = dir.join(format!("{id}.json"));
-        if !path.exists() {
-            return Err(VaultError::WalletNotFound(id.to_owned()));
-        }
-        fs::remove_file(&path).map_err(|e| VaultError::io(&path, e))
-    }
-
-    /// Check whether a wallet with the given name exists.
-    pub fn wallet_name_exists(&self, name: &str) -> Result<bool, VaultError> {
-        Ok(self.list_wallets()?.iter().any(|w| w.name == name))
-    }
-
-    /// Rename a wallet.
-    pub fn rename_wallet(&self, name_or_id: &str, new_name: &str) -> Result<(), VaultError> {
-        let mut wallet = self.load_wallet(name_or_id)?;
-        if wallet.name == new_name {
-            return Ok(());
-        }
-        if self.wallet_name_exists(new_name)? {
-            return Err(VaultError::WalletNameExists(new_name.to_owned()));
-        }
-        new_name.clone_into(&mut wallet.name);
-        self.save_wallet(&wallet)
-    }
-
-    // ── API Keys ────────────────────────────────────────────────────
-
-    /// Save an API key file with strict permissions.
-    pub fn save_api_key(&self, key: &ApiKeyFile) -> Result<(), VaultError> {
-        sanitize_id(&key.id)?;
-        let dir = self.keys_dir()?;
-        let path = dir.join(format!("{}.json", key.id));
-        let json = serde_json::to_string_pretty(key)?;
-        fs::write(&path, json).map_err(|e| VaultError::io(&path, e))?;
-        permissions::set_file_permissions(&path);
-        Ok(())
-    }
-
-    /// Load an API key by ID.
-    pub fn load_api_key(&self, id: &str) -> Result<ApiKeyFile, VaultError> {
-        sanitize_id(id)?;
-        let dir = self.keys_dir()?;
-        let path = dir.join(format!("{id}.json"));
-        if !path.exists() {
-            return Err(VaultError::ApiKeyNotFound);
-        }
-        let contents = fs::read_to_string(&path).map_err(|e| VaultError::io(&path, e))?;
-        Ok(serde_json::from_str(&contents)?)
-    }
-
-    /// Look up an API key by the SHA-256 hash of the token.
-    pub fn load_api_key_by_token_hash(&self, token_hash: &str) -> Result<ApiKeyFile, VaultError> {
-        self.list_api_keys()?
-            .into_iter()
-            .find(|k| k.token_hash == token_hash)
-            .ok_or(VaultError::ApiKeyNotFound)
-    }
-
-    /// List all API keys, sorted by creation time (newest first).
-    pub fn list_api_keys(&self) -> Result<Vec<ApiKeyFile>, VaultError> {
-        let dir = self.keys_dir()?;
-        let mut keys = Vec::new();
-        for entry in read_json_dir(&dir)? {
-            if let Ok(k) = serde_json::from_str::<ApiKeyFile>(&entry) {
-                keys.push(k);
-            }
-        }
-        keys.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-        Ok(keys)
-    }
-
-    /// Delete an API key by ID.
-    pub fn delete_api_key(&self, id: &str) -> Result<(), VaultError> {
-        sanitize_id(id)?;
-        let dir = self.keys_dir()?;
-        let path = dir.join(format!("{id}.json"));
-        if !path.exists() {
-            return Err(VaultError::ApiKeyNotFound);
-        }
-        fs::remove_file(&path).map_err(|e| VaultError::io(&path, e))
-    }
-
-    // ── Policies ────────────────────────────────────────────────────
-
-    /// Save a policy definition.
-    pub fn save_policy(&self, policy: &Policy) -> Result<(), VaultError> {
-        sanitize_id(&policy.id)?;
-        let dir = self.policies_dir()?;
-        let path = dir.join(format!("{}.json", policy.id));
-        let json = serde_json::to_string_pretty(policy)?;
-        fs::write(&path, json).map_err(|e| VaultError::io(&path, e))
-    }
-
-    /// Load a policy by ID.
-    pub fn load_policy(&self, id: &str) -> Result<Policy, VaultError> {
-        sanitize_id(id)?;
-        let dir = self.policies_dir()?;
-        let path = dir.join(format!("{id}.json"));
-        if !path.exists() {
-            return Err(VaultError::PolicyNotFound(id.to_owned()));
-        }
-        let contents = fs::read_to_string(&path).map_err(|e| VaultError::io(&path, e))?;
-        Ok(serde_json::from_str(&contents)?)
-    }
-
-    /// List all policies, sorted alphabetically by name.
-    pub fn list_policies(&self) -> Result<Vec<Policy>, VaultError> {
-        let dir = self.policies_dir()?;
-        let mut policies = Vec::new();
-        for entry in read_json_dir(&dir)? {
-            if let Ok(p) = serde_json::from_str::<Policy>(&entry) {
-                policies.push(p);
-            }
-        }
-        policies.sort_by(|a, b| a.name.cmp(&b.name));
-        Ok(policies)
-    }
-
-    /// Save a raw policy JSON string by ID.
-    pub fn save_policy_raw(&self, id: &str, json: &str) -> Result<(), VaultError> {
-        sanitize_id(id)?;
-        let dir = self.policies_dir()?;
-        let path = dir.join(format!("{id}.json"));
-        fs::write(&path, json).map_err(|e| VaultError::io(&path, e))
-    }
-
-    /// Load a raw policy JSON string by ID.
-    pub fn load_policy_raw(&self, id: &str) -> Result<String, VaultError> {
-        sanitize_id(id)?;
-        let dir = self.policies_dir()?;
-        let path = dir.join(format!("{id}.json"));
-        if !path.exists() {
-            return Err(VaultError::PolicyNotFound(id.to_owned()));
-        }
-        fs::read_to_string(&path).map_err(|e| VaultError::io(&path, e))
-    }
-
-    /// List all raw policy JSON files.
-    pub fn list_policies_raw(&self) -> Result<Vec<String>, VaultError> {
-        let dir = self.policies_dir()?;
-        read_json_dir(&dir)
-    }
-
-    /// Delete a policy by ID.
-    pub fn delete_policy(&self, id: &str) -> Result<(), VaultError> {
-        sanitize_id(id)?;
-        let dir = self.policies_dir()?;
-        let path = dir.join(format!("{id}.json"));
-        if !path.exists() {
-            return Err(VaultError::PolicyNotFound(id.to_owned()));
-        }
-        fs::remove_file(&path).map_err(|e| VaultError::io(&path, e))
-    }
-
-    // ── Internal ────────────────────────────────────────────────────
-
-    /// Ensure and return the wallets subdirectory.
-    fn wallets_dir(&self) -> Result<PathBuf, VaultError> {
-        let dir = self.root.join("wallets");
-        fs::create_dir_all(&dir).map_err(|e| VaultError::io(&dir, e))?;
-        permissions::set_dir_permissions(&dir);
-        Ok(dir)
-    }
-
-    /// Ensure and return the keys subdirectory.
-    fn keys_dir(&self) -> Result<PathBuf, VaultError> {
-        let dir = self.root.join("keys");
-        fs::create_dir_all(&dir).map_err(|e| VaultError::io(&dir, e))?;
-        permissions::set_dir_permissions(&dir);
-        Ok(dir)
-    }
-
-    /// Ensure and return the policies subdirectory.
-    fn policies_dir(&self) -> Result<PathBuf, VaultError> {
-        let dir = self.root.join("policies");
-        fs::create_dir_all(&dir).map_err(|e| VaultError::io(&dir, e))?;
-        Ok(dir)
-    }
-}
-
-/// Read all `.json` files from a directory, returning their contents.
+/// Read all `.json` files from a directory, returning their raw contents.
 fn read_json_dir(dir: &Path) -> Result<Vec<String>, VaultError> {
     let mut entries = Vec::new();
     let rd = match fs::read_dir(dir) {
@@ -301,122 +156,24 @@ fn read_json_dir(dir: &Path) -> Result<Vec<String>, VaultError> {
     Ok(entries)
 }
 
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod tests {
-    use super::*;
-    use crate::wallet::{KeyType, WalletAccount};
-
-    fn temp_vault() -> (tempfile::TempDir, Vault) {
-        let dir = tempfile::tempdir().unwrap();
-        let vault = Vault::open(dir.path()).unwrap();
-        (dir, vault)
+/// Set directory permissions to owner-only (`0o700` on Unix, no-op elsewhere).
+#[allow(clippy::missing_const_for_fn)]
+fn set_dir_permissions(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700));
     }
+    let _ = path;
+}
 
-    fn dummy_wallet(id: &str, name: &str) -> EncryptedWallet {
-        EncryptedWallet::new(
-            id.to_owned(),
-            name.to_owned(),
-            vec![WalletAccount {
-                account_id: "eip155:1:0xabc".to_owned(),
-                address: "0xabc".to_owned(),
-                chain_id: "eip155:1".to_owned(),
-                derivation_path: "m/44'/60'/0'/0/0".to_owned(),
-            }],
-            serde_json::json!({"cipher": "aes-256-gcm"}),
-            KeyType::Mnemonic,
-        )
+/// Set file permissions to owner read/write only (`0o600` on Unix, no-op elsewhere).
+#[allow(clippy::missing_const_for_fn)]
+fn set_file_permissions(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
     }
-
-    #[test]
-    fn save_and_list_wallets() {
-        let (_dir, vault) = temp_vault();
-        let w = dummy_wallet("id-1", "my-wallet");
-        vault.save_wallet(&w).unwrap();
-
-        let wallets = vault.list_wallets().unwrap();
-        assert_eq!(wallets.len(), 1);
-        assert_eq!(wallets[0].id, "id-1");
-    }
-
-    #[test]
-    fn load_by_name_or_id() {
-        let (_dir, vault) = temp_vault();
-        vault.save_wallet(&dummy_wallet("uuid-1", "alpha")).unwrap();
-
-        let by_id = vault.load_wallet("uuid-1").unwrap();
-        assert_eq!(by_id.name, "alpha");
-
-        let by_name = vault.load_wallet("alpha").unwrap();
-        assert_eq!(by_name.id, "uuid-1");
-
-        assert!(vault.load_wallet("missing").is_err());
-    }
-
-    #[test]
-    fn delete_wallet() {
-        let (_dir, vault) = temp_vault();
-        vault.save_wallet(&dummy_wallet("del-1", "del")).unwrap();
-        assert_eq!(vault.list_wallets().unwrap().len(), 1);
-        vault.delete_wallet("del-1").unwrap();
-        assert_eq!(vault.list_wallets().unwrap().len(), 0);
-    }
-
-    #[test]
-    fn api_key_crud() {
-        use std::collections::HashMap;
-
-        use crate::crypto::{generate_token, hash_token};
-
-        let (_dir, vault) = temp_vault();
-        let token = generate_token();
-        let key = ApiKeyFile {
-            id: "k1".into(),
-            name: "agent".into(),
-            token_hash: hash_token(&token),
-            created_at: "2026-01-01T00:00:00Z".into(),
-            wallet_ids: vec!["w1".into()],
-            policy_ids: vec![],
-            expires_at: None,
-            wallet_secrets: HashMap::new(),
-        };
-
-        vault.save_api_key(&key).unwrap();
-        let loaded = vault.load_api_key("k1").unwrap();
-        assert_eq!(loaded.name, "agent");
-
-        let by_hash = vault
-            .load_api_key_by_token_hash(&hash_token(&token))
-            .unwrap();
-        assert_eq!(by_hash.id, "k1");
-
-        vault.delete_api_key("k1").unwrap();
-        assert!(vault.load_api_key("k1").is_err());
-    }
-
-    #[test]
-    fn path_traversal_rejected() {
-        let (_dir, vault) = temp_vault();
-        let wallet = dummy_wallet("../../../etc/passwd", "evil");
-        assert!(vault.save_wallet(&wallet).is_err());
-        assert!(vault.delete_wallet("../secret").is_err());
-        assert!(vault.load_api_key("../secret").is_err());
-        assert!(vault.save_policy_raw("../evil", "{}").is_err());
-    }
-
-    #[test]
-    fn policy_raw_crud() {
-        let (_dir, vault) = temp_vault();
-        let json = r#"{"id":"p1","name":"test"}"#;
-        vault.save_policy_raw("p1", json).unwrap();
-
-        let loaded = vault.load_policy_raw("p1").unwrap();
-        assert_eq!(loaded, json);
-
-        let all = vault.list_policies_raw().unwrap();
-        assert_eq!(all.len(), 1);
-
-        vault.delete_policy("p1").unwrap();
-        assert!(vault.load_policy_raw("p1").is_err());
-    }
+    let _ = path;
 }

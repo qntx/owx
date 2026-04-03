@@ -10,9 +10,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-owx-core.workspace = true
 owx-vault.workspace = true
-owx-pay.workspace = true
 
 kobe.workspace = true
 kobe-btc.workspace = true
@@ -47,9 +45,6 @@ sha2.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 zeroize.workspace = true
-
-[dev-dependencies]
-tempfile.workspace = true
 
 [lints]
 workspace = true

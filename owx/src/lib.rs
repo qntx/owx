@@ -1,28 +1,120 @@
 //! Agent-native, self-custodial, policy-gated, multi-chain wallet toolkit.
 //!
-//! Flat public API over [`owx_vault::Vault`].
-//!
 //! ```ignore
 //! let vault = owx::Vault::open("~/.owx")?;
 //! let info  = owx::create_wallet(&vault, "my-wallet", "pass", 12)?;
 //! let sig   = owx::sign_message(&vault, "my-wallet", "ethereum", b"hello", "pass", None)?;
 //! ```
 
-mod broadcast;
+pub mod chain;
 mod error;
-mod handler;
-mod key_ops;
-mod ops;
-mod policy_engine;
-mod secret;
-pub mod types;
+pub mod key;
+pub mod policy;
+pub mod secret;
+pub mod signer;
+pub mod wallet;
 
-pub use error::{OwxError, OwxErrorCode};
-pub use key_ops::{create_api_key, list_api_keys, revoke_api_key};
-pub use ops::{
-    create_wallet, delete_wallet, derive_address, export_wallet, generate_mnemonic, get_wallet,
-    import_mnemonic, import_private_keys, list_wallets, rename_wallet, sign_and_send, sign_message,
-    sign_transaction,
+use std::path::PathBuf;
+
+pub use error::{Error, ErrorCode};
+pub use key::{ApiKeyCreateResult, ApiKeyInfo, create_api_key, list_api_keys, revoke_api_key};
+pub use signer::{SendResult, SignResult};
+pub use wallet::{
+    AccountInfo, WalletInfo, create_wallet, delete_wallet, derive_address, export_wallet,
+    generate_mnemonic, get_wallet, import_mnemonic, import_private_keys, list_wallets,
+    rename_wallet,
 };
-pub use owx_vault::Vault;
-pub use types::{AccountInfo, ApiKeyCreateResult, ApiKeyInfo, SendResult, SignResult, WalletInfo};
+
+/// Domain-aware vault wrapping [`owx_vault::Store`].
+#[derive(Debug, Clone)]
+pub struct Vault {
+    /// Underlying generic store.
+    store: owx_vault::Store,
+}
+
+impl Vault {
+    /// Open (or create) a vault at the given path.
+    pub fn open(path: impl Into<PathBuf>) -> Result<Self, Error> {
+        Ok(Self {
+            store: owx_vault::Store::open(path)?,
+        })
+    }
+
+    /// Open the default vault at `~/.owx`.
+    pub fn open_default() -> Result<Self, Error> {
+        Self::open(default_vault_path())
+    }
+
+    /// Access the underlying generic store.
+    #[must_use]
+    pub const fn store(&self) -> &owx_vault::Store {
+        &self.store
+    }
+}
+
+/// Sign a message.
+pub fn sign_message(
+    vault: &Vault,
+    wallet_name_or_id: &str,
+    chain: &str,
+    message: &[u8],
+    credential: &str,
+    index: Option<u32>,
+) -> Result<SignResult, Error> {
+    let chain_info = chain::resolve_chain(chain)?;
+    let idx = index.unwrap_or(0);
+    let key_hex =
+        key::resolve_signing_key(vault, wallet_name_or_id, credential, chain_info.family, idx)?;
+    let out = signer::sign_message(chain_info.family, &key_hex, message)?;
+    Ok(signer::to_sign_result(out))
+}
+
+/// Sign a transaction (hex-encoded).
+pub fn sign_transaction(
+    vault: &Vault,
+    wallet_name_or_id: &str,
+    chain: &str,
+    tx_hex: &str,
+    credential: &str,
+    index: Option<u32>,
+) -> Result<SignResult, Error> {
+    let chain_info = chain::resolve_chain(chain)?;
+    let tx_hex_clean = tx_hex.strip_prefix("0x").unwrap_or(tx_hex);
+    let tx_bytes =
+        hex::decode(tx_hex_clean).map_err(|e| Error::InvalidInput(format!("invalid hex: {e}")))?;
+    let idx = index.unwrap_or(0);
+    let key_hex =
+        key::resolve_signing_key(vault, wallet_name_or_id, credential, chain_info.family, idx)?;
+    let out = signer::sign_transaction(chain_info.family, &key_hex, &tx_bytes)?;
+    Ok(signer::to_sign_result(out))
+}
+
+/// Sign EIP-712 typed data (EVM only).
+pub fn sign_typed_data(
+    vault: &Vault,
+    wallet_name_or_id: &str,
+    chain: &str,
+    typed_data_json: &str,
+    credential: &str,
+    index: Option<u32>,
+) -> Result<SignResult, Error> {
+    let chain_info = chain::resolve_chain(chain)?;
+    if chain_info.family != chain::ChainFamily::Evm {
+        return Err(Error::InvalidInput(
+            "EIP-712 typed data signing is only supported for EVM chains".into(),
+        ));
+    }
+    let idx = index.unwrap_or(0);
+    let key_hex =
+        key::resolve_signing_key(vault, wallet_name_or_id, credential, chain_info.family, idx)?;
+    let out = signer::sign_typed_data(&key_hex, typed_data_json)?;
+    Ok(signer::to_sign_result(out))
+}
+
+/// Best-effort default vault path.
+fn default_vault_path() -> PathBuf {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| "/tmp".to_owned());
+    PathBuf::from(home).join(".owx")
+}

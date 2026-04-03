@@ -1,8 +1,8 @@
-//! Vault error types.
+//! Vault-layer error types (crypto + I/O only, no domain knowledge).
 
 use std::path::PathBuf;
 
-/// Errors that can occur in vault operations.
+/// Errors from vault-level operations (encryption, storage, I/O).
 #[derive(Debug, thiserror::Error)]
 pub enum VaultError {
     /// Encryption or decryption failed.
@@ -13,32 +13,11 @@ pub enum VaultError {
     #[error("invalid params: {0}")]
     InvalidParams(String),
 
-    /// Wallet not found by name or ID.
-    #[error("wallet not found: {0}")]
-    WalletNotFound(String),
+    /// A stored entry was not found.
+    #[error("not found: {0}")]
+    NotFound(String),
 
-    /// Wallet name already exists.
-    #[error("wallet name already exists: {0}")]
-    WalletNameExists(String),
-
-    /// Multiple wallets share the same name.
-    #[error("ambiguous wallet name '{name}': {count} matches")]
-    AmbiguousWallet {
-        /// The ambiguous name.
-        name: String,
-        /// Number of matches.
-        count: usize,
-    },
-
-    /// API key not found.
-    #[error("API key not found")]
-    ApiKeyNotFound,
-
-    /// Policy not found.
-    #[error("policy not found: {0}")]
-    PolicyNotFound(String),
-
-    /// Invalid input from the caller.
+    /// Invalid input rejected at the storage layer.
     #[error("invalid input: {0}")]
     InvalidInput(String),
 
@@ -51,7 +30,7 @@ pub enum VaultError {
         source: std::io::Error,
     },
 
-    /// JSON serialization/deserialization error.
+    /// JSON serialization / deserialization error.
     #[error("json: {0}")]
     Json(#[from] serde_json::Error),
 }
