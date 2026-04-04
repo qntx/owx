@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
 
-use crate::Vault;
+use crate::Owx;
 use crate::chain::{ChainFamily, default_chain};
 use crate::error::Error;
 use crate::policy::{self, Policy, PolicyContext, SpendingContext, TransactionContext};
@@ -75,14 +75,14 @@ fn to_info(k: &ApiKeyFile) -> ApiKeyInfo {
 
 /// Create an API key for agent access to one or more wallets.
 pub fn create_api_key(
-    vault: &Vault,
+    vault: &Owx,
     name: &str,
     wallet_ids: &[String],
     policy_ids: &[String],
     passphrase: &str,
     expires_at: Option<&str>,
 ) -> Result<ApiKeyCreateResult, Error> {
-    let token = owx_vault::crypto::generate_token();
+    let token = crate::token::generate_token();
     let mut wallet_secrets = HashMap::new();
     let mut resolved_ids = Vec::with_capacity(wallet_ids.len());
 
@@ -104,7 +104,7 @@ pub fn create_api_key(
     let key_file = ApiKeyFile {
         id: uuid::Uuid::new_v4().to_string(),
         name: name.to_owned(),
-        token_hash: owx_vault::crypto::hash_token(&token),
+        token_hash: crate::token::hash_token(&token),
         created_at: chrono::Utc::now().to_rfc3339(),
         wallet_ids: resolved_ids,
         policy_ids: policy_ids.to_vec(),
@@ -121,14 +121,14 @@ pub fn create_api_key(
 }
 
 /// List all API keys (public info only).
-pub fn list_api_keys(vault: &Vault) -> Result<Vec<ApiKeyInfo>, Error> {
+pub fn list_api_keys(vault: &Owx) -> Result<Vec<ApiKeyInfo>, Error> {
     let mut keys: Vec<ApiKeyFile> = vault.store().list("keys")?;
     keys.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     Ok(keys.iter().map(to_info).collect())
 }
 
 /// Revoke (delete) an API key by ID.
-pub fn revoke_api_key(vault: &Vault, id: &str) -> Result<(), Error> {
+pub fn revoke_api_key(vault: &Owx, id: &str) -> Result<(), Error> {
     vault
         .store()
         .delete("keys", id)
@@ -139,13 +139,13 @@ pub fn revoke_api_key(vault: &Vault, id: &str) -> Result<(), Error> {
 ///
 /// Validates token → checks expiry → loads wallet → enforces policies → decrypts.
 pub fn resolve_agent_key(
-    vault: &Vault,
+    vault: &Owx,
     wallet_name_or_id: &str,
     token: &str,
     family: ChainFamily,
     index: u32,
 ) -> Result<String, Error> {
-    let token_hash = owx_vault::crypto::hash_token(token);
+    let token_hash = crate::token::hash_token(token);
     let api_key = find_key_by_hash(vault, &token_hash)?;
 
     if let Some(ref exp) = api_key.expires_at {
@@ -209,13 +209,13 @@ pub fn resolve_agent_key(
 
 /// Resolve signing key: passphrase (owner) or API token (agent).
 pub fn resolve_signing_key(
-    vault: &Vault,
+    vault: &Owx,
     wallet_name_or_id: &str,
     credential: &str,
     family: ChainFamily,
     index: u32,
 ) -> Result<String, Error> {
-    if owx_vault::crypto::is_api_token(credential) {
+    if crate::token::is_api_token(credential) {
         return resolve_agent_key(vault, wallet_name_or_id, credential, family, index);
     }
     let wallet = crate::wallet::load_wallet(vault, wallet_name_or_id)?;
@@ -242,7 +242,7 @@ fn extract_key_hex(
 }
 
 /// Look up an API key by token hash (linear scan).
-fn find_key_by_hash(vault: &Vault, token_hash: &str) -> Result<ApiKeyFile, Error> {
+fn find_key_by_hash(vault: &Owx, token_hash: &str) -> Result<ApiKeyFile, Error> {
     let keys: Vec<ApiKeyFile> = vault.store().list("keys")?;
     keys.into_iter()
         .find(|k| k.token_hash == token_hash)

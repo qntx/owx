@@ -11,10 +11,9 @@
 #![allow(clippy::missing_docs_in_private_items)]
 
 pub use lifiswap;
-use thiserror::Error;
 
 /// Swap error.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum SwapError {
     /// LiFi SDK error.
     #[error("lifi: {0}")]

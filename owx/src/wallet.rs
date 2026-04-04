@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
 
-use crate::Vault;
+use crate::Owx;
 use crate::chain::{ALL_FAMILIES, default_chain};
 use crate::error::Error;
 use crate::secret::{WalletSecret, decrypt_secret};
@@ -111,12 +111,12 @@ pub fn generate_mnemonic(words: usize) -> Result<String, Error> {
 
 /// Create a new wallet: generate mnemonic, derive all-chain accounts, encrypt, store.
 pub fn create_wallet(
-    vault: &Vault,
+    owx: &Owx,
     name: &str,
     passphrase: &str,
     words: usize,
 ) -> Result<WalletInfo, Error> {
-    ensure_name_available(vault, name)?;
+    ensure_name_available(owx, name)?;
     let kobe_wallet =
         kobe::Wallet::generate(words, None).map_err(|e| Error::Derivation(e.to_string()))?;
     let phrase = kobe_wallet.mnemonic();
@@ -130,19 +130,19 @@ pub fn create_wallet(
         crypto_json,
         secret.key_type(),
     );
-    vault.store().save("wallets", &wallet.id, &wallet)?;
+    owx.store().save("wallets", &wallet.id, &wallet)?;
     Ok(to_info(&wallet))
 }
 
 /// Import a wallet from an existing mnemonic phrase.
 pub fn import_mnemonic(
-    vault: &Vault,
+    owx: &Owx,
     name: &str,
     mnemonic_phrase: &str,
     passphrase: &str,
     index: u32,
 ) -> Result<WalletInfo, Error> {
-    ensure_name_available(vault, name)?;
+    ensure_name_available(owx, name)?;
     let accounts = signer::derive_all_accounts(mnemonic_phrase, index)?;
     let secret = WalletSecret::mnemonic(mnemonic_phrase);
     let crypto_json = encrypt_secret(&secret, passphrase)?;
@@ -153,7 +153,7 @@ pub fn import_mnemonic(
         crypto_json,
         secret.key_type(),
     );
-    vault.store().save("wallets", &wallet.id, &wallet)?;
+    owx.store().save("wallets", &wallet.id, &wallet)?;
     Ok(to_info(&wallet))
 }
 
@@ -163,7 +163,7 @@ pub fn import_mnemonic(
 /// (default: secp256k1). A random 32-byte key is generated for the other
 /// curve so all chain families get an address.
 pub fn import_private_key(
-    vault: &Vault,
+    owx: &Owx,
     name: &str,
     private_key_hex: &str,
     chain: Option<&str>,
@@ -171,7 +171,7 @@ pub fn import_private_key(
     secp256k1_hex: Option<&str>,
     ed25519_hex: Option<&str>,
 ) -> Result<WalletInfo, Error> {
-    ensure_name_available(vault, name)?;
+    ensure_name_available(owx, name)?;
 
     let (secp_bytes, ed_bytes) =
         resolve_key_pair(private_key_hex, chain, secp256k1_hex, ed25519_hex)?;
@@ -188,20 +188,20 @@ pub fn import_private_key(
         crypto_json,
         secret.key_type(),
     );
-    vault.store().save("wallets", &wallet.id, &wallet)?;
+    owx.store().save("wallets", &wallet.id, &wallet)?;
     Ok(to_info(&wallet))
 }
 
 /// Import a wallet from explicit dual-curve private keys.
 pub fn import_private_keys(
-    vault: &Vault,
+    owx: &Owx,
     name: &str,
     secp256k1_hex: &str,
     ed25519_hex: &str,
     passphrase: &str,
 ) -> Result<WalletInfo, Error> {
     import_private_key(
-        vault,
+        owx,
         name,
         "",
         None,
@@ -212,46 +212,46 @@ pub fn import_private_keys(
 }
 
 /// List all wallets (newest first).
-pub fn list_wallets(vault: &Vault) -> Result<Vec<WalletInfo>, Error> {
-    let mut wallets: Vec<EncryptedWallet> = vault.store().list("wallets")?;
+pub fn list_wallets(owx: &Owx) -> Result<Vec<WalletInfo>, Error> {
+    let mut wallets: Vec<EncryptedWallet> = owx.store().list("wallets")?;
     wallets.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     Ok(wallets.iter().map(to_info).collect())
 }
 
 /// Get a wallet by name or ID.
-pub fn get_wallet(vault: &Vault, name_or_id: &str) -> Result<WalletInfo, Error> {
-    Ok(to_info(&load_wallet(vault, name_or_id)?))
+pub fn get_wallet(owx: &Owx, name_or_id: &str) -> Result<WalletInfo, Error> {
+    Ok(to_info(&load_wallet(owx, name_or_id)?))
 }
 
 /// Delete a wallet.
-pub fn delete_wallet(vault: &Vault, name_or_id: &str) -> Result<(), Error> {
-    let w = load_wallet(vault, name_or_id)?;
-    vault.store().delete("wallets", &w.id)?;
+pub fn delete_wallet(owx: &Owx, name_or_id: &str) -> Result<(), Error> {
+    let w = load_wallet(owx, name_or_id)?;
+    owx.store().delete("wallets", &w.id)?;
     Ok(())
 }
 
 /// Rename a wallet.
-pub fn rename_wallet(vault: &Vault, name_or_id: &str, new_name: &str) -> Result<(), Error> {
-    let mut wallet = load_wallet(vault, name_or_id)?;
+pub fn rename_wallet(owx: &Owx, name_or_id: &str, new_name: &str) -> Result<(), Error> {
+    let mut wallet = load_wallet(owx, name_or_id)?;
     if wallet.name == new_name {
         return Ok(());
     }
-    ensure_name_available(vault, new_name)?;
+    ensure_name_available(owx, new_name)?;
     new_name.clone_into(&mut wallet.name);
-    vault.store().save("wallets", &wallet.id, &wallet)?;
+    owx.store().save("wallets", &wallet.id, &wallet)?;
     Ok(())
 }
 
 /// Export a wallet's secret (mnemonic phrase or JSON key pair).
-pub fn export_wallet(vault: &Vault, name_or_id: &str, passphrase: &str) -> Result<String, Error> {
-    let wallet = load_wallet(vault, name_or_id)?;
+pub fn export_wallet(owx: &Owx, name_or_id: &str, passphrase: &str) -> Result<String, Error> {
+    let wallet = load_wallet(owx, name_or_id)?;
     let secret = decrypt_secret(&wallet, passphrase)?;
     secret.export_string()
 }
 
 /// Derive an address for a specific chain from a wallet.
 pub fn derive_address(
-    vault: &Vault,
+    owx: &Owx,
     wallet_name_or_id: &str,
     chain: &str,
     passphrase: &str,
@@ -260,7 +260,7 @@ pub fn derive_address(
     let resolved = crate::chain::resolve(chain)?;
     let family = resolved.family();
     let chain_id = resolved.chain_id();
-    let wallet = load_wallet(vault, wallet_name_or_id)?;
+    let wallet = load_wallet(owx, wallet_name_or_id)?;
     let secret = decrypt_secret(&wallet, passphrase)?;
     let idx = index.unwrap_or(0);
 
@@ -285,8 +285,8 @@ pub fn derive_address(
 }
 
 /// Load an encrypted wallet by name or ID (internal).
-pub(crate) fn load_wallet(vault: &Vault, name_or_id: &str) -> Result<EncryptedWallet, Error> {
-    let wallets: Vec<EncryptedWallet> = vault.store().list("wallets")?;
+pub(crate) fn load_wallet(owx: &Owx, name_or_id: &str) -> Result<EncryptedWallet, Error> {
+    let wallets: Vec<EncryptedWallet> = owx.store().list("wallets")?;
 
     if let Some(w) = wallets.iter().find(|w| w.id == name_or_id) {
         return Ok(w.clone());
@@ -400,8 +400,8 @@ fn validate_key_len(bytes: &[u8], label: &str) -> Result<(), Error> {
 }
 
 /// Ensure no wallet with this name already exists.
-fn ensure_name_available(vault: &Vault, name: &str) -> Result<(), Error> {
-    let wallets: Vec<EncryptedWallet> = vault.store().list("wallets")?;
+fn ensure_name_available(owx: &Owx, name: &str) -> Result<(), Error> {
+    let wallets: Vec<EncryptedWallet> = owx.store().list("wallets")?;
     if wallets.iter().any(|w| w.name == name) {
         return Err(Error::WalletNameExists(name.to_owned()));
     }

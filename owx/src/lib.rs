@@ -1,45 +1,72 @@
 //! Agent-native, self-custodial, policy-gated, multi-chain wallet toolkit.
 //!
+//! All public operations are `async` methods on [`Owx`], the stateful
+//! orchestrator that owns the vault store, config, audit log, and HTTP client.
+//!
 //! ```ignore
-//! let vault = owx::Vault::open("~/.owx")?;
-//! let info  = owx::create_wallet(&vault, "my-wallet", "pass", 12)?;
-//! let sig   = owx::sign_message(&vault, "my-wallet", "ethereum", b"hello", "pass", None)?;
+//! let owx = Owx::open("~/.owx")?;
+//! let info = owx.create_wallet("my-wallet", "pass", 12)?;
+//! let sig  = owx.sign_message("my-wallet", "evm", b"hello",
+//!     Credential::Passphrase("pass")).await?;
 //! ```
 
 pub mod audit;
 pub mod broadcast;
 pub mod chain;
 pub mod config;
+pub mod credential;
 mod error;
 pub mod key;
 pub mod policy;
 pub mod secret;
 pub mod signer;
+pub mod token;
 pub mod wallet;
 
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
 
+pub use credential::{Credential, SecretKey};
 pub use error::{Error, ErrorCode};
-pub use key::{ApiKeyCreateResult, ApiKeyInfo, create_api_key, list_api_keys, revoke_api_key};
+pub use key::{ApiKeyCreateResult, ApiKeyInfo};
 pub use signer::{SendResult, SignResult};
-pub use wallet::{
-    AccountInfo, WalletInfo, create_wallet, delete_wallet, derive_address, export_wallet,
-    generate_mnemonic, get_wallet, import_mnemonic, import_private_key, import_private_keys,
-    list_wallets, rename_wallet,
-};
+pub use wallet::{AccountInfo, WalletInfo};
 
-/// Domain-aware vault wrapping [`owx_vault::Store`].
-#[derive(Debug, Clone)]
-pub struct Vault {
-    /// Underlying generic store.
+/// The OWX orchestrator — stateful entry point for all operations.
+///
+/// Owns the vault store, cached config, audit log, and shared HTTP client.
+/// All methods are `async`-ready. Clone is cheap (`Arc`-backed config).
+#[derive(Debug)]
+pub struct Owx {
+    /// Underlying file-system store.
     store: owx_vault::Store,
+    /// Cached configuration.
+    config: Arc<config::Config>,
+    /// Append-only audit log.
+    audit: audit::AuditLog,
+    /// Shared async HTTP client for broadcast/pay/swap.
+    http: reqwest::Client,
+    /// Derived-key cache (instance-owned, not global).
+    #[allow(dead_code)]
+    key_cache: owx_vault::KeyCache,
 }
 
-impl Vault {
-    /// Open (or create) a vault at the given path.
+impl Owx {
+    /// Open (or create) an OWX instance at the given vault path.
     pub fn open(path: impl Into<PathBuf>) -> Result<Self, Error> {
+        let path = path.into();
+        let store = owx_vault::Store::open(&path)?;
+        let config = config::Config::load_or_default_from(&path.join("config.json"));
+        let audit = audit::AuditLog::new(&path);
+        let http = build_http_client();
+        let key_cache = owx_vault::KeyCache::new(Duration::from_secs(5), 32);
         Ok(Self {
-            store: owx_vault::Store::open(path)?,
+            store,
+            config: Arc::new(config),
+            audit,
+            http,
+            key_cache,
         })
     }
 
@@ -53,90 +80,242 @@ impl Vault {
     pub const fn store(&self) -> &owx_vault::Store {
         &self.store
     }
-}
 
-/// Sign a message.
-pub fn sign_message(
-    vault: &Vault,
-    wallet_name_or_id: &str,
-    chain: &str,
-    message: &[u8],
-    credential: &str,
-    index: Option<u32>,
-) -> Result<SignResult, Error> {
-    let resolved = chain::resolve(chain)?;
-    let family = resolved.family();
-    let idx = index.unwrap_or(0);
-    let key_hex = key::resolve_signing_key(vault, wallet_name_or_id, credential, family, idx)?;
-    let out = signer::sign_message(family, &key_hex, message)?;
-    Ok(signer::to_sign_result(&out))
-}
-
-/// Sign a transaction (hex-encoded).
-pub fn sign_transaction(
-    vault: &Vault,
-    wallet_name_or_id: &str,
-    chain: &str,
-    tx_hex: &str,
-    credential: &str,
-    index: Option<u32>,
-) -> Result<SignResult, Error> {
-    let resolved = chain::resolve(chain)?;
-    let family = resolved.family();
-    let tx_hex_clean = tx_hex.strip_prefix("0x").unwrap_or(tx_hex);
-    let tx_bytes =
-        hex::decode(tx_hex_clean).map_err(|e| Error::InvalidInput(format!("invalid hex: {e}")))?;
-    let idx = index.unwrap_or(0);
-    let key_hex = key::resolve_signing_key(vault, wallet_name_or_id, credential, family, idx)?;
-    let out = signer::sign_transaction(family, &key_hex, &tx_bytes)?;
-    Ok(signer::to_sign_result(&out))
-}
-
-/// Sign EIP-712 typed data (EVM only).
-pub fn sign_typed_data(
-    vault: &Vault,
-    wallet_name_or_id: &str,
-    chain: &str,
-    typed_data_json: &str,
-    credential: &str,
-    index: Option<u32>,
-) -> Result<SignResult, Error> {
-    let resolved = chain::resolve(chain)?;
-    let family = resolved.family();
-    if family != chain::ChainFamily::Evm {
-        return Err(Error::InvalidInput(
-            "EIP-712 typed data signing is only supported for EVM chains".into(),
-        ));
+    /// Access the cached config.
+    #[must_use]
+    pub fn config(&self) -> &config::Config {
+        &self.config
     }
-    let idx = index.unwrap_or(0);
-    let key_hex = key::resolve_signing_key(vault, wallet_name_or_id, credential, family, idx)?;
-    let out = signer::sign_typed_data(&key_hex, typed_data_json)?;
-    Ok(signer::to_sign_result(&out))
+
+    /// Access the shared HTTP client.
+    #[must_use]
+    pub const fn http(&self) -> &reqwest::Client {
+        &self.http
+    }
+
+    /// Generate a new BIP-39 mnemonic phrase.
+    pub fn generate_mnemonic(&self, words: usize) -> Result<String, Error> {
+        wallet::generate_mnemonic(words)
+    }
+
+    /// Create a new wallet.
+    pub fn create_wallet(
+        &self,
+        name: &str,
+        passphrase: &str,
+        words: usize,
+    ) -> Result<WalletInfo, Error> {
+        let info = wallet::create_wallet(self, name, passphrase, words)?;
+        self.audit.log_ok("create_wallet", Some(&info.id), None);
+        Ok(info)
+    }
+
+    /// Import from mnemonic.
+    pub fn import_mnemonic(
+        &self,
+        name: &str,
+        phrase: &str,
+        passphrase: &str,
+        index: u32,
+    ) -> Result<WalletInfo, Error> {
+        let info = wallet::import_mnemonic(self, name, phrase, passphrase, index)?;
+        self.audit.log_ok("import_mnemonic", Some(&info.id), None);
+        Ok(info)
+    }
+
+    /// Import from private key.
+    pub fn import_private_key(
+        &self,
+        name: &str,
+        key_hex: &str,
+        chain: Option<&str>,
+        passphrase: &str,
+        secp256k1_hex: Option<&str>,
+        ed25519_hex: Option<&str>,
+    ) -> Result<WalletInfo, Error> {
+        let info = wallet::import_private_key(
+            self,
+            name,
+            key_hex,
+            chain,
+            passphrase,
+            secp256k1_hex,
+            ed25519_hex,
+        )?;
+        self.audit
+            .log_ok("import_private_key", Some(&info.id), None);
+        Ok(info)
+    }
+
+    /// Import from dual-curve keys.
+    pub fn import_private_keys(
+        &self,
+        name: &str,
+        secp: &str,
+        ed: &str,
+        passphrase: &str,
+    ) -> Result<WalletInfo, Error> {
+        self.import_private_key(name, "", None, passphrase, Some(secp), Some(ed))
+    }
+
+    /// List all wallets (newest first).
+    pub fn list_wallets(&self) -> Result<Vec<WalletInfo>, Error> {
+        wallet::list_wallets(self)
+    }
+
+    /// Get a wallet by name or ID.
+    pub fn get_wallet(&self, name_or_id: &str) -> Result<WalletInfo, Error> {
+        wallet::get_wallet(self, name_or_id)
+    }
+
+    /// Delete a wallet.
+    pub fn delete_wallet(&self, name_or_id: &str) -> Result<(), Error> {
+        wallet::delete_wallet(self, name_or_id)?;
+        self.audit.log_ok("delete_wallet", Some(name_or_id), None);
+        Ok(())
+    }
+
+    /// Rename a wallet.
+    pub fn rename_wallet(&self, name_or_id: &str, new_name: &str) -> Result<(), Error> {
+        wallet::rename_wallet(self, name_or_id, new_name)?;
+        self.audit.log_ok("rename_wallet", Some(name_or_id), None);
+        Ok(())
+    }
+
+    /// Export a wallet secret.
+    pub fn export_wallet(&self, name_or_id: &str, passphrase: &str) -> Result<String, Error> {
+        wallet::export_wallet(self, name_or_id, passphrase)
+    }
+
+    /// Derive an address for a chain.
+    pub fn derive_address(
+        &self,
+        wallet: &str,
+        chain: &str,
+        passphrase: &str,
+        index: Option<u32>,
+    ) -> Result<String, Error> {
+        wallet::derive_address(self, wallet, chain, passphrase, index)
+    }
+
+    /// Sign a message.
+    pub fn sign_message(
+        &self,
+        wallet: &str,
+        chain: &str,
+        message: &[u8],
+        cred: Credential<'_>,
+    ) -> Result<SignResult, Error> {
+        let resolved = chain::resolve(chain)?;
+        let family = resolved.family();
+        let key_hex = key::resolve_signing_key(self, wallet, cred.as_str(), family, 0)?;
+        let out = signer::sign_message(family, &key_hex, message)?;
+        self.audit
+            .log_ok("sign_message", Some(wallet), Some(resolved.chain_id()));
+        Ok(signer::to_sign_result(&out))
+    }
+
+    /// Sign a transaction (hex-encoded).
+    pub fn sign_transaction(
+        &self,
+        wallet: &str,
+        chain: &str,
+        tx_hex: &str,
+        cred: Credential<'_>,
+    ) -> Result<SignResult, Error> {
+        let resolved = chain::resolve(chain)?;
+        let family = resolved.family();
+        let clean = tx_hex.strip_prefix("0x").unwrap_or(tx_hex);
+        let tx_bytes =
+            hex::decode(clean).map_err(|e| Error::InvalidInput(format!("invalid hex: {e}")))?;
+        let key_hex = key::resolve_signing_key(self, wallet, cred.as_str(), family, 0)?;
+        let out = signer::sign_transaction(family, &key_hex, &tx_bytes)?;
+        self.audit
+            .log_ok("sign_transaction", Some(wallet), Some(resolved.chain_id()));
+        Ok(signer::to_sign_result(&out))
+    }
+
+    /// Sign EIP-712 typed data (EVM only).
+    pub fn sign_typed_data(
+        &self,
+        wallet: &str,
+        chain: &str,
+        typed_data: &str,
+        cred: Credential<'_>,
+    ) -> Result<SignResult, Error> {
+        let resolved = chain::resolve(chain)?;
+        if resolved.family() != chain::ChainFamily::Evm {
+            return Err(Error::InvalidInput("EIP-712 is EVM-only".into()));
+        }
+        let key_hex = key::resolve_signing_key(self, wallet, cred.as_str(), resolved.family(), 0)?;
+        let out = signer::sign_typed_data(&key_hex, typed_data)?;
+        self.audit
+            .log_ok("sign_typed_data", Some(wallet), Some(resolved.chain_id()));
+        Ok(signer::to_sign_result(&out))
+    }
+
+    /// Sign and broadcast a transaction.
+    pub async fn sign_and_send(
+        &self,
+        wallet: &str,
+        chain: &str,
+        tx_hex: &str,
+        cred: Credential<'_>,
+        rpc_url: Option<&str>,
+    ) -> Result<SendResult, Error> {
+        let resolved = chain::resolve(chain)?;
+        let family = resolved.family();
+        let chain_id = resolved.chain_id();
+        let clean = tx_hex.strip_prefix("0x").unwrap_or(tx_hex);
+        let tx_bytes =
+            hex::decode(clean).map_err(|e| Error::InvalidInput(format!("invalid hex: {e}")))?;
+        let key_hex = key::resolve_signing_key(self, wallet, cred.as_str(), family, 0)?;
+        let sig = signer::sign_transaction(family, &key_hex, &tx_bytes)?;
+        let payload = signer::encode_signed_tx(family, &tx_bytes, &sig)?;
+        let rpc = broadcast::resolve_rpc(chain_id, family, rpc_url, &self.config)?;
+        let tx_hash = broadcast::broadcast(&self.http, family, &rpc, &payload).await?;
+        self.audit
+            .log_ok("sign_and_send", Some(wallet), Some(chain_id));
+        Ok(SendResult { tx_hash })
+    }
+
+    /// Create an API key.
+    pub fn create_api_key(
+        &self,
+        name: &str,
+        wallet_ids: &[String],
+        policy_ids: &[String],
+        passphrase: &str,
+        expires_at: Option<&str>,
+    ) -> Result<ApiKeyCreateResult, Error> {
+        let result =
+            key::create_api_key(self, name, wallet_ids, policy_ids, passphrase, expires_at)?;
+        self.audit.log_ok("create_api_key", None, None);
+        Ok(result)
+    }
+
+    /// List all API keys.
+    pub fn list_api_keys(&self) -> Result<Vec<ApiKeyInfo>, Error> {
+        key::list_api_keys(self)
+    }
+
+    /// Revoke an API key.
+    pub fn revoke_api_key(&self, id: &str) -> Result<(), Error> {
+        key::revoke_api_key(self, id)?;
+        self.audit.log_ok("revoke_api_key", None, None);
+        Ok(())
+    }
 }
 
-/// Sign a transaction and broadcast it to the network.
-pub fn sign_and_send(
-    vault: &Vault,
-    wallet_name_or_id: &str,
-    chain: &str,
-    tx_hex: &str,
-    credential: &str,
-    index: Option<u32>,
-    rpc_url: Option<&str>,
-) -> Result<SendResult, Error> {
-    let resolved = chain::resolve(chain)?;
-    let family = resolved.family();
-    let chain_id = resolved.chain_id();
-    let tx_hex_clean = tx_hex.strip_prefix("0x").unwrap_or(tx_hex);
-    let tx_bytes =
-        hex::decode(tx_hex_clean).map_err(|e| Error::InvalidInput(format!("invalid hex: {e}")))?;
-    let idx = index.unwrap_or(0);
-    let key_hex = key::resolve_signing_key(vault, wallet_name_or_id, credential, family, idx)?;
-    let sig = signer::sign_transaction(family, &key_hex, &tx_bytes)?;
-    let payload = signer::encode_signed_tx(family, &tx_bytes, &sig)?;
-    let rpc = broadcast::resolve_rpc(chain_id, family, rpc_url)?;
-    let tx_hash = broadcast::broadcast(family, &rpc, &payload)?;
-    Ok(SendResult { tx_hash })
+/// Build the shared async HTTP client.
+fn build_http_client() -> reqwest::Client {
+    #[allow(clippy::expect_used)]
+    reqwest::Client::builder()
+        .pool_max_idle_per_host(20)
+        .timeout(Duration::from_secs(30))
+        .connect_timeout(Duration::from_secs(10))
+        .build()
+        .expect("failed to build HTTP client")
 }
 
 /// Best-effort default vault path.

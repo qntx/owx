@@ -15,7 +15,7 @@ mod error;
 mod fund;
 mod x402;
 
-pub use bridge::{VaultBridge, WalletBridge};
+pub use bridge::{OwxBridge, WalletBridge};
 pub use discovery::{DiscoverResult, Service};
 pub use error::{PayError, PayErrorCode};
 pub use fund::{FundResult, TokenBalance};

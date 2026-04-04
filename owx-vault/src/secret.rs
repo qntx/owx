@@ -61,6 +61,12 @@ impl Drop for SecretBytes {
     }
 }
 
+impl AsRef<[u8]> for SecretBytes {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 impl std::fmt::Debug for SecretBytes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "SecretBytes([REDACTED; {} bytes])", self.0.len())

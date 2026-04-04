@@ -1,6 +1,6 @@
-//! Wallet bridge trait and vault-backed implementation.
+//! Wallet bridge trait and OWX-backed implementation.
 
-use owx::Vault;
+use owx::Owx;
 use owx::chain::ChainFamily;
 
 /// Trait abstracting wallet access for payment operations.
@@ -21,34 +21,33 @@ pub trait WalletBridge: Send + Sync {
     ) -> Result<String, owx::Error>;
 }
 
-/// Concrete [`WalletBridge`] backed by an OWX vault wallet.
-pub struct VaultBridge<'v> {
-    vault: &'v Vault,
+/// Concrete [`WalletBridge`] backed by an [`Owx`] instance.
+pub struct OwxBridge<'a> {
+    owx: &'a Owx,
     wallet: String,
     credential: String,
     index: u32,
 }
 
-impl std::fmt::Debug for VaultBridge<'_> {
+impl std::fmt::Debug for OwxBridge<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("VaultBridge")
+        f.debug_struct("OwxBridge")
             .field("wallet", &self.wallet)
-            .field("credential", &"[REDACTED]")
             .field("index", &self.index)
             .finish()
     }
 }
 
-impl<'v> VaultBridge<'v> {
+impl<'a> OwxBridge<'a> {
     /// Create a new bridge.
     pub fn new(
-        vault: &'v Vault,
+        owx: &'a Owx,
         wallet: impl Into<String>,
         credential: impl Into<String>,
         index: u32,
     ) -> Self {
         Self {
-            vault,
+            owx,
             wallet: wallet.into(),
             credential: credential.into(),
             index,
@@ -56,14 +55,11 @@ impl<'v> VaultBridge<'v> {
     }
 }
 
-impl WalletBridge for VaultBridge<'_> {
+impl WalletBridge for OwxBridge<'_> {
     fn supported_families(&self) -> Vec<ChainFamily> {
-        owx::list_wallets(self.vault)
+        self.owx
+            .get_wallet(&self.wallet)
             .ok()
-            .and_then(|ws| {
-                ws.into_iter()
-                    .find(|w| w.id == self.wallet || w.name == self.wallet)
-            })
             .map(|w| {
                 w.accounts
                     .iter()
@@ -80,7 +76,7 @@ impl WalletBridge for VaultBridge<'_> {
     }
 
     fn address(&self, network: &str) -> Result<String, owx::Error> {
-        let info = owx::get_wallet(self.vault, &self.wallet)?;
+        let info = self.owx.get_wallet(&self.wallet)?;
         info.accounts
             .iter()
             .find(|a| a.chain_id == network)
@@ -94,14 +90,10 @@ impl WalletBridge for VaultBridge<'_> {
         network: &str,
         payload: &str,
     ) -> Result<String, owx::Error> {
-        let result = owx::sign_typed_data(
-            self.vault,
-            &self.wallet,
-            network,
-            payload,
-            &self.credential,
-            Some(self.index),
-        )?;
+        let cred = owx::Credential::parse(&self.credential);
+        let result = self
+            .owx
+            .sign_typed_data(&self.wallet, network, payload, cred)?;
         let sig_bytes = hex::decode(&result.signature)
             .map_err(|e| owx::Error::Signing(format!("invalid sig hex: {e}")))?;
         let full = if sig_bytes.len() == 64 {

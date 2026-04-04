@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
-use owx::Vault;
+use owx::Owx;
 
 #[derive(Parser)]
 #[command(
@@ -187,34 +187,34 @@ enum PolicyAction {
 #[allow(clippy::print_stderr)]
 fn main() {
     let cli = Cli::parse();
-    let vault = match &cli.vault {
-        Some(path) => Vault::open(path),
-        None => Vault::open_default(),
+    let owx = match &cli.vault {
+        Some(path) => Owx::open(path),
+        None => Owx::open_default(),
     };
-    let vault = match vault {
+    let owx = match owx {
         Ok(v) => v,
         Err(e) => exit_with_error(&e),
     };
-    if let Err(e) = run(cli.command, &vault) {
+    if let Err(e) = run(cli.command, &owx) {
         eprintln!("{e}");
         std::process::exit(1);
     }
 }
 
 #[allow(clippy::print_stdout)]
-fn run(cmd: Commands, vault: &Vault) -> Result<(), Box<dyn std::error::Error>> {
+fn run(cmd: Commands, owx: &Owx) -> Result<(), Box<dyn std::error::Error>> {
     match cmd {
-        Commands::Wallet { action } => run_wallet(action, vault)?,
-        Commands::Key { action } => run_key(action, vault)?,
-        Commands::Sign { action } => run_sign(action, vault)?,
+        Commands::Wallet { action } => run_wallet(action, owx)?,
+        Commands::Key { action } => run_key(action, owx)?,
+        Commands::Sign { action } => run_sign(action, owx)?,
         Commands::Derive { chain, index } => {
             let wallet_name = read_line("Wallet name or ID: ");
             let pass = read_line("Passphrase: ");
-            let address = owx::derive_address(vault, &wallet_name, &chain, &pass, Some(index))?;
+            let address = owx.derive_address(&wallet_name, &chain, &pass, Some(index))?;
             print_json(&serde_json::json!({ "chain": chain, "index": index, "address": address }))?;
         }
         Commands::Generate { words } => {
-            let phrase = owx::generate_mnemonic(words as usize)?;
+            let phrase = owx.generate_mnemonic(words as usize)?;
             print_json(&serde_json::json!({ "mnemonic": phrase }))?;
         }
         Commands::Send {
@@ -223,15 +223,17 @@ fn run(cmd: Commands, vault: &Vault) -> Result<(), Box<dyn std::error::Error>> {
             tx_hex,
             rpc,
         } => {
-            let cred = read_line("Passphrase or API token: ");
+            let cred_str = read_line("Passphrase or API token: ");
+            let cred = owx::Credential::parse(&cred_str);
+            let rt = tokio::runtime::Runtime::new()?;
             let result =
-                owx::sign_and_send(vault, &wallet, &chain, &tx_hex, &cred, None, rpc.as_deref())?;
+                rt.block_on(owx.sign_and_send(&wallet, &chain, &tx_hex, cred, rpc.as_deref()))?;
             print_json(&result)?;
         }
         Commands::Pay { url, method, body } => {
             let wallet_name = read_line("Wallet name or ID: ");
             let cred = read_line("Passphrase or API token: ");
-            let bridge = owx_pay::VaultBridge::new(vault, &wallet_name, &cred, 0);
+            let bridge = owx_pay::OwxBridge::new(owx, &wallet_name, &cred, 0);
             let result = owx_pay::pay(&bridge, &url, &method, body.as_deref())?;
             print_json(&result)?;
         }
@@ -240,22 +242,22 @@ fn run(cmd: Commands, vault: &Vault) -> Result<(), Box<dyn std::error::Error>> {
             print_json(&result)?;
         }
         Commands::Fund { chain, token } => {
-            let evm_addr = first_evm_address(vault)?;
+            let evm_addr = first_evm_address(owx)?;
             let result = owx_pay::fund(&evm_addr, Some(&chain), Some(&token))?;
             print_json(&result)?;
         }
         Commands::Balance { chain } => {
-            let evm_addr = first_evm_address(vault)?;
+            let evm_addr = first_evm_address(owx)?;
             let balances = owx_pay::get_balances(&evm_addr, Some(&chain))?;
             print_json(&balances)?;
         }
-        Commands::Policy { action } => run_policy(action, vault)?,
+        Commands::Policy { action } => run_policy(action, owx)?,
     }
     Ok(())
 }
 
-fn first_evm_address(vault: &Vault) -> Result<String, owx::Error> {
-    let wallets = owx::list_wallets(vault)?;
+fn first_evm_address(owx: &Owx) -> Result<String, owx::Error> {
+    let wallets = owx.list_wallets()?;
     let w = wallets
         .first()
         .ok_or_else(|| owx::Error::InvalidInput("no wallets found".into()))?;
@@ -267,27 +269,19 @@ fn first_evm_address(vault: &Vault) -> Result<String, owx::Error> {
 }
 
 #[allow(clippy::print_stdout)]
-fn run_wallet(action: WalletAction, vault: &Vault) -> Result<(), owx::Error> {
+fn run_wallet(action: WalletAction, owx: &Owx) -> Result<(), owx::Error> {
     match action {
         WalletAction::Create { name, words } => {
             let pass = read_line("Passphrase: ");
-            print_json(&owx::create_wallet(vault, &name, &pass, words)?)
+            print_json(&owx.create_wallet(&name, &pass, words)?)
         }
         WalletAction::Import { name, mnemonic } => {
             let pass = read_line("Passphrase: ");
-            print_json(&owx::import_mnemonic(vault, &name, &mnemonic, &pass, 0)?)
+            print_json(&owx.import_mnemonic(&name, &mnemonic, &pass, 0)?)
         }
         WalletAction::ImportKey { name, key, chain } => {
             let pass = read_line("Passphrase: ");
-            print_json(&owx::import_private_key(
-                vault,
-                &name,
-                &key,
-                chain.as_deref(),
-                &pass,
-                None,
-                None,
-            )?)
+            print_json(&owx.import_private_key(&name, &key, chain.as_deref(), &pass, None, None)?)
         }
         WalletAction::ImportKeys {
             name,
@@ -295,29 +289,27 @@ fn run_wallet(action: WalletAction, vault: &Vault) -> Result<(), owx::Error> {
             ed25519,
         } => {
             let pass = read_line("Passphrase: ");
-            print_json(&owx::import_private_keys(
-                vault, &name, &secp256k1, &ed25519, &pass,
-            )?)
+            print_json(&owx.import_private_keys(&name, &secp256k1, &ed25519, &pass)?)
         }
-        WalletAction::List => print_json(&owx::list_wallets(vault)?),
-        WalletAction::Info { name } => print_json(&owx::get_wallet(vault, &name)?),
+        WalletAction::List => print_json(&owx.list_wallets()?),
+        WalletAction::Info { name } => print_json(&owx.get_wallet(&name)?),
         WalletAction::Export { name } => {
             let pass = read_line("Passphrase: ");
-            print_json(&owx::export_wallet(vault, &name, &pass)?)
+            print_json(&owx.export_wallet(&name, &pass)?)
         }
         WalletAction::Rename { name, new_name } => {
-            owx::rename_wallet(vault, &name, &new_name)?;
+            owx.rename_wallet(&name, &new_name)?;
             print_json(&serde_json::json!({ "status": "renamed", "name": new_name }))
         }
         WalletAction::Delete { name } => {
-            owx::delete_wallet(vault, &name)?;
+            owx.delete_wallet(&name)?;
             print_json(&serde_json::json!({ "status": "deleted", "name": name }))
         }
     }
 }
 
 #[allow(clippy::print_stdout)]
-fn run_key(action: KeyAction, vault: &Vault) -> Result<(), owx::Error> {
+fn run_key(action: KeyAction, owx: &Owx) -> Result<(), owx::Error> {
     match action {
         KeyAction::Create {
             name,
@@ -326,26 +318,20 @@ fn run_key(action: KeyAction, vault: &Vault) -> Result<(), owx::Error> {
             expires,
         } => {
             let pass = read_line("Owner passphrase: ");
-            print_json(&owx::create_api_key(
-                vault,
-                &name,
-                &wallet,
-                &policy,
-                &pass,
-                expires.as_deref(),
-            )?)
+            print_json(&owx.create_api_key(&name, &wallet, &policy, &pass, expires.as_deref())?)
         }
-        KeyAction::List => print_json(&owx::list_api_keys(vault)?),
+        KeyAction::List => print_json(&owx.list_api_keys()?),
         KeyAction::Revoke { id } => {
-            owx::revoke_api_key(vault, &id)?;
+            owx.revoke_api_key(&id)?;
             print_json(&serde_json::json!({ "status": "revoked", "id": id }))
         }
     }
 }
 
 #[allow(clippy::print_stdout)]
-fn run_sign(action: SignAction, vault: &Vault) -> Result<(), owx::Error> {
-    let cred = read_line("Passphrase or API token: ");
+fn run_sign(action: SignAction, owx: &Owx) -> Result<(), owx::Error> {
+    let cred_str = read_line("Passphrase or API token: ");
+    let cred = owx::Credential::parse(&cred_str);
     match action {
         SignAction::Message {
             wallet,
@@ -358,23 +344,19 @@ fn run_sign(action: SignAction, vault: &Vault) -> Result<(), owx::Error> {
                     .map_err(|e| owx::Error::InvalidInput(format!("invalid hex: {e}")))?,
                 _ => message.into_bytes(),
             };
-            print_json(&owx::sign_message(
-                vault, &wallet, &chain, &msg_bytes, &cred, None,
-            )?)
+            print_json(&owx.sign_message(&wallet, &chain, &msg_bytes, cred)?)
         }
         SignAction::Transaction {
             wallet,
             chain,
             tx_hex,
-        } => print_json(&owx::sign_transaction(
-            vault, &wallet, &chain, &tx_hex, &cred, None,
-        )?),
+        } => print_json(&owx.sign_transaction(&wallet, &chain, &tx_hex, cred)?),
     }
 }
 
 #[allow(clippy::print_stdout)]
-fn run_policy(action: PolicyAction, vault: &Vault) -> Result<(), owx::Error> {
-    let store = vault.store();
+fn run_policy(action: PolicyAction, owx: &Owx) -> Result<(), owx::Error> {
+    let store = owx.store();
     match action {
         PolicyAction::Create { id, json } => {
             store.save_raw("policies", &id, &json)?;
