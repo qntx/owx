@@ -177,3 +177,135 @@ fn set_file_permissions(path: &Path) {
     }
     let _ = path;
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use serde::{Deserialize, Serialize};
+
+    use super::*;
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    struct TestItem {
+        id: String,
+        value: u32,
+    }
+
+    #[test]
+    fn save_load_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let item = TestItem {
+            id: "abc".into(),
+            value: 42,
+        };
+        store.save("items", "abc", &item).unwrap();
+        let loaded: TestItem = store.load("items", "abc").unwrap();
+        assert_eq!(loaded, item);
+    }
+
+    #[test]
+    fn list_returns_all() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        store
+            .save(
+                "items",
+                "a",
+                &TestItem {
+                    id: "a".into(),
+                    value: 1,
+                },
+            )
+            .unwrap();
+        store
+            .save(
+                "items",
+                "b",
+                &TestItem {
+                    id: "b".into(),
+                    value: 2,
+                },
+            )
+            .unwrap();
+        let items: Vec<TestItem> = store.list("items").unwrap();
+        assert_eq!(items.len(), 2);
+    }
+
+    #[test]
+    fn delete_removes_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        store
+            .save(
+                "items",
+                "x",
+                &TestItem {
+                    id: "x".into(),
+                    value: 1,
+                },
+            )
+            .unwrap();
+        assert!(store.exists("items", "x"));
+        store.delete("items", "x").unwrap();
+        assert!(!store.exists("items", "x"));
+    }
+
+    #[test]
+    fn load_not_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let result: Result<TestItem, _> = store.load("items", "missing");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn path_traversal_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        assert!(
+            store
+                .save(
+                    "items",
+                    "../escape",
+                    &TestItem {
+                        id: "x".into(),
+                        value: 0
+                    }
+                )
+                .is_err()
+        );
+        assert!(
+            store
+                .save(
+                    "items",
+                    "a/b",
+                    &TestItem {
+                        id: "x".into(),
+                        value: 0
+                    }
+                )
+                .is_err()
+        );
+        assert!(
+            store
+                .save(
+                    "items",
+                    "..",
+                    &TestItem {
+                        id: "x".into(),
+                        value: 0
+                    }
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn list_empty_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let items: Vec<TestItem> = store.list("nonexistent").unwrap();
+        assert!(items.is_empty());
+    }
+}

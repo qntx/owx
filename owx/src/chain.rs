@@ -29,7 +29,7 @@ macro_rules! for_each_chain {
             [ Spark,     "spark",    "spark",   8_797_555, false, signer::spark::Signer   ],
             [ Filecoin,  "filecoin", "fil",     461,       false, signer::fil::Signer     ],
             [ Sui,       "sui",      "sui",     784,       true,  signer::sui::Signer     ],
-            [ Xrpl,      "xrpl",     "xrpl",   144,       false, signer::xrpl::Signer    ],
+            [ Xrpl,      "xrpl",     "xrpl",    144,       false, signer::xrpl::Signer    ],
         }
     };
 }
@@ -406,4 +406,91 @@ pub fn default_chain(family: ChainFamily) -> &'static Chain {
         .iter()
         .find(|c| c.family == family)
         .expect("all families have a default chain")
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_known_by_name() {
+        let r = resolve("ethereum").unwrap();
+        assert_eq!(r.family(), ChainFamily::Evm);
+        assert_eq!(r.chain_id(), "eip155:1");
+    }
+
+    #[test]
+    fn resolve_evm_alias() {
+        let r = resolve("evm").unwrap();
+        assert_eq!(r.name(), "ethereum");
+    }
+
+    #[test]
+    fn resolve_caip2() {
+        let r = resolve("eip155:42161").unwrap();
+        assert_eq!(r.name(), "arbitrum");
+    }
+
+    #[test]
+    fn resolve_dynamic_caip2() {
+        let r = resolve("eip155:99999").unwrap();
+        assert_eq!(r.family(), ChainFamily::Evm);
+        assert_eq!(r.chain_id(), "eip155:99999");
+    }
+
+    #[test]
+    fn resolve_all_known_chains() {
+        for chain in KNOWN {
+            let r = resolve(chain.name).unwrap();
+            assert_eq!(r.family(), chain.family);
+            assert_eq!(r.chain_id(), chain.chain_id);
+        }
+    }
+
+    #[test]
+    fn resolve_unknown_fails() {
+        assert!(resolve("unknown_chain").is_err());
+    }
+
+    #[test]
+    fn chain_family_from_namespace_roundtrip() {
+        for &fam in &ALL_FAMILIES {
+            let ns = fam.namespace();
+            assert_eq!(ChainFamily::from_namespace(ns), Some(fam));
+        }
+    }
+
+    #[test]
+    fn chain_family_display_parse_roundtrip() {
+        for &fam in &ALL_FAMILIES {
+            let s = fam.to_string();
+            let parsed: ChainFamily = s.parse().unwrap();
+            assert_eq!(parsed, fam);
+        }
+    }
+
+    #[test]
+    fn chain_id_parse_valid() {
+        let id: ChainId = "eip155:1".parse().unwrap();
+        assert_eq!(id.namespace, "eip155");
+        assert_eq!(id.reference, "1");
+        assert_eq!(id.to_string(), "eip155:1");
+    }
+
+    #[test]
+    fn chain_id_reject_invalid() {
+        assert!("".parse::<ChainId>().is_err());
+        assert!("ab:1".parse::<ChainId>().is_err());
+        assert!("eip1551".parse::<ChainId>().is_err());
+        assert!("EIP155:1".parse::<ChainId>().is_err());
+    }
+
+    #[test]
+    fn default_chain_all_families() {
+        for &fam in &ALL_FAMILIES {
+            let chain = default_chain(fam);
+            assert_eq!(chain.family, fam);
+        }
+    }
 }
