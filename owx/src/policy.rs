@@ -339,3 +339,195 @@ pub fn list_policies(store: &owx_vault::Store) -> Result<Vec<Policy>, Error> {
     policies.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(policies)
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    fn test_policy(id: &str, rules: Vec<PolicyRule>) -> Policy {
+        Policy {
+            id: id.to_owned(),
+            name: id.to_owned(),
+            version: 1,
+            created_at: "2026-01-01T00:00:00Z".to_owned(),
+            rules,
+            executable: None,
+            config: None,
+            action: PolicyAction::Deny,
+            timeout_seconds: None,
+        }
+    }
+
+    fn test_ctx() -> PolicyContext {
+        PolicyContext {
+            chain_id: "eip155:8453".to_owned(),
+            wallet_id: "w1".to_owned(),
+            api_key_id: "k1".to_owned(),
+            transaction: TransactionContext {
+                to: Some("0xRecipient".to_owned()),
+                value: Some("100000".to_owned()),
+                raw_hex: "0xdead".to_owned(),
+                data: None,
+            },
+            spending: SpendingContext {
+                daily_total: "50000".to_owned(),
+                date: "2026-01-01".to_owned(),
+            },
+            timestamp: "2026-01-01T12:00:00Z".to_owned(),
+        }
+    }
+
+    #[test]
+    fn allowed_chains_pass() {
+        let p = test_policy(
+            "p1",
+            vec![PolicyRule::AllowedChains {
+                chain_ids: vec!["eip155:8453".into()],
+            }],
+        );
+        assert!(evaluate(&[p], &test_ctx()).allow);
+    }
+
+    #[test]
+    fn allowed_chains_deny() {
+        let p = test_policy(
+            "p1",
+            vec![PolicyRule::AllowedChains {
+                chain_ids: vec!["eip155:1".into()],
+            }],
+        );
+        let r = evaluate(&[p], &test_ctx());
+        assert!(!r.allow);
+        assert!(r.reason.unwrap().contains("not in allowlist"));
+    }
+
+    #[test]
+    fn expires_at_pass() {
+        let p = test_policy(
+            "p1",
+            vec![PolicyRule::ExpiresAt {
+                timestamp: "2027-01-01T00:00:00Z".to_owned(),
+            }],
+        );
+        assert!(evaluate(&[p], &test_ctx()).allow);
+    }
+
+    #[test]
+    fn expires_at_deny() {
+        let p = test_policy(
+            "p1",
+            vec![PolicyRule::ExpiresAt {
+                timestamp: "2025-01-01T00:00:00Z".to_owned(),
+            }],
+        );
+        assert!(!evaluate(&[p], &test_ctx()).allow);
+    }
+
+    #[test]
+    fn max_amount_pass() {
+        let p = test_policy(
+            "p1",
+            vec![PolicyRule::MaxAmount {
+                amount: "200000".to_owned(),
+                asset: "native".to_owned(),
+            }],
+        );
+        assert!(evaluate(&[p], &test_ctx()).allow);
+    }
+
+    #[test]
+    fn max_amount_deny() {
+        let p = test_policy(
+            "p1",
+            vec![PolicyRule::MaxAmount {
+                amount: "50000".to_owned(),
+                asset: "native".to_owned(),
+            }],
+        );
+        assert!(!evaluate(&[p], &test_ctx()).allow);
+    }
+
+    #[test]
+    fn daily_limit_pass() {
+        let p = test_policy(
+            "p1",
+            vec![PolicyRule::DailyLimit {
+                amount: "100000".to_owned(),
+                asset: "native".to_owned(),
+            }],
+        );
+        assert!(evaluate(&[p], &test_ctx()).allow);
+    }
+
+    #[test]
+    fn daily_limit_deny() {
+        let p = test_policy(
+            "p1",
+            vec![PolicyRule::DailyLimit {
+                amount: "10000".to_owned(),
+                asset: "native".to_owned(),
+            }],
+        );
+        assert!(!evaluate(&[p], &test_ctx()).allow);
+    }
+
+    #[test]
+    fn allowed_recipients_pass() {
+        let p = test_policy(
+            "p1",
+            vec![PolicyRule::AllowedRecipients {
+                addresses: vec!["0xRecipient".into()],
+            }],
+        );
+        assert!(evaluate(&[p], &test_ctx()).allow);
+    }
+
+    #[test]
+    fn allowed_recipients_deny() {
+        let p = test_policy(
+            "p1",
+            vec![PolicyRule::AllowedRecipients {
+                addresses: vec!["0xOther".into()],
+            }],
+        );
+        assert!(!evaluate(&[p], &test_ctx()).allow);
+    }
+
+    #[test]
+    fn and_semantics_short_circuits() {
+        let policies = vec![
+            test_policy(
+                "pass",
+                vec![PolicyRule::AllowedChains {
+                    chain_ids: vec!["eip155:8453".into()],
+                }],
+            ),
+            test_policy(
+                "fail",
+                vec![PolicyRule::AllowedChains {
+                    chain_ids: vec!["eip155:1".into()],
+                }],
+            ),
+        ];
+        let r = evaluate(&policies, &test_ctx());
+        assert!(!r.allow);
+        assert_eq!(r.policy_id.unwrap(), "fail");
+    }
+
+    #[test]
+    fn empty_policies_allow() {
+        assert!(evaluate(&[], &test_ctx()).allow);
+    }
+
+    #[test]
+    fn recipients_case_insensitive() {
+        let p = test_policy(
+            "p1",
+            vec![PolicyRule::AllowedRecipients {
+                addresses: vec!["0xrecipient".into()],
+            }],
+        );
+        assert!(evaluate(&[p], &test_ctx()).allow);
+    }
+}

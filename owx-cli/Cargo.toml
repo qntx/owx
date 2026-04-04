@@ -13,6 +13,11 @@ categories.workspace = true
 name = "owx"
 path = "src/main.rs"
 
+[features]
+default = ["pay", "moonpay"]
+pay = ["owx-pay/x402"]
+moonpay = ["owx-pay/moonpay"]
+
 [dependencies]
 owx.workspace = true
 owx-pay.workspace = true

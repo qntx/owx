@@ -9,6 +9,12 @@ readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
+[features]
+default = ["x402"]
+x402 = []
+moonpay = []
+full = ["x402", "moonpay"]
+
 [dependencies]
 owx.workspace = true
 base64.workspace = true

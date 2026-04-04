@@ -10,18 +10,27 @@
 #![allow(clippy::missing_docs_in_private_items)]
 
 mod bridge;
-mod discovery;
 mod error;
-mod fund;
+
+#[cfg(feature = "x402")]
+mod discovery;
+#[cfg(feature = "x402")]
 mod x402;
 
+#[cfg(feature = "moonpay")]
+mod fund;
+
 pub use bridge::{OwxBridge, WalletBridge};
+#[cfg(feature = "x402")]
 pub use discovery::{DiscoverResult, Service};
 pub use error::{PayError, PayErrorCode};
+#[cfg(feature = "moonpay")]
 pub use fund::{FundResult, TokenBalance};
+#[cfg(feature = "x402")]
 pub use x402::{PayResult, PaymentInfo};
 
 /// Make an HTTP request with automatic x402 payment handling (blocking).
+#[cfg(feature = "x402")]
 pub fn pay(
     wallet: &dyn WalletBridge,
     url: &str,
@@ -32,6 +41,7 @@ pub fn pay(
 }
 
 /// Discover payable services.
+#[cfg(feature = "x402")]
 pub fn discover(
     query: Option<&str>,
     limit: Option<u64>,
@@ -41,6 +51,7 @@ pub fn discover(
 }
 
 /// Fund a wallet via MoonPay.
+#[cfg(feature = "moonpay")]
 pub fn fund(
     wallet_address: &str,
     chain: Option<&str>,
@@ -50,6 +61,7 @@ pub fn fund(
 }
 
 /// Check token balances via MoonPay.
+#[cfg(feature = "moonpay")]
 pub fn get_balances(
     wallet_address: &str,
     chain: Option<&str>,

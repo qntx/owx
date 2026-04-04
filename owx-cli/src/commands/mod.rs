@@ -8,7 +8,7 @@ pub mod wallet;
 use clap::Subcommand;
 use owx::Owx;
 
-use crate::output::{first_evm_address, print_json, read_line};
+use crate::output::{print_json, read_line};
 
 /// Top-level CLI commands.
 #[derive(Subcommand)]
@@ -48,6 +48,7 @@ pub enum Commands {
         rpc: Option<String>,
     },
     /// Make an HTTP request with automatic x402 payment.
+    #[cfg(feature = "pay")]
     Pay {
         url: String,
         #[arg(long, default_value = "GET")]
@@ -56,6 +57,7 @@ pub enum Commands {
         body: Option<String>,
     },
     /// Discover payable services.
+    #[cfg(feature = "pay")]
     Discover {
         #[arg(long)]
         query: Option<String>,
@@ -63,6 +65,7 @@ pub enum Commands {
         limit: u64,
     },
     /// Fund a wallet via MoonPay.
+    #[cfg(feature = "moonpay")]
     Fund {
         #[arg(long, default_value = "base")]
         chain: String,
@@ -70,6 +73,7 @@ pub enum Commands {
         token: String,
     },
     /// Check token balances via MoonPay.
+    #[cfg(feature = "moonpay")]
     Balance {
         #[arg(long, default_value = "base")]
         chain: String,
@@ -89,10 +93,10 @@ pub fn dispatch(cmd: Commands, owx: &Owx) -> Result<(), Box<dyn std::error::Erro
         Commands::Key { action } => key::run(action, owx)?,
         Commands::Sign { action } => sign::run(action, owx)?,
         Commands::Derive { chain, index } => {
-            let wallet_name = read_line("Wallet name or ID: ");
+            let wn = read_line("Wallet name or ID: ");
             let pass = read_line("Passphrase: ");
-            let address = owx.derive_address(&wallet_name, &chain, &pass, Some(index))?;
-            print_json(&serde_json::json!({ "chain": chain, "index": index, "address": address }))?;
+            let addr = owx.derive_address(&wn, &chain, &pass, Some(index))?;
+            print_json(&serde_json::json!({ "chain": chain, "index": index, "address": addr }))?;
         }
         Commands::Generate { words } => {
             let phrase = owx.generate_mnemonic(words as usize)?;
@@ -111,24 +115,28 @@ pub fn dispatch(cmd: Commands, owx: &Owx) -> Result<(), Box<dyn std::error::Erro
                 rt.block_on(owx.sign_and_send(&wallet, &chain, &tx_hex, cred, rpc.as_deref()))?;
             print_json(&result)?;
         }
+        #[cfg(feature = "pay")]
         Commands::Pay { url, method, body } => {
-            let wallet_name = read_line("Wallet name or ID: ");
+            let wn = read_line("Wallet name or ID: ");
             let cred = read_line("Passphrase or API token: ");
-            let bridge = owx_pay::OwxBridge::new(owx, &wallet_name, &cred, 0);
+            let bridge = owx_pay::OwxBridge::new(owx, &wn, &cred, 0);
             let result = owx_pay::pay(&bridge, &url, &method, body.as_deref())?;
             print_json(&result)?;
         }
+        #[cfg(feature = "pay")]
         Commands::Discover { query, limit } => {
             let result = owx_pay::discover(query.as_deref(), Some(limit), None)?;
             print_json(&result)?;
         }
+        #[cfg(feature = "moonpay")]
         Commands::Fund { chain, token } => {
-            let evm_addr = first_evm_address(owx)?;
+            let evm_addr = crate::output::first_evm_address(owx)?;
             let result = owx_pay::fund(&evm_addr, Some(&chain), Some(&token))?;
             print_json(&result)?;
         }
+        #[cfg(feature = "moonpay")]
         Commands::Balance { chain } => {
-            let evm_addr = first_evm_address(owx)?;
+            let evm_addr = crate::output::first_evm_address(owx)?;
             let balances = owx_pay::get_balances(&evm_addr, Some(&chain))?;
             print_json(&balances)?;
         }
