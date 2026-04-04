@@ -53,6 +53,9 @@ pub fn derive_account(
         ChainFamily::Sui => {
             kobe::Derive::derive(&kobe_sui::Deriver::new(wallet), index).map_err(d_err)
         }
+        ChainFamily::Xrpl => {
+            kobe::Derive::derive(&kobe_xrpl::Deriver::new(wallet), index).map_err(d_err)
+        }
     }
 }
 
@@ -78,6 +81,7 @@ pub fn sign_message(
         ChainFamily::Spark => sign!(signer::spark::Signer),
         ChainFamily::Filecoin => sign!(signer::fil::Signer),
         ChainFamily::Sui => sign!(signer::sui::Signer),
+        ChainFamily::Xrpl => sign!(signer::xrpl::Signer),
     }
 }
 
@@ -103,6 +107,7 @@ pub fn sign_transaction(
         ChainFamily::Spark => sign!(signer::spark::Signer),
         ChainFamily::Filecoin => sign!(signer::fil::Signer),
         ChainFamily::Sui => sign!(signer::sui::Signer),
+        ChainFamily::Xrpl => sign!(signer::xrpl::Signer),
     }
 }
 
@@ -129,21 +134,22 @@ pub fn encode_signed_tx(
     }
 }
 
-/// Derive an address from a hex private key (not all families support this).
+/// Derive an address from a hex private key.
 pub fn address_from_hex(family: ChainFamily, key_hex: &str) -> Result<String, Error> {
+    macro_rules! addr {
+        ($signer:path) => {{ Ok(<$signer>::from_hex(key_hex).map_err(s_err)?.address()) }};
+    }
     match family {
-        ChainFamily::Evm => Ok(signer::evm::Signer::from_hex(key_hex)
-            .map_err(s_err)?
-            .address()),
-        ChainFamily::Solana => Ok(signer::svm::Signer::from_hex(key_hex)
-            .map_err(s_err)?
-            .address()),
-        ChainFamily::Sui => Ok(signer::sui::Signer::from_hex(key_hex)
-            .map_err(s_err)?
-            .address()),
-        _ => Err(Error::InvalidInput(format!(
-            "address derivation from private key not supported for {family}"
-        ))),
+        ChainFamily::Evm => addr!(signer::evm::Signer),
+        ChainFamily::Bitcoin => addr!(signer::btc::Signer),
+        ChainFamily::Solana => addr!(signer::svm::Signer),
+        ChainFamily::Cosmos => addr!(signer::cosmos::Signer),
+        ChainFamily::Tron => addr!(signer::tron::Signer),
+        ChainFamily::Ton => addr!(signer::ton::Signer),
+        ChainFamily::Spark => addr!(signer::spark::Signer),
+        ChainFamily::Filecoin => addr!(signer::fil::Signer),
+        ChainFamily::Sui => addr!(signer::sui::Signer),
+        ChainFamily::Xrpl => addr!(signer::xrpl::Signer),
     }
 }
 
@@ -157,7 +163,7 @@ pub fn derive_private_key_hex(
     Ok(d.private_key.to_string())
 }
 
-/// Derive accounts for all 9 chain families from a mnemonic.
+/// Derive accounts for all 10 chain families from a mnemonic.
 pub fn derive_all_accounts(mnemonic: &str, index: u32) -> Result<Vec<WalletAccount>, Error> {
     let wallet = kobe::Wallet::from_mnemonic(mnemonic, None).map_err(d_err)?;
     let mut accounts = Vec::with_capacity(ALL_FAMILIES.len());

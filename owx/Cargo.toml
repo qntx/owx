@@ -22,17 +22,9 @@ kobe-sui.workspace = true
 kobe-svm.workspace = true
 kobe-ton.workspace = true
 kobe-tron.workspace = true
+kobe-xrpl.workspace = true
 
 signer.workspace = true
-signer-btc.workspace = true
-signer-cosmos.workspace = true
-signer-evm.workspace = true
-signer-fil.workspace = true
-signer-spark.workspace = true
-signer-sui.workspace = true
-signer-svm.workspace = true
-signer-ton.workspace = true
-signer-tron.workspace = true
 
 base64.workspace = true
 chrono.workspace = true
@@ -41,7 +33,6 @@ hex.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 zeroize.workspace = true

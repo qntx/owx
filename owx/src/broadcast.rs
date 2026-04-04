@@ -121,6 +121,32 @@ pub fn broadcast(family: ChainFamily, rpc_url: &str, payload: &[u8]) -> Result<S
                 .map(ToOwned::to_owned)
                 .ok_or_else(|| Error::BroadcastFailed(format!("no hash: {resp}")))
         }
+        ChainFamily::Sui => {
+            use base64::Engine as _;
+            let b64 = base64::engine::general_purpose::STANDARD.encode(payload);
+            let body = serde_json::json!({
+                "jsonrpc": "2.0", "method": "sui_executeTransactionBlock",
+                "params": [b64, [], null, null], "id": 1
+            });
+            let resp = post_json(rpc_url, &body)?;
+            extract_json_field(&resp, "result")
+        }
+        ChainFamily::Xrpl => {
+            let hex_tx = hex::encode(payload);
+            let body = serde_json::json!({
+                "method": "submit",
+                "params": [{ "tx_blob": hex_tx }]
+            });
+            let resp = post_json(rpc_url, &body)?;
+            let parsed: serde_json::Value = serde_json::from_str(&resp)?;
+            if let Some(hash) = parsed["result"]["tx_json"]["hash"].as_str() {
+                Ok(hash.to_owned())
+            } else {
+                Err(Error::BroadcastFailed(format!(
+                    "no tx hash in XRPL response: {resp}"
+                )))
+            }
+        }
         _ => Err(Error::BroadcastFailed(format!(
             "broadcast not yet supported for {family}"
         ))),

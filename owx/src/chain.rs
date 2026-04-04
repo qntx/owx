@@ -27,10 +27,12 @@ pub enum ChainFamily {
     Filecoin,
     /// Sui.
     Sui,
+    /// XRP Ledger.
+    Xrpl,
 }
 
 /// All supported chain families in canonical order.
-pub const ALL_FAMILIES: [ChainFamily; 9] = [
+pub const ALL_FAMILIES: [ChainFamily; 10] = [
     ChainFamily::Evm,
     ChainFamily::Bitcoin,
     ChainFamily::Solana,
@@ -40,6 +42,7 @@ pub const ALL_FAMILIES: [ChainFamily; 9] = [
     ChainFamily::Spark,
     ChainFamily::Filecoin,
     ChainFamily::Sui,
+    ChainFamily::Xrpl,
 ];
 
 /// A known chain with its family and CAIP-2 identifier.
@@ -79,6 +82,8 @@ const KNOWN: &[(&str, ChainFamily, &str)] = &[
     ("spark", ChainFamily::Spark, "spark:mainnet"),
     ("filecoin", ChainFamily::Filecoin, "fil:mainnet"),
     ("sui", ChainFamily::Sui, "sui:mainnet"),
+    ("etherlink", ChainFamily::Evm, "eip155:42793"),
+    ("xrpl", ChainFamily::Xrpl, "xrpl:mainnet"),
 ];
 
 /// Resolve a chain string into a [`Chain`].
@@ -156,6 +161,7 @@ impl ChainFamily {
             Self::Spark => "spark",
             Self::Filecoin => "fil",
             Self::Sui => "sui",
+            Self::Xrpl => "xrpl",
         }
     }
 
@@ -172,6 +178,7 @@ impl ChainFamily {
             "spark" => Some(Self::Spark),
             "fil" => Some(Self::Filecoin),
             "sui" => Some(Self::Sui),
+            "xrpl" => Some(Self::Xrpl),
             _ => None,
         }
     }
@@ -189,6 +196,7 @@ impl fmt::Display for ChainFamily {
             Self::Spark => "spark",
             Self::Filecoin => "filecoin",
             Self::Sui => "sui",
+            Self::Xrpl => "xrpl",
         })
     }
 }
@@ -207,6 +215,7 @@ impl FromStr for ChainFamily {
             "spark" => Ok(Self::Spark),
             "filecoin" => Ok(Self::Filecoin),
             "sui" => Ok(Self::Sui),
+            "xrpl" => Ok(Self::Xrpl),
             _ => Err(format!("unknown chain family: {s}")),
         }
     }

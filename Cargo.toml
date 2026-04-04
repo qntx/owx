@@ -17,29 +17,21 @@ readme = "README.md"
 owx = { version = "0.5", path = "owx" }
 owx-vault = { version = "0.5", path = "owx-vault" }
 
-# HD wallet derivation (all 9 chains)
-kobe = { version = "0.7.5", default-features = false, features = ["std", "rand"] }
-kobe-btc = { version = "0.7.5", default-features = false, features = ["std"] }
-kobe-cosmos = { version = "0.7.5", default-features = false, features = ["std"] }
-kobe-evm = { version = "0.7.5", default-features = false, features = ["std"] }
-kobe-fil = { version = "0.7.5", default-features = false, features = ["std"] }
-kobe-spark = { version = "0.7.5", default-features = false, features = ["std"] }
-kobe-sui = { version = "0.7.5", default-features = false, features = ["std"] }
-kobe-svm = { version = "0.7.5", default-features = false, features = ["std"] }
-kobe-ton = { version = "0.7.5", default-features = false, features = ["std"] }
-kobe-tron = { version = "0.7.5", default-features = false, features = ["std"] }
+# HD wallet derivation (all 10 chains)
+kobe = { version = "0.7.7", default-features = false, features = ["std", "rand"] }
+kobe-btc = { version = "0.7.7", default-features = false, features = ["std"] }
+kobe-cosmos = { version = "0.7.7", default-features = false, features = ["std"] }
+kobe-evm = { version = "0.7.7", default-features = false, features = ["std"] }
+kobe-fil = { version = "0.7.7", default-features = false, features = ["std"] }
+kobe-spark = { version = "0.7.7", default-features = false, features = ["std"] }
+kobe-sui = { version = "0.7.7", default-features = false, features = ["std"] }
+kobe-svm = { version = "0.7.7", default-features = false, features = ["std"] }
+kobe-ton = { version = "0.7.7", default-features = false, features = ["std"] }
+kobe-tron = { version = "0.7.7", default-features = false, features = ["std"] }
+kobe-xrpl = { version = "0.7.7", default-features = false, features = ["std"] }
 
-# Transaction signing (all 9 chains)
-signer = { version = "0.4.2", features = ["kobe"] }
-signer-btc = { version = "0.4.2", features = ["kobe"] }
-signer-cosmos = { version = "0.4.2", features = ["kobe"] }
-signer-evm = { version = "0.4.2", features = ["kobe"] }
-signer-fil = { version = "0.4.2", features = ["kobe"] }
-signer-spark = { version = "0.4.2", features = ["kobe"] }
-signer-sui = { version = "0.4.2", features = ["kobe"] }
-signer-svm = { version = "0.4.2", features = ["kobe"] }
-signer-ton = { version = "0.4.2", features = ["kobe"] }
-signer-tron = { version = "0.4.2", features = ["kobe"] }
+# Transaction signing (umbrella crate re-exports all 10 chain signers)
+signer = { version = "0.5.0", features = ["kobe"] }
 
 # Crypto
 aes-gcm = "0.10.3"
@@ -47,7 +39,6 @@ hkdf = "0.12.4"
 scrypt = "0.11.0"
 sha2 = "0.10.9"
 zeroize = { version = "1.8.2", features = ["derive"] }
-rand = "0.8.5"
 
 # Serialization
 serde = { version = "1.0.228", features = ["derive"] }

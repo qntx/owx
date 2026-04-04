@@ -57,6 +57,11 @@ impl Config {
                 "sui:mainnet".into(),
                 "https://fullnode.mainnet.sui.io:443".into(),
             ),
+            (
+                "eip155:42793".into(),
+                "https://node.mainnet.etherlink.com".into(),
+            ),
+            ("xrpl:mainnet".into(), "https://s1.ripple.com:51234".into()),
         ])
     }
 
