@@ -1,9 +1,39 @@
-//! Chain registry, family classification, CAIP-2 resolution, and chain ID types.
+//! Chain registry, family classification, and CAIP-2 resolution.
+//!
+//! The central `for_each_chain!` macro defines the chain ↔ crate mapping once.
+//! All dispatch (derivation, signing, address) is generated from it — adding a
+//! new chain family requires only extending that single table.
 
 use std::fmt;
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize, de};
+
+/// Master chain table. Every row is:
+///
+/// ```text
+/// (Variant, display, namespace, coin_type, is_ed25519, signer_path)
+/// ```
+///
+/// Derivation logic lives in `signer::derive_account` (Bitcoin needs special
+/// error handling), but signing/address dispatch uses this table via macros.
+macro_rules! for_each_chain {
+    ($macro:ident) => {
+        $macro! {
+            [ Evm,       "evm",      "eip155",  60,        false, signer::evm::Signer     ],
+            [ Bitcoin,   "bitcoin",  "bip122",  0,         false, signer::btc::Signer     ],
+            [ Solana,    "solana",   "solana",  501,       true,  signer::svm::Signer     ],
+            [ Cosmos,    "cosmos",   "cosmos",  118,       false, signer::cosmos::Signer  ],
+            [ Tron,      "tron",     "tron",    195,       false, signer::tron::Signer    ],
+            [ Ton,       "ton",      "ton",     607,       true,  signer::ton::Signer     ],
+            [ Spark,     "spark",    "spark",   8_797_555, false, signer::spark::Signer   ],
+            [ Filecoin,  "filecoin", "fil",     461,       false, signer::fil::Signer     ],
+            [ Sui,       "sui",      "sui",     784,       true,  signer::sui::Signer     ],
+            [ Xrpl,      "xrpl",     "xrpl",   144,       false, signer::xrpl::Signer    ],
+        }
+    };
+}
+pub(crate) use for_each_chain;
 
 /// Supported chain families grouped by elliptic curve.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -45,107 +75,55 @@ pub const ALL_FAMILIES: [ChainFamily; 10] = [
     ChainFamily::Xrpl,
 ];
 
-impl ChainFamily {
-    /// Whether this family uses Ed25519 (vs secp256k1).
-    #[must_use]
-    pub const fn is_ed25519(self) -> bool {
-        matches!(self, Self::Solana | Self::Ton | Self::Sui)
-    }
+/// Implement `ChainFamily` methods, `Display`, and `FromStr` from the chain table.
+macro_rules! impl_chain_family_methods {
+    ( $( [ $variant:ident, $display:expr, $ns:expr, $coin:expr, $ed:expr, $signer:path ] ),+ $(,)? ) => {
+        impl ChainFamily {
+            /// Whether this family uses Ed25519 (vs secp256k1).
+            #[must_use]
+            pub const fn is_ed25519(self) -> bool {
+                match self { $( Self::$variant => $ed, )+ }
+            }
 
-    /// CAIP-2 namespace for this family.
-    #[must_use]
-    pub const fn namespace(self) -> &'static str {
-        match self {
-            Self::Evm => "eip155",
-            Self::Bitcoin => "bip122",
-            Self::Solana => "solana",
-            Self::Cosmos => "cosmos",
-            Self::Tron => "tron",
-            Self::Ton => "ton",
-            Self::Spark => "spark",
-            Self::Filecoin => "fil",
-            Self::Sui => "sui",
-            Self::Xrpl => "xrpl",
-        }
-    }
+            /// CAIP-2 namespace.
+            #[must_use]
+            pub const fn namespace(self) -> &'static str {
+                match self { $( Self::$variant => $ns, )+ }
+            }
 
-    /// BIP-44 coin type for this chain family.
-    #[must_use]
-    pub const fn coin_type(self) -> u32 {
-        match self {
-            Self::Evm => 60,
-            Self::Bitcoin => 0,
-            Self::Solana => 501,
-            Self::Cosmos => 118,
-            Self::Tron => 195,
-            Self::Ton => 607,
-            Self::Spark => 8_797_555,
-            Self::Filecoin => 461,
-            Self::Sui => 784,
-            Self::Xrpl => 144,
-        }
-    }
+            /// BIP-44 coin type.
+            #[must_use]
+            pub const fn coin_type(self) -> u32 {
+                match self { $( Self::$variant => $coin, )+ }
+            }
 
-    /// Resolve a CAIP-2 namespace string to a [`ChainFamily`].
-    #[must_use]
-    pub fn from_namespace(ns: &str) -> Option<Self> {
-        match ns {
-            "eip155" => Some(Self::Evm),
-            "bip122" => Some(Self::Bitcoin),
-            "solana" => Some(Self::Solana),
-            "cosmos" => Some(Self::Cosmos),
-            "tron" => Some(Self::Tron),
-            "ton" => Some(Self::Ton),
-            "spark" => Some(Self::Spark),
-            "fil" => Some(Self::Filecoin),
-            "sui" => Some(Self::Sui),
-            "xrpl" => Some(Self::Xrpl),
-            _ => None,
+            /// Resolve a CAIP-2 namespace to a [`ChainFamily`].
+            #[must_use]
+            pub fn from_namespace(ns: &str) -> Option<Self> {
+                match ns { $( $ns => Some(Self::$variant), )+ _ => None }
+            }
         }
-    }
+
+        impl fmt::Display for ChainFamily {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(match self { $( Self::$variant => $display, )+ })
+            }
+        }
+
+        impl FromStr for ChainFamily {
+            type Err = String;
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                match s.to_lowercase().as_str() {
+                    $( $display => Ok(Self::$variant), )+
+                    _ => Err(format!("unknown chain family: {s}")),
+                }
+            }
+        }
+    };
 }
-
-impl fmt::Display for ChainFamily {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Evm => "evm",
-            Self::Bitcoin => "bitcoin",
-            Self::Solana => "solana",
-            Self::Cosmos => "cosmos",
-            Self::Tron => "tron",
-            Self::Ton => "ton",
-            Self::Spark => "spark",
-            Self::Filecoin => "filecoin",
-            Self::Sui => "sui",
-            Self::Xrpl => "xrpl",
-        })
-    }
-}
-
-impl FromStr for ChainFamily {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "evm" => Ok(Self::Evm),
-            "bitcoin" => Ok(Self::Bitcoin),
-            "solana" => Ok(Self::Solana),
-            "cosmos" => Ok(Self::Cosmos),
-            "tron" => Ok(Self::Tron),
-            "ton" => Ok(Self::Ton),
-            "spark" => Ok(Self::Spark),
-            "filecoin" => Ok(Self::Filecoin),
-            "sui" => Ok(Self::Sui),
-            "xrpl" => Ok(Self::Xrpl),
-            _ => Err(format!("unknown chain family: {s}")),
-        }
-    }
-}
+for_each_chain!(impl_chain_family_methods);
 
 /// CAIP-2 chain identifier (`namespace:reference`).
-///
-/// Validates namespace (3–8 lowercase alphanumeric) and reference (1–64 alphanumeric + dash/underscore)
-/// per the [CAIP-2 specification](https://github.com/ChainAgnostic/CAIPs/blob/main/CAIPs/caip-2.md).
 #[derive(Debug, Clone, Eq)]
 pub struct ChainId {
     /// CAIP-2 namespace (e.g. "eip155", "solana").
@@ -157,15 +135,15 @@ pub struct ChainId {
 impl ChainId {
     /// Validate a CAIP-2 namespace: 3–8 chars, `[a-z0-9]` only.
     fn validate_namespace(ns: &str) -> Result<(), String> {
-        if ns.len() < 3 || ns.len() > 8 {
+        if !(3..=8).contains(&ns.len()) {
             return Err(format!(
                 "namespace must be 3–8 chars, got {} ('{ns}')",
                 ns.len()
             ));
         }
         if !ns
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
         {
             return Err(format!("namespace must be [a-z0-9], got '{ns}'"));
         }
@@ -181,8 +159,8 @@ impl ChainId {
             ));
         }
         if !r
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
         {
             return Err(format!("reference contains invalid chars: '{r}'"));
         }
@@ -192,15 +170,14 @@ impl ChainId {
 
 impl FromStr for ChainId {
     type Err = String;
-
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (namespace, reference) = s
+        let (ns, reference) = s
             .split_once(':')
             .ok_or_else(|| format!("expected 'namespace:reference', got '{s}'"))?;
-        Self::validate_namespace(namespace)?;
+        Self::validate_namespace(ns)?;
         Self::validate_reference(reference)?;
         Ok(Self {
-            namespace: namespace.to_owned(),
+            namespace: ns.to_owned(),
             reference: reference.to_owned(),
         })
     }
@@ -238,102 +215,195 @@ impl<'de> Deserialize<'de> for ChainId {
     }
 }
 
-/// A resolved chain with its family and CAIP-2 identifier.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A resolved chain: name + family + CAIP-2 identifier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Chain {
     /// Human-readable name (e.g. "ethereum", "base").
-    pub name: String,
+    pub name: &'static str,
     /// Chain family (curve grouping).
     pub family: ChainFamily,
     /// CAIP-2 chain ID (e.g. "eip155:1").
-    pub chain_id: String,
+    pub chain_id: &'static str,
 }
 
-/// Known chains registry (name, family, CAIP-2 ID).
-const KNOWN: &[(&str, ChainFamily, &str)] = &[
-    ("ethereum", ChainFamily::Evm, "eip155:1"),
-    ("polygon", ChainFamily::Evm, "eip155:137"),
-    ("arbitrum", ChainFamily::Evm, "eip155:42161"),
-    ("optimism", ChainFamily::Evm, "eip155:10"),
-    ("base", ChainFamily::Evm, "eip155:8453"),
-    ("plasma", ChainFamily::Evm, "eip155:9745"),
-    ("bsc", ChainFamily::Evm, "eip155:56"),
-    ("avalanche", ChainFamily::Evm, "eip155:43114"),
-    ("etherlink", ChainFamily::Evm, "eip155:42793"),
-    (
-        "solana",
-        ChainFamily::Solana,
-        "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
-    ),
-    (
-        "bitcoin",
-        ChainFamily::Bitcoin,
-        "bip122:000000000019d6689c085ae165831e93",
-    ),
-    ("cosmos", ChainFamily::Cosmos, "cosmos:cosmoshub-4"),
-    ("tron", ChainFamily::Tron, "tron:mainnet"),
-    ("ton", ChainFamily::Ton, "ton:mainnet"),
-    ("spark", ChainFamily::Spark, "spark:mainnet"),
-    ("filecoin", ChainFamily::Filecoin, "fil:mainnet"),
-    ("sui", ChainFamily::Sui, "sui:mainnet"),
-    ("xrpl", ChainFamily::Xrpl, "xrpl:mainnet"),
-    ("xrpl-testnet", ChainFamily::Xrpl, "xrpl:testnet"),
-    ("xrpl-devnet", ChainFamily::Xrpl, "xrpl:devnet"),
+/// Known chains registry.
+pub const KNOWN: &[Chain] = &[
+    Chain {
+        name: "ethereum",
+        family: ChainFamily::Evm,
+        chain_id: "eip155:1",
+    },
+    Chain {
+        name: "polygon",
+        family: ChainFamily::Evm,
+        chain_id: "eip155:137",
+    },
+    Chain {
+        name: "arbitrum",
+        family: ChainFamily::Evm,
+        chain_id: "eip155:42161",
+    },
+    Chain {
+        name: "optimism",
+        family: ChainFamily::Evm,
+        chain_id: "eip155:10",
+    },
+    Chain {
+        name: "base",
+        family: ChainFamily::Evm,
+        chain_id: "eip155:8453",
+    },
+    Chain {
+        name: "plasma",
+        family: ChainFamily::Evm,
+        chain_id: "eip155:9745",
+    },
+    Chain {
+        name: "bsc",
+        family: ChainFamily::Evm,
+        chain_id: "eip155:56",
+    },
+    Chain {
+        name: "avalanche",
+        family: ChainFamily::Evm,
+        chain_id: "eip155:43114",
+    },
+    Chain {
+        name: "etherlink",
+        family: ChainFamily::Evm,
+        chain_id: "eip155:42793",
+    },
+    Chain {
+        name: "solana",
+        family: ChainFamily::Solana,
+        chain_id: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+    },
+    Chain {
+        name: "bitcoin",
+        family: ChainFamily::Bitcoin,
+        chain_id: "bip122:000000000019d6689c085ae165831e93",
+    },
+    Chain {
+        name: "cosmos",
+        family: ChainFamily::Cosmos,
+        chain_id: "cosmos:cosmoshub-4",
+    },
+    Chain {
+        name: "tron",
+        family: ChainFamily::Tron,
+        chain_id: "tron:mainnet",
+    },
+    Chain {
+        name: "ton",
+        family: ChainFamily::Ton,
+        chain_id: "ton:mainnet",
+    },
+    Chain {
+        name: "spark",
+        family: ChainFamily::Spark,
+        chain_id: "spark:mainnet",
+    },
+    Chain {
+        name: "filecoin",
+        family: ChainFamily::Filecoin,
+        chain_id: "fil:mainnet",
+    },
+    Chain {
+        name: "sui",
+        family: ChainFamily::Sui,
+        chain_id: "sui:mainnet",
+    },
+    Chain {
+        name: "xrpl",
+        family: ChainFamily::Xrpl,
+        chain_id: "xrpl:mainnet",
+    },
+    Chain {
+        name: "xrpl-testnet",
+        family: ChainFamily::Xrpl,
+        chain_id: "xrpl:testnet",
+    },
+    Chain {
+        name: "xrpl-devnet",
+        family: ChainFamily::Xrpl,
+        chain_id: "xrpl:devnet",
+    },
 ];
 
-/// Resolve a chain string into a [`Chain`].
-///
-/// Accepts:
-/// - Friendly names: `"ethereum"`, `"base"`, `"xrpl-testnet"`
-/// - Legacy family name: `"evm"` → resolves to `"ethereum"`
-/// - CAIP-2 IDs: `"eip155:1"`, `"eip155:42161"`
-/// - Unknown CAIP-2 IDs with a recognized namespace: `"eip155:9999"` → `ChainFamily::Evm`
-pub fn resolve_chain(s: &str) -> Result<Chain, crate::Error> {
+/// Resolve a chain string into a known [`Chain`], or synthesize one for
+/// unregistered CAIP-2 IDs with a recognized namespace.
+pub fn resolve(s: &str) -> Result<ResolvedChain, crate::Error> {
     let lower = s.to_lowercase();
     let lookup = if lower == "evm" { "ethereum" } else { &lower };
 
-    if let Some(&(name, family, chain_id)) = KNOWN.iter().find(|(n, _, _)| *n == lookup) {
-        return Ok(Chain {
-            name: name.to_owned(),
-            family,
-            chain_id: chain_id.to_owned(),
-        });
+    if let Some(chain) = KNOWN.iter().find(|c| c.name == lookup) {
+        return Ok(ResolvedChain::Known(chain));
     }
-
-    if let Some(&(name, family, chain_id)) = KNOWN.iter().find(|(_, _, id)| *id == s) {
-        return Ok(Chain {
-            name: name.to_owned(),
-            family,
-            chain_id: chain_id.to_owned(),
-        });
+    if let Some(chain) = KNOWN.iter().find(|c| c.chain_id == s) {
+        return Ok(ResolvedChain::Known(chain));
     }
-
     if let Some((namespace, _)) = s.split_once(':')
         && let Some(family) = ChainFamily::from_namespace(namespace)
     {
-        return Ok(Chain {
-            name: s.to_owned(),
+        return Ok(ResolvedChain::Dynamic {
             family,
             chain_id: s.to_owned(),
         });
     }
-
     Err(crate::Error::InvalidInput(format!(
         "unknown chain: '{s}'. Use a chain name (ethereum, solana, …) or CAIP-2 ID (eip155:1, …)"
     )))
 }
 
+/// Result of chain resolution — either a static reference or a dynamic CAIP-2 chain.
+#[derive(Debug, Clone)]
+pub enum ResolvedChain {
+    /// A known chain from the static registry.
+    Known(&'static Chain),
+    /// A dynamically resolved chain (unknown CAIP-2 ID but recognized namespace).
+    Dynamic {
+        /// Chain family derived from the namespace.
+        family: ChainFamily,
+        /// The original CAIP-2 chain ID string.
+        chain_id: String,
+    },
+}
+
+impl ResolvedChain {
+    /// Chain family.
+    #[must_use]
+    pub const fn family(&self) -> ChainFamily {
+        match self {
+            Self::Known(c) => c.family,
+            Self::Dynamic { family, .. } => *family,
+        }
+    }
+
+    /// CAIP-2 chain ID.
+    #[must_use]
+    pub fn chain_id(&self) -> &str {
+        match self {
+            Self::Known(c) => c.chain_id,
+            Self::Dynamic { chain_id, .. } => chain_id,
+        }
+    }
+
+    /// Human-readable name (chain ID for dynamic chains).
+    #[must_use]
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Known(c) => c.name,
+            Self::Dynamic { chain_id, .. } => chain_id,
+        }
+    }
+}
+
 /// Returns the default [`Chain`] for a given [`ChainFamily`].
 #[must_use]
 #[allow(clippy::expect_used)]
-pub fn default_chain(family: ChainFamily) -> Chain {
-    let &(name, fam, chain_id) = KNOWN
+pub fn default_chain(family: ChainFamily) -> &'static Chain {
+    KNOWN
         .iter()
-        .find(|(_, f, _)| *f == family)
-        .expect("all families have a default chain");
-    Chain {
-        name: name.to_owned(),
-        family: fam,
-        chain_id: chain_id.to_owned(),
-    }
+        .find(|c| c.family == family)
+        .expect("all families have a default chain")
 }

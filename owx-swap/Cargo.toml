@@ -1,25 +1,21 @@
 [package]
-name = "owx-cli"
+name = "owx-swap"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "CLI for OWX agent wallet toolkit."
+description = "Cross-chain token swap via LiFi for OWX."
 readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
-[[bin]]
-name = "owx"
-path = "src/main.rs"
-
 [dependencies]
 owx.workspace = true
-owx-pay.workspace = true
-clap.workspace = true
-hex.workspace = true
+lifiswap.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

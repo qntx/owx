@@ -172,7 +172,7 @@ pub fn resolve_agent_key(
 
     if !policies.is_empty() {
         let ctx = PolicyContext {
-            chain_id: chain.chain_id,
+            chain_id: chain.chain_id.to_owned(),
             wallet_id: wallet.id.clone(),
             api_key_id: api_key.id.clone(),
             transaction: TransactionContext {

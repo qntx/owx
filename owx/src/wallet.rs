@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
 
 use crate::Vault;
-use crate::chain::{ALL_FAMILIES, default_chain, resolve_chain};
+use crate::chain::{ALL_FAMILIES, default_chain};
 use crate::error::Error;
 use crate::secret::{WalletSecret, decrypt_secret};
 use crate::signer;
@@ -117,14 +117,12 @@ pub fn create_wallet(
     words: usize,
 ) -> Result<WalletInfo, Error> {
     ensure_name_available(vault, name)?;
-
     let kobe_wallet =
         kobe::Wallet::generate(words, None).map_err(|e| Error::Derivation(e.to_string()))?;
     let phrase = kobe_wallet.mnemonic();
     let accounts = signer::derive_all_accounts(phrase, 0)?;
     let secret = WalletSecret::mnemonic(phrase);
     let crypto_json = encrypt_secret(&secret, passphrase)?;
-
     let wallet = EncryptedWallet::new(
         uuid::Uuid::new_v4().to_string(),
         name.to_owned(),
@@ -148,7 +146,6 @@ pub fn import_mnemonic(
     let accounts = signer::derive_all_accounts(mnemonic_phrase, index)?;
     let secret = WalletSecret::mnemonic(mnemonic_phrase);
     let crypto_json = encrypt_secret(&secret, passphrase)?;
-
     let wallet = EncryptedWallet::new(
         uuid::Uuid::new_v4().to_string(),
         name.to_owned(),
@@ -165,11 +162,6 @@ pub fn import_mnemonic(
 /// The `chain` parameter determines which curve the key belongs to
 /// (default: secp256k1). A random 32-byte key is generated for the other
 /// curve so all chain families get an address.
-///
-/// Optionally, pass explicit keys for each curve via `secp256k1_hex` and
-/// `ed25519_hex`. When both are provided, `private_key_hex` and `chain`
-/// are ignored. When only one is provided alongside `private_key_hex`, it
-/// overrides the random generation for that curve.
 pub fn import_private_key(
     vault: &Vault,
     name: &str,
@@ -181,44 +173,14 @@ pub fn import_private_key(
 ) -> Result<WalletInfo, Error> {
     ensure_name_available(vault, name)?;
 
-    let (secp_hex, ed_hex) = if let (Some(s), Some(e)) = (secp256k1_hex, ed25519_hex) {
-        (decode_hex_key(s)?, decode_hex_key(e)?)
-    } else {
-        let key_bytes = decode_hex_key(private_key_hex)?;
-        let source_curve_is_ed25519 = chain.is_some_and(|c| {
-            resolve_chain(c)
-                .is_ok_and(|ch| ch.family.is_ed25519())
-        });
+    let (secp_bytes, ed_bytes) =
+        resolve_key_pair(private_key_hex, chain, secp256k1_hex, ed25519_hex)?;
+    validate_key_len(&secp_bytes, "secp256k1")?;
+    validate_key_len(&ed_bytes, "ed25519")?;
 
-        let mut random_key = [0u8; 32];
-        getrandom::getrandom(&mut random_key)
-            .map_err(|e| Error::InvalidInput(format!("CSPRNG failed: {e}")))?;
-        let random_vec = random_key.to_vec();
-
-        if source_curve_is_ed25519 {
-            let secp = secp256k1_hex
-                .map(decode_hex_key)
-                .transpose()?
-                .unwrap_or(random_vec);
-            (secp, key_bytes)
-        } else {
-            let ed = ed25519_hex
-                .map(decode_hex_key)
-                .transpose()?
-                .unwrap_or(random_vec);
-            (key_bytes, ed)
-        }
-    };
-
-    let secp_str = hex::encode(&secp_hex);
-    let ed_str = hex::encode(&ed_hex);
-    validate_key_len(&secp_hex, "secp256k1")?;
-    validate_key_len(&ed_hex, "ed25519")?;
-
-    let secret = WalletSecret::key_pair(&secp_str, &ed_str);
+    let secret = WalletSecret::key_pair(hex::encode(&secp_bytes), hex::encode(&ed_bytes));
     let accounts = derive_accounts_from_secret(&secret);
     let crypto_json = encrypt_secret(&secret, passphrase)?;
-
     let wallet = EncryptedWallet::new(
         uuid::Uuid::new_v4().to_string(),
         name.to_owned(),
@@ -295,7 +257,9 @@ pub fn derive_address(
     passphrase: &str,
     index: Option<u32>,
 ) -> Result<String, Error> {
-    let chain_info = resolve_chain(chain)?;
+    let resolved = crate::chain::resolve(chain)?;
+    let family = resolved.family();
+    let chain_id = resolved.chain_id();
     let wallet = load_wallet(vault, wallet_name_or_id)?;
     let secret = decrypt_secret(&wallet, passphrase)?;
     let idx = index.unwrap_or(0);
@@ -303,25 +267,20 @@ pub fn derive_address(
     if let Some(phrase) = secret.phrase() {
         let kw = kobe::Wallet::from_mnemonic(phrase, None)
             .map_err(|e| Error::Derivation(e.to_string()))?;
-        let key_hex = signer::derive_private_key_hex(&kw, chain_info.family, idx)?;
-        signer::address_from_hex(chain_info.family, &key_hex).or_else(|_| {
+        let key_hex = signer::derive_private_key_hex(&kw, family, idx)?;
+        signer::address_from_hex(family, &key_hex).or_else(|_| {
             let accounts = signer::derive_all_accounts(phrase, idx)?;
             accounts
                 .iter()
-                .find(|a| a.chain_id == chain_info.chain_id)
+                .find(|a| a.chain_id == chain_id)
                 .map(|a| a.address.clone())
-                .ok_or_else(|| {
-                    Error::InvalidInput(format!("no account for chain {}", chain_info.chain_id))
-                })
+                .ok_or_else(|| Error::InvalidInput(format!("no account for chain {chain_id}")))
         })
     } else {
-        let h = secret.private_key_hex(chain_info.family).ok_or_else(|| {
-            Error::InvalidInput(format!(
-                "no private key for chain family {}",
-                chain_info.family
-            ))
+        let h = secret.private_key_hex(family).ok_or_else(|| {
+            Error::InvalidInput(format!("no private key for chain family {family}"))
         })?;
-        signer::address_from_hex(chain_info.family, h)
+        signer::address_from_hex(family, h)
     }
 }
 
@@ -332,7 +291,6 @@ pub(crate) fn load_wallet(vault: &Vault, name_or_id: &str) -> Result<EncryptedWa
     if let Some(w) = wallets.iter().find(|w| w.id == name_or_id) {
         return Ok(w.clone());
     }
-
     let matches: Vec<&EncryptedWallet> = wallets.iter().filter(|w| w.name == name_or_id).collect();
     match matches.len() {
         0 => Err(Error::WalletNotFound(name_or_id.to_owned())),
@@ -373,21 +331,55 @@ fn encrypt_secret(secret: &WalletSecret, passphrase: &str) -> Result<serde_json:
 /// Derive accounts for all chain families from a [`WalletSecret`] key pair.
 fn derive_accounts_from_secret(secret: &WalletSecret) -> Vec<WalletAccount> {
     let mut accounts = Vec::new();
-    for fam in &ALL_FAMILIES {
-        let Some(key_hex) = secret.private_key_hex(*fam) else {
+    for &fam in &ALL_FAMILIES {
+        let Some(key_hex) = secret.private_key_hex(fam) else {
             continue;
         };
-        let chain = default_chain(*fam);
-        if let Ok(addr) = signer::address_from_hex(*fam, key_hex) {
+        let chain = default_chain(fam);
+        if let Ok(addr) = signer::address_from_hex(fam, key_hex) {
             accounts.push(WalletAccount {
                 account_id: format!("{}:{addr}", chain.chain_id),
                 address: addr,
-                chain_id: chain.chain_id,
+                chain_id: chain.chain_id.to_owned(),
                 derivation_path: String::new(),
             });
         }
     }
     accounts
+}
+
+/// Resolve the dual-curve key pair from import parameters.
+fn resolve_key_pair(
+    primary_hex: &str,
+    chain: Option<&str>,
+    secp_override: Option<&str>,
+    ed_override: Option<&str>,
+) -> Result<(Vec<u8>, Vec<u8>), Error> {
+    if let (Some(s), Some(e)) = (secp_override, ed_override) {
+        return Ok((decode_hex_key(s)?, decode_hex_key(e)?));
+    }
+
+    let key_bytes = decode_hex_key(primary_hex)?;
+    let is_ed25519 =
+        chain.is_some_and(|c| crate::chain::resolve(c).is_ok_and(|r| r.family().is_ed25519()));
+
+    let mut random = [0u8; 32];
+    getrandom::getrandom(&mut random)
+        .map_err(|e| Error::InvalidInput(format!("CSPRNG failed: {e}")))?;
+
+    if is_ed25519 {
+        let secp = secp_override
+            .map(decode_hex_key)
+            .transpose()?
+            .unwrap_or_else(|| random.to_vec());
+        Ok((secp, key_bytes))
+    } else {
+        let ed = ed_override
+            .map(decode_hex_key)
+            .transpose()?
+            .unwrap_or_else(|| random.to_vec());
+        Ok((key_bytes, ed))
+    }
 }
 
 /// Decode a hex private key (strips optional `0x` prefix).

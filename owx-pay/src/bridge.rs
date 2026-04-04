@@ -1,19 +1,31 @@
-//! [`VaultBridge`] — connects OWX vault signing to the payment layer.
+//! Wallet bridge trait and vault-backed implementation.
 
-use crate::Vault;
-use crate::chain::ChainFamily;
-use crate::error::Error;
-use crate::pay::WalletBridge;
+use owx::Vault;
+use owx::chain::ChainFamily;
+
+/// Trait abstracting wallet access for payment operations.
+///
+/// The private key NEVER leaves the implementation — all signing happens
+/// inside the wallet.
+pub trait WalletBridge: Send + Sync {
+    /// Chain families this wallet supports.
+    fn supported_families(&self) -> Vec<ChainFamily>;
+    /// Get the address for a CAIP-2 network string.
+    fn address(&self, network: &str) -> Result<String, owx::Error>;
+    /// Sign a payment payload for a scheme/network. Returns hex signature.
+    fn sign_payload(
+        &self,
+        scheme: &str,
+        network: &str,
+        payload: &str,
+    ) -> Result<String, owx::Error>;
+}
 
 /// Concrete [`WalletBridge`] backed by an OWX vault wallet.
 pub struct VaultBridge<'v> {
-    /// Vault handle.
     vault: &'v Vault,
-    /// Wallet name or ID.
     wallet: String,
-    /// Credential (passphrase or API token).
     credential: String,
-    /// Account index for derivation.
     index: u32,
 }
 
@@ -46,7 +58,7 @@ impl<'v> VaultBridge<'v> {
 
 impl WalletBridge for VaultBridge<'_> {
     fn supported_families(&self) -> Vec<ChainFamily> {
-        crate::list_wallets(self.vault)
+        owx::list_wallets(self.vault)
             .ok()
             .and_then(|ws| {
                 ws.into_iter()
@@ -67,17 +79,22 @@ impl WalletBridge for VaultBridge<'_> {
             .unwrap_or_default()
     }
 
-    fn address(&self, network: &str) -> Result<String, Error> {
-        let info = crate::get_wallet(self.vault, &self.wallet)?;
+    fn address(&self, network: &str) -> Result<String, owx::Error> {
+        let info = owx::get_wallet(self.vault, &self.wallet)?;
         info.accounts
             .iter()
             .find(|a| a.chain_id == network)
             .map(|a| a.address.clone())
-            .ok_or_else(|| Error::InvalidInput(format!("no account for chain {network}")))
+            .ok_or_else(|| owx::Error::InvalidInput(format!("no account for chain {network}")))
     }
 
-    fn sign_payload(&self, _scheme: &str, network: &str, payload: &str) -> Result<String, Error> {
-        let result = crate::sign_typed_data(
+    fn sign_payload(
+        &self,
+        _scheme: &str,
+        network: &str,
+        payload: &str,
+    ) -> Result<String, owx::Error> {
+        let result = owx::sign_typed_data(
             self.vault,
             &self.wallet,
             network,
@@ -85,10 +102,8 @@ impl WalletBridge for VaultBridge<'_> {
             &self.credential,
             Some(self.index),
         )?;
-
         let sig_bytes = hex::decode(&result.signature)
-            .map_err(|e| Error::Signing(format!("invalid sig hex: {e}")))?;
-
+            .map_err(|e| owx::Error::Signing(format!("invalid sig hex: {e}")))?;
         let full = if sig_bytes.len() == 64 {
             let mut buf = sig_bytes;
             buf.push(27 + result.recovery_id.unwrap_or(0));

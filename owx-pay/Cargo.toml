@@ -1,31 +1,16 @@
 [package]
-name = "owx"
+name = "owx-pay"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description.workspace = true
+description = "x402 payment protocol, service discovery, and wallet funding for OWX."
 readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-owx-vault.workspace = true
-
-kobe.workspace = true
-kobe-btc.workspace = true
-kobe-cosmos.workspace = true
-kobe-evm.workspace = true
-kobe-fil.workspace = true
-kobe-spark.workspace = true
-kobe-sui.workspace = true
-kobe-svm.workspace = true
-kobe-ton.workspace = true
-kobe-tron.workspace = true
-kobe-xrpl.workspace = true
-
-signer.workspace = true
-
+owx.workspace = true
 base64.workspace = true
 chrono.workspace = true
 getrandom.workspace = true
@@ -34,8 +19,6 @@ reqwest = { workspace = true, features = ["blocking"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-uuid.workspace = true
-zeroize.workspace = true
 
 [lints]
 workspace = true

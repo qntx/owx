@@ -36,10 +36,6 @@ pub enum ErrorCode {
     Signing,
     /// Transaction broadcast failed.
     BroadcastFailed,
-    /// x402 payment protocol error.
-    Pay,
-    /// HTTP request error.
-    Http,
 }
 
 /// Unified error type for all `owx` operations.
@@ -103,14 +99,6 @@ pub enum Error {
     #[error("broadcast: {0}")]
     BroadcastFailed(String),
 
-    /// x402 payment protocol error.
-    #[error("pay: {0}")]
-    Pay(String),
-
-    /// HTTP request error.
-    #[error("http: {0}")]
-    Http(#[from] reqwest::Error),
-
     /// JSON error.
     #[error("json: {0}")]
     Json(#[from] serde_json::Error),
@@ -140,14 +128,12 @@ impl Error {
             Self::Derivation(_) => ErrorCode::Derivation,
             Self::Signing(_) => ErrorCode::Signing,
             Self::BroadcastFailed(_) => ErrorCode::BroadcastFailed,
-            Self::Pay(_) => ErrorCode::Pay,
-            Self::Http(_) => ErrorCode::Http,
             Self::Json(_) => ErrorCode::Json,
         }
     }
 }
 
-/// JSON: `{"code": "...", "message": "..."}`.
+/// JSON serialization: `{"code": "...", "message": "..."}`.
 #[derive(Serialize)]
 struct ErrorPayload {
     /// Machine-readable code.
