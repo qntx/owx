@@ -162,7 +162,7 @@ fn set_dir_permissions(path: &Path) {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700));
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o700));
     }
     let _ = path;
 }
@@ -173,7 +173,7 @@ fn set_file_permissions(path: &Path) {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+        let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
     }
     let _ = path;
 }

@@ -57,19 +57,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn scrypt_encrypt_decrypt_roundtrip() {
-        let plaintext = b"secret mnemonic phrase";
-        let passphrase = "test-pass";
-        let envelope = encrypt(plaintext, passphrase).unwrap();
+    fn scrypt_roundtrip() {
+        let plaintext = b"abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let envelope = encrypt(plaintext, "strong-pass").unwrap();
         assert_eq!(envelope.kdf, "scrypt");
-        let decrypted = decrypt(&envelope, passphrase).unwrap();
+        assert_eq!(envelope.cipher, "aes-256-gcm");
+        let decrypted = decrypt(&envelope, "strong-pass").unwrap();
         assert_eq!(decrypted.expose(), plaintext);
     }
 
     #[test]
-    fn hkdf_encrypt_decrypt_roundtrip() {
-        let plaintext = b"agent key material";
-        let token = "owx_key_abc123";
+    fn hkdf_roundtrip() {
+        let plaintext = b"{\"secp256k1\":\"deadbeef\",\"ed25519\":\"cafebabe\"}";
+        let token = "owx_key_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         let envelope = encrypt_hkdf(plaintext, token).unwrap();
         assert_eq!(envelope.kdf, "hkdf-sha256");
         let decrypted = decrypt(&envelope, token).unwrap();
@@ -77,34 +77,72 @@ mod tests {
     }
 
     #[test]
-    fn wrong_passphrase_fails() {
-        let envelope = encrypt(b"data", "correct").unwrap();
-        let result = decrypt(&envelope, "wrong");
-        assert!(result.is_err());
+    fn empty_plaintext_roundtrip() {
+        let envelope = encrypt(b"", "pass").unwrap();
+        let decrypted = decrypt(&envelope, "pass").unwrap();
+        assert!(decrypted.expose().is_empty());
     }
 
     #[test]
-    fn wrong_token_fails() {
-        let envelope = encrypt_hkdf(b"data", "token-a").unwrap();
-        let result = decrypt(&envelope, "token-b");
-        assert!(result.is_err());
+    fn wrong_passphrase_rejected() {
+        let envelope = encrypt(b"sensitive", "correct").unwrap();
+        assert!(decrypt(&envelope, "wrong").is_err());
     }
 
     #[test]
-    fn unsupported_kdf_fails() {
+    fn wrong_token_rejected() {
+        let envelope = encrypt_hkdf(b"sensitive", "token-a").unwrap();
+        assert!(decrypt(&envelope, "token-b").is_err());
+    }
+
+    #[test]
+    fn tampered_ciphertext_rejected() {
         let mut envelope = encrypt(b"data", "pass").unwrap();
-        envelope.kdf = "argon2".to_owned();
-        let result = decrypt(&envelope, "pass");
-        assert!(result.is_err());
+        let mut ct_bytes = hex::decode(&envelope.ciphertext).unwrap();
+        if let Some(b) = ct_bytes.first_mut() {
+            *b ^= 0xff;
+        }
+        envelope.ciphertext = hex::encode(&ct_bytes);
+        assert!(
+            decrypt(&envelope, "pass").is_err(),
+            "tampered ciphertext must be rejected"
+        );
     }
 
     #[test]
-    fn envelope_json_roundtrip() {
-        let envelope = encrypt(b"test", "pass").unwrap();
-        let json = serde_json::to_string(&envelope).unwrap();
-        let parsed: CryptoEnvelope = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.cipher, "aes-256-gcm");
-        let decrypted = decrypt(&parsed, "pass").unwrap();
-        assert_eq!(decrypted.expose(), b"test");
+    fn tampered_auth_tag_rejected() {
+        let mut envelope = encrypt(b"data", "pass").unwrap();
+        let mut tag_bytes = hex::decode(&envelope.auth_tag).unwrap();
+        if let Some(b) = tag_bytes.last_mut() {
+            *b ^= 0xff;
+        }
+        envelope.auth_tag = hex::encode(&tag_bytes);
+        assert!(
+            decrypt(&envelope, "pass").is_err(),
+            "tampered auth tag must be rejected"
+        );
+    }
+
+    #[test]
+    fn unsupported_kdf_rejected() {
+        let mut envelope = encrypt(b"data", "pass").unwrap();
+        envelope.kdf = "argon2id".to_owned();
+        assert!(decrypt(&envelope, "pass").is_err());
+    }
+
+    #[test]
+    fn envelope_survives_json_serialization() {
+        let original = encrypt(b"roundtrip-via-json", "pass").unwrap();
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: CryptoEnvelope = serde_json::from_str(&json).unwrap();
+        let decrypted = decrypt(&restored, "pass").unwrap();
+        assert_eq!(decrypted.expose(), b"roundtrip-via-json");
+    }
+
+    #[test]
+    fn two_encryptions_produce_different_envelopes() {
+        let e1 = encrypt(b"same-data", "same-pass").unwrap();
+        let e2 = encrypt(b"same-data", "same-pass").unwrap();
+        assert_ne!(e1.ciphertext, e2.ciphertext, "random salt/IV should differ");
     }
 }

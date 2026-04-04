@@ -135,3 +135,65 @@ impl Drop for KeyCache {
         self.clear();
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn insert_and_get() {
+        let cache = KeyCache::new(Duration::from_mins(1), 10);
+        cache.insert("k1", SecretBytes::from_slice(b"secret"));
+        let val = cache.get("k1").unwrap();
+        assert_eq!(val.expose(), b"secret");
+    }
+
+    #[test]
+    fn get_missing_returns_none() {
+        let cache = KeyCache::new(Duration::from_mins(1), 10);
+        assert!(cache.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn ttl_expiry() {
+        let cache = KeyCache::new(Duration::from_millis(50), 10);
+        cache.insert("k1", SecretBytes::from_slice(b"data"));
+        assert!(cache.get("k1").is_some());
+        std::thread::sleep(Duration::from_millis(80));
+        assert!(cache.get("k1").is_none());
+    }
+
+    #[test]
+    fn lru_eviction_at_capacity() {
+        let cache = KeyCache::new(Duration::from_mins(1), 2);
+        cache.insert("k1", SecretBytes::from_slice(b"a"));
+        cache.insert("k2", SecretBytes::from_slice(b"b"));
+        // Access k1 to make k2 the LRU
+        let _ = cache.get("k1");
+        // Insert k3 — should evict k2 (LRU)
+        cache.insert("k3", SecretBytes::from_slice(b"c"));
+        assert!(cache.get("k1").is_some());
+        assert!(cache.get("k2").is_none());
+        assert!(cache.get("k3").is_some());
+    }
+
+    #[test]
+    fn clear_removes_all() {
+        let cache = KeyCache::new(Duration::from_mins(1), 10);
+        cache.insert("k1", SecretBytes::from_slice(b"a"));
+        cache.insert("k2", SecretBytes::from_slice(b"b"));
+        assert_eq!(cache.len(), 2);
+        cache.clear();
+        assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn overwrite_existing_key() {
+        let cache = KeyCache::new(Duration::from_mins(1), 10);
+        cache.insert("k1", SecretBytes::from_slice(b"old"));
+        cache.insert("k1", SecretBytes::from_slice(b"new"));
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.get("k1").unwrap().expose(), b"new");
+    }
+}

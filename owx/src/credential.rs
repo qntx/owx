@@ -84,3 +84,56 @@ impl std::fmt::Debug for SecretKey {
         f.write_str("SecretKey([REDACTED])")
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_passphrase() {
+        let cred = Credential::parse("my-password");
+        assert!(matches!(cred, Credential::Passphrase("my-password")));
+        assert_eq!(cred.as_str(), "my-password");
+    }
+
+    #[test]
+    fn parse_api_token() {
+        let token = "owx_key_0123456789abcdef";
+        let cred = Credential::parse(token);
+        assert!(matches!(cred, Credential::ApiToken(_)));
+        assert_eq!(cred.as_str(), token);
+    }
+
+    #[test]
+    fn parse_empty_is_passphrase() {
+        assert!(matches!(Credential::parse(""), Credential::Passphrase("")));
+    }
+
+    #[test]
+    fn secret_key_from_hex() {
+        let key =
+            SecretKey::from_hex("4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318")
+                .unwrap();
+        assert_eq!(key.as_bytes().len(), 32);
+    }
+
+    #[test]
+    fn secret_key_strips_0x_prefix() {
+        let key = SecretKey::from_hex("0xaabb").unwrap();
+        assert_eq!(key.as_bytes(), &[0xaa, 0xbb]);
+    }
+
+    #[test]
+    fn secret_key_invalid_hex_rejected() {
+        assert!(SecretKey::from_hex("not-hex").is_err());
+    }
+
+    #[test]
+    fn secret_key_debug_redacted() {
+        let key = SecretKey::from_hex("aabb").unwrap();
+        let dbg = format!("{key:?}");
+        assert_eq!(dbg, "SecretKey([REDACTED])");
+        assert!(!dbg.contains("aa"));
+    }
+}

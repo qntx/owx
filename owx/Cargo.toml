@@ -39,5 +39,8 @@ thiserror.workspace = true
 uuid.workspace = true
 zeroize.workspace = true
 
+[dev-dependencies]
+tempfile = "3"
+
 [lints]
 workspace = true
