@@ -1,27 +1,21 @@
 //! Cross-chain token swap via LiFi for OWX.
 //!
-//! This crate wraps the [`lifiswap`] SDK to provide a simple swap interface
-//! that integrates with OWX vault wallets.
+//! Wraps [`lifiswap::LiFiClient`] with a simplified async API for quoting,
+//! routing, and executing cross-chain swaps using OWX wallets.
 //!
 //! ```ignore
 //! let client = owx_swap::SwapClient::new("my-integrator")?;
-//! let quote = client.quote(&request).await?;
+//! let quote = client.quote("42161", "0xUSDC", "0xWallet", "10000000", "10", "0xDAI").await?;
 //! ```
 
 #![allow(clippy::missing_docs_in_private_items)]
 
-pub use lifiswap;
+mod client;
+mod error;
 
-/// Swap error.
-#[derive(Debug, thiserror::Error)]
-pub enum SwapError {
-    /// LiFi SDK error.
-    #[error("lifi: {0}")]
-    LiFi(#[from] lifiswap::error::LiFiError),
-    /// OWX error.
-    #[error("owx: {0}")]
-    Owx(#[from] owx::Error),
-}
+pub use client::SwapClient;
+pub use error::SwapError;
+pub use lifiswap;
 
 /// Re-export key types from lifiswap for convenience.
 pub mod types {

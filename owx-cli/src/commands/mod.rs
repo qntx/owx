@@ -3,6 +3,8 @@
 pub mod key;
 pub mod policy;
 pub mod sign;
+#[cfg(feature = "swap")]
+pub mod swap;
 pub mod wallet;
 
 use clap::Subcommand;
@@ -78,6 +80,12 @@ pub enum Commands {
         #[arg(long, default_value = "base")]
         chain: String,
     },
+    /// Cross-chain token swap via LiFi.
+    #[cfg(feature = "swap")]
+    Swap {
+        #[command(subcommand)]
+        action: swap::SwapAction,
+    },
     /// Policy management.
     Policy {
         #[command(subcommand)]
@@ -140,6 +148,8 @@ pub fn dispatch(cmd: Commands, owx: &Owx) -> Result<(), Box<dyn std::error::Erro
             let balances = owx_pay::get_balances(&evm_addr, Some(&chain))?;
             print_json(&balances)?;
         }
+        #[cfg(feature = "swap")]
+        Commands::Swap { action } => swap::run(action)?,
         Commands::Policy { action } => policy::run(action, owx)?,
     }
     Ok(())

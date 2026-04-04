@@ -14,13 +14,15 @@ name = "owx"
 path = "src/main.rs"
 
 [features]
-default = ["pay", "moonpay"]
+default = ["pay", "moonpay", "swap"]
 pay = ["owx-pay/x402"]
 moonpay = ["owx-pay/moonpay"]
+swap = ["dep:owx-swap"]
 
 [dependencies]
 owx.workspace = true
 owx-pay.workspace = true
+owx-swap = { workspace = true, optional = true }
 clap.workspace = true
 hex.workspace = true
 serde.workspace = true

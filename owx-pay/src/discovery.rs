@@ -1,20 +1,11 @@
 //! x402 service discovery via CDP directory API.
 
 use std::fmt::Write as _;
-use std::sync::LazyLock;
-use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::{PayError, PayErrorCode};
-
-static HTTP: LazyLock<reqwest::blocking::Client> = LazyLock::new(|| {
-    #[allow(clippy::expect_used)]
-    reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()
-        .expect("failed to build HTTP client")
-});
+use crate::x402::http::CLIENT as HTTP;
 
 const DIRECTORY_URL: &str = "https://x402.org/api/services";
 
