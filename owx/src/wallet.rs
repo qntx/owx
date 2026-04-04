@@ -28,8 +28,9 @@ pub struct WalletAccount {
     pub address: String,
     /// CAIP-2 chain identifier (e.g. `eip155:1`).
     pub chain_id: String,
-    /// BIP-44 derivation path (empty for imported keys).
-    pub derivation_path: String,
+    /// BIP-44 derivation path (`None` for imported keys).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub derivation_path: Option<String>,
 }
 
 /// The full on-disk wallet file (extended keystore v2).
@@ -98,8 +99,9 @@ pub struct AccountInfo {
     pub chain_id: String,
     /// Address in the chain's native format.
     pub address: String,
-    /// BIP-44 derivation path used (empty for imported keys).
-    pub derivation_path: String,
+    /// BIP-44 derivation path (`None` for imported keys).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub derivation_path: Option<String>,
 }
 
 /// Generate a new BIP-39 mnemonic phrase.
@@ -285,12 +287,14 @@ pub fn derive_address(
 }
 
 /// Load an encrypted wallet by name or ID (internal).
+///
+/// Optimized: tries direct ID lookup first (single file read), falls back
+/// to listing all wallets only for name-based lookup.
 pub(crate) fn load_wallet(owx: &Owx, name_or_id: &str) -> Result<EncryptedWallet, Error> {
-    let wallets: Vec<EncryptedWallet> = owx.store().list("wallets")?;
-
-    if let Some(w) = wallets.iter().find(|w| w.id == name_or_id) {
-        return Ok(w.clone());
+    if let Ok(w) = owx.store().load::<EncryptedWallet>("wallets", name_or_id) {
+        return Ok(w);
     }
+    let wallets: Vec<EncryptedWallet> = owx.store().list("wallets")?;
     let matches: Vec<&EncryptedWallet> = wallets.iter().filter(|w| w.name == name_or_id).collect();
     match matches.len() {
         0 => Err(Error::WalletNotFound(name_or_id.to_owned())),
@@ -341,7 +345,7 @@ fn derive_accounts_from_secret(secret: &WalletSecret) -> Vec<WalletAccount> {
                 account_id: format!("{}:{addr}", chain.chain_id),
                 address: addr,
                 chain_id: chain.chain_id.to_owned(),
-                derivation_path: String::new(),
+                derivation_path: None,
             });
         }
     }

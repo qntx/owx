@@ -72,6 +72,9 @@ pub struct Policy {
     pub config: Option<serde_json::Value>,
     /// Action to take on rule match.
     pub action: PolicyAction,
+    /// Executable timeout in seconds (default: 5).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_seconds: Option<u64>,
 }
 
 /// Transaction fields available for policy evaluation.
@@ -171,7 +174,13 @@ fn evaluate_one(policy: &Policy, context: &PolicyContext) -> PolicyResult {
         }
     }
     if let Some(ref exe) = policy.executable {
-        return evaluate_executable(exe, policy.config.as_ref(), &policy.id, context);
+        return evaluate_executable(
+            exe,
+            policy.config.as_ref(),
+            &policy.id,
+            context,
+            policy.timeout_seconds,
+        );
     }
     PolicyResult::allowed()
 }
@@ -232,6 +241,7 @@ fn evaluate_executable(
     config: Option<&serde_json::Value>,
     pid: &str,
     ctx: &PolicyContext,
+    timeout_seconds: Option<u64>,
 ) -> PolicyResult {
     let mut payload = serde_json::to_value(ctx).unwrap_or_default();
     if let Some(cfg) = config
@@ -259,7 +269,8 @@ fn evaluate_executable(
         let _ = stdin.write_all(&stdin_bytes);
     }
 
-    let output = match wait_timeout(&mut child, Duration::from_secs(5)) {
+    let timeout = Duration::from_secs(timeout_seconds.unwrap_or(5));
+    let output = match wait_timeout(&mut child, timeout) {
         Ok(o) => o,
         Err(reason) => return PolicyResult::denied(pid, reason),
     };

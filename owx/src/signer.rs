@@ -112,7 +112,7 @@ pub fn derive_all_accounts(mnemonic: &str, index: u32) -> Result<Vec<WalletAccou
             account_id: format!("{}:{}", chain.chain_id, d.address),
             address: d.address,
             chain_id: chain.chain_id.to_owned(),
-            derivation_path: d.path,
+            derivation_path: Some(d.path),
         });
     }
     Ok(accounts)
