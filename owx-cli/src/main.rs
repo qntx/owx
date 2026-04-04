@@ -86,6 +86,11 @@ enum Commands {
         #[arg(long, default_value = "USDC")]
         token: String,
     },
+    /// Check token balances via MoonPay.
+    Balance {
+        #[arg(long, default_value = "base")]
+        chain: String,
+    },
     /// Policy management.
     Policy {
         #[command(subcommand)]
@@ -107,13 +112,23 @@ enum WalletAction {
         #[arg(long)]
         mnemonic: String,
     },
-    /// Import from dual-curve private keys.
+    /// Import from a single private key (auto-generates the other curve).
+    ImportKey {
+        name: String,
+        /// Hex-encoded private key.
+        #[arg(long)]
+        key: String,
+        /// Source chain (determines curve; default: evm/secp256k1).
+        #[arg(long)]
+        chain: Option<String>,
+    },
+    /// Import from explicit dual-curve private keys.
     ImportKeys {
         name: String,
         #[arg(long)]
-        secp256k1: Option<String>,
+        secp256k1: String,
         #[arg(long)]
-        ed25519: Option<String>,
+        ed25519: String,
     },
     /// List all wallets.
     List,
@@ -254,6 +269,19 @@ fn run(cmd: Commands, vault: &Vault) -> Result<(), owx::Error> {
             let result = owx::pay::fund(&evm_account.address, Some(&chain), Some(&token))?;
             print_json(&result)
         }
+        Commands::Balance { chain } => {
+            let wallets = owx::list_wallets(vault)?;
+            let wallet_info = wallets.first().ok_or_else(|| {
+                owx::Error::InvalidInput("no wallets found; create one first".into())
+            })?;
+            let evm_account = wallet_info
+                .accounts
+                .iter()
+                .find(|a| a.chain_id.starts_with("eip155:"))
+                .ok_or_else(|| owx::Error::InvalidInput("no EVM account found".into()))?;
+            let balances = owx::pay::get_balances(&evm_account.address, Some(&chain))?;
+            print_json(&balances)
+        }
         Commands::Policy { action } => run_policy(action, vault),
     }
 }
@@ -269,15 +297,27 @@ fn run_wallet(action: WalletAction, vault: &Vault) -> Result<(), owx::Error> {
             let pass = read_passphrase("Passphrase: ");
             print_json(&owx::import_mnemonic(vault, &name, &mnemonic, &pass, 0)?)
         }
+        WalletAction::ImportKey { name, key, chain } => {
+            let pass = read_passphrase("Passphrase: ");
+            print_json(&owx::import_private_key(
+                vault,
+                &name,
+                &key,
+                chain.as_deref(),
+                &pass,
+                None,
+                None,
+            )?)
+        }
         WalletAction::ImportKeys {
             name,
             secp256k1,
             ed25519,
         } => {
             let pass = read_passphrase("Passphrase: ");
-            let secp = secp256k1.unwrap_or_else(|| "0".repeat(64));
-            let ed = ed25519.unwrap_or_else(|| "0".repeat(64));
-            print_json(&owx::import_private_keys(vault, &name, &secp, &ed, &pass)?)
+            print_json(&owx::import_private_keys(
+                vault, &name, &secp256k1, &ed25519, &pass,
+            )?)
         }
         WalletAction::List => print_json(&owx::list_wallets(vault)?),
         WalletAction::Info { name } => print_json(&owx::get_wallet(vault, &name)?),

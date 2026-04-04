@@ -26,8 +26,8 @@ pub use key::{ApiKeyCreateResult, ApiKeyInfo, create_api_key, list_api_keys, rev
 pub use signer::{SendResult, SignResult};
 pub use wallet::{
     AccountInfo, WalletInfo, create_wallet, delete_wallet, derive_address, export_wallet,
-    generate_mnemonic, get_wallet, import_mnemonic, import_private_keys, list_wallets,
-    rename_wallet,
+    generate_mnemonic, get_wallet, import_mnemonic, import_private_key, import_private_keys,
+    list_wallets, rename_wallet,
 };
 
 /// Domain-aware vault wrapping [`owx_vault::Store`].

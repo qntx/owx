@@ -1,6 +1,7 @@
 //! [`VaultBridge`] — connects OWX vault signing to the payment layer.
 
 use crate::Vault;
+use crate::chain::ChainFamily;
 use crate::error::Error;
 use crate::pay::WalletBridge;
 
@@ -44,31 +45,42 @@ impl<'v> VaultBridge<'v> {
 }
 
 impl WalletBridge for VaultBridge<'_> {
-    fn supported_chains(&self) -> Vec<String> {
+    fn supported_families(&self) -> Vec<ChainFamily> {
         crate::list_wallets(self.vault)
             .ok()
             .and_then(|ws| {
                 ws.into_iter()
                     .find(|w| w.id == self.wallet || w.name == self.wallet)
             })
-            .map(|w| w.accounts.into_iter().map(|a| a.chain_id).collect())
+            .map(|w| {
+                w.accounts
+                    .iter()
+                    .filter_map(|a| {
+                        a.chain_id
+                            .split_once(':')
+                            .and_then(|(ns, _)| ChainFamily::from_namespace(ns))
+                    })
+                    .collect::<std::collections::HashSet<_>>()
+                    .into_iter()
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
-    fn address(&self, chain_id: &str) -> Result<String, Error> {
+    fn address(&self, network: &str) -> Result<String, Error> {
         let info = crate::get_wallet(self.vault, &self.wallet)?;
         info.accounts
             .iter()
-            .find(|a| a.chain_id == chain_id)
+            .find(|a| a.chain_id == network)
             .map(|a| a.address.clone())
-            .ok_or_else(|| Error::InvalidInput(format!("no account for chain {chain_id}")))
+            .ok_or_else(|| Error::InvalidInput(format!("no account for chain {network}")))
     }
 
-    fn sign_typed_data(&self, chain_id: &str, payload: &str) -> Result<String, Error> {
+    fn sign_payload(&self, _scheme: &str, network: &str, payload: &str) -> Result<String, Error> {
         let result = crate::sign_typed_data(
             self.vault,
             &self.wallet,
-            chain_id,
+            network,
             payload,
             &self.credential,
             Some(self.index),

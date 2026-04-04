@@ -5,6 +5,19 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+/// Backup configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupConfig {
+    /// Backup directory path.
+    pub path: PathBuf,
+    /// Whether to auto-backup on wallet mutations.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_backup: Option<bool>,
+    /// Maximum number of backup snapshots to retain.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_backups: Option<u32>,
+}
+
 /// Application configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -14,6 +27,12 @@ pub struct Config {
     /// RPC endpoints keyed by CAIP-2 chain ID.
     #[serde(default)]
     pub rpc: HashMap<String, String>,
+    /// Plugin configuration (opaque JSON per plugin name).
+    #[serde(default)]
+    pub plugins: HashMap<String, serde_json::Value>,
+    /// Optional backup configuration.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backup: Option<BackupConfig>,
 }
 
 impl Config {
@@ -34,6 +53,10 @@ impl Config {
             (
                 "eip155:43114".into(),
                 "https://api.avax.network/ext/bc/C/rpc".into(),
+            ),
+            (
+                "eip155:42793".into(),
+                "https://node.mainnet.etherlink.com".into(),
             ),
             (
                 "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp".into(),
@@ -57,11 +80,15 @@ impl Config {
                 "sui:mainnet".into(),
                 "https://fullnode.mainnet.sui.io:443".into(),
             ),
-            (
-                "eip155:42793".into(),
-                "https://node.mainnet.etherlink.com".into(),
-            ),
             ("xrpl:mainnet".into(), "https://s1.ripple.com:51234".into()),
+            (
+                "xrpl:testnet".into(),
+                "https://s.altnet.rippletest.net:51234".into(),
+            ),
+            (
+                "xrpl:devnet".into(),
+                "https://s.devnet.rippletest.net:51234".into(),
+            ),
         ])
     }
 
@@ -91,6 +118,8 @@ impl Config {
             for (k, v) in user_config.rpc {
                 config.rpc.insert(k, v);
             }
+            config.plugins = user_config.plugins;
+            config.backup = user_config.backup;
             if !user_config.vault_path.as_os_str().is_empty() {
                 config.vault_path = user_config.vault_path;
             }
@@ -104,6 +133,8 @@ impl Default for Config {
         Self {
             vault_path: default_vault_path(),
             rpc: Self::default_rpc(),
+            plugins: HashMap::new(),
+            backup: None,
         }
     }
 }
