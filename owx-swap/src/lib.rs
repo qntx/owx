@@ -1,29 +1,35 @@
-//! Cross-chain token swap via LiFi for OWX.
+//! Backend-agnostic cross-chain token swap engine for OWX.
 //!
-//! Wraps [`lifiswap::LiFiClient`] with a simplified async API for quoting,
-//! routing, and executing cross-chain swaps using OWX wallets.
+//! `owx-swap` provides a generic [`SwapBackend`] trait so that multiple
+//! aggregators (LiFi, Uniswap, Jupiter, …) can be plugged in behind a
+//! unified [`SwapEngine`].
+//!
+//! # Agent workflow
 //!
 //! ```ignore
-//! let client = owx_swap::SwapClient::new("my-integrator")?;
-//! let quote = client.quote("42161", "0xUSDC", "0xWallet", "10000000", "10", "0xDAI").await?;
+//! use owx_swap::{SwapEngine, SwapRequest};
+//!
+//! let mut engine = SwapEngine::new();
+//! engine.add_backend(owx_swap::backends::lifi::LiFiBackend::new("owx")?);
+//!
+//! let req = SwapRequest { /* … */ };
+//! let quotes = engine.get_quotes(&req).await?;   // JSON-serialisable
+//! let receipt = engine.execute(&quotes[0], &signer).await?;
 //! ```
 
-#![allow(clippy::missing_docs_in_private_items)]
-
-mod client;
+pub mod backends;
+mod engine;
 mod error;
-#[cfg(feature = "evm")]
 mod provider;
+pub mod types;
 
-pub use client::SwapClient;
+#[cfg(feature = "evm")]
+pub use backends::evm::{evm_provider_from_key, evm_provider_from_key_with_rpcs};
+#[cfg(feature = "lifi")]
+pub use backends::lifi::LiFiBackend;
+pub use engine::SwapEngine;
 pub use error::SwapError;
-pub use lifiswap;
 #[cfg(feature = "evm")]
-pub use lifiswap_evm;
-#[cfg(feature = "evm")]
-pub use provider::{evm_provider_from_key, evm_provider_from_key_with_rpcs};
-
-/// Re-export key types from lifiswap for convenience.
-pub mod types {
-    pub use lifiswap::types::*;
-}
+pub use lifiswap_evm::EvmProvider;
+pub use provider::{SwapBackend, SwapSigner};
+pub use types::{SelectionStrategy, SwapQuote, SwapReceipt, SwapRequest, SwapStatus};

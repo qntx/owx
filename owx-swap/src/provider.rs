@@ -1,55 +1,54 @@
-//! EVM provider bridge: OWX wallet → lifiswap-evm execution.
+//! Backend-agnostic swap provider and signer traits.
 //!
-//! Creates a [`lifiswap_evm::EvmProvider`] from an OWX private key hex string,
-//! enabling end-to-end swap execution through the lifiswap engine.
+//! [`SwapBackend`] is the extension point for adding new swap/bridge
+//! aggregators (LiFi, Uniswap, Jupiter, 1inch, …).
+//!
+//! [`SwapSigner`] abstracts the signing capability so that `owx-swap` never
+//! touches raw private keys directly.
 
-use std::collections::HashMap;
-
-use alloy::signers::local::PrivateKeySigner;
-use lifiswap_evm::{EvmProvider, LocalSigner};
+use std::future::Future;
+use std::pin::Pin;
 
 use crate::error::SwapError;
+use crate::types::{SwapQuote, SwapReceipt, SwapRequest};
 
-/// Build an [`EvmProvider`] from a raw secp256k1 private key hex and default RPC URL.
+/// A swap/bridge aggregator backend.
 ///
-/// The provider handles signing, broadcasting, balance queries, and allowance
-/// management for EVM chains. Multi-chain RPC resolution is handled by the
-/// optional [`OwxRpcResolver`].
-pub fn evm_provider_from_key(
-    private_key_hex: &str,
-    rpc_url: &str,
-) -> Result<EvmProvider, SwapError> {
-    let key_hex = private_key_hex
-        .strip_prefix("0x")
-        .unwrap_or(private_key_hex);
-    let signer: PrivateKeySigner = key_hex
-        .parse()
-        .map_err(|e| SwapError::InvalidInput(format!("invalid private key: {e}")))?;
+/// Implementations translate between the generic [`SwapRequest`]/[`SwapQuote`]
+/// types and the backend's native API.
+pub trait SwapBackend: Send + Sync {
+    /// Unique backend identifier (e.g. `"lifi"`, `"uniswap"`, `"jupiter"`).
+    fn name(&self) -> &str;
 
-    let rpc: url::Url = rpc_url
-        .parse()
-        .map_err(|e| SwapError::InvalidInput(format!("invalid RPC URL: {e}")))?;
+    /// Fetch quotes for a swap request.
+    fn get_quotes<'a>(
+        &'a self,
+        req: &'a SwapRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<SwapQuote>, SwapError>> + Send + 'a>>;
 
-    let local = LocalSigner::new(signer, rpc.clone());
-    Ok(EvmProvider::new(local, rpc))
+    /// Execute a previously obtained quote.
+    ///
+    /// The `quote.opaque` field carries backend-specific state needed for
+    /// execution (e.g. a serialised LiFi `Route`).
+    fn execute<'a>(
+        &'a self,
+        quote: &'a SwapQuote,
+        signer: &'a dyn SwapSigner,
+    ) -> Pin<Box<dyn Future<Output = Result<SwapReceipt, SwapError>> + Send + 'a>>;
 }
 
-/// Build an [`EvmProvider`] with multi-chain RPC resolution from OWX config.
-pub fn evm_provider_from_key_with_rpcs(
-    private_key_hex: &str,
-    default_rpc_url: &str,
-    rpc_map: HashMap<u64, String>,
-) -> Result<EvmProvider, SwapError> {
-    let provider = evm_provider_from_key(private_key_hex, default_rpc_url)?;
-    Ok(provider.with_rpc_resolver(OwxRpcResolver(rpc_map)))
-}
+/// Signing abstraction injected by the caller (typically `owx` core).
+///
+/// The swap engine never sees raw private keys — it delegates all
+/// cryptographic operations through this trait.
+pub trait SwapSigner: Send + Sync {
+    /// Wallet address on the relevant chain.
+    fn address(&self) -> &str;
 
-/// Maps LiFi numeric chain IDs to OWX RPC URLs.
-#[derive(Debug, Clone)]
-struct OwxRpcResolver(HashMap<u64, String>);
-
-impl lifiswap_evm::rpc::RpcUrlResolver for OwxRpcResolver {
-    fn resolve(&self, chain_id: u64) -> Option<url::Url> {
-        self.0.get(&chain_id).and_then(|s| s.parse().ok())
-    }
+    /// Sign and broadcast a raw transaction, returning the tx hash.
+    fn send_transaction<'a>(
+        &'a self,
+        chain_id: u64,
+        tx_data: &'a [u8],
+    ) -> Pin<Box<dyn Future<Output = Result<String, SwapError>> + Send + 'a>>;
 }

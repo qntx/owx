@@ -34,17 +34,6 @@ pub fn exit_with_error(error: &owx::Error) -> ! {
     std::process::exit(1)
 }
 
-/// Prompt for user input on stderr, read from stdin.
-#[allow(clippy::print_stderr, clippy::expect_used)]
-pub fn read_line(prompt: &str) -> String {
-    eprint!("{prompt}");
-    let mut input = String::new();
-    std::io::stdin()
-        .read_line(&mut input)
-        .expect("failed to read input");
-    input.trim().to_owned()
-}
-
 /// Find the first EVM address from the first wallet.
 pub fn first_evm_address(owx: &Owx) -> Result<String, owx::Error> {
     let wallets = owx.list_wallets()?;

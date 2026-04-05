@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use zeroize::Zeroize;
+use subtle::ConstantTimeEq;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::Owx;
 use crate::chain::{ChainFamily, default_chain};
@@ -138,19 +139,21 @@ pub fn revoke_api_key(vault: &Owx, id: &str) -> Result<(), Error> {
 /// Resolve the hex private key for signing via an API token (agent mode).
 ///
 /// Validates token → checks expiry → loads wallet → enforces policies → decrypts.
+/// Returns a [`Zeroizing<String>`] that is automatically scrubbed on drop.
 pub fn resolve_agent_key(
     vault: &Owx,
     wallet_name_or_id: &str,
     token: &str,
     family: ChainFamily,
     index: u32,
-) -> Result<String, Error> {
+) -> Result<Zeroizing<String>, Error> {
     let token_hash = crate::token::hash_token(token);
     let api_key = find_key_by_hash(vault, &token_hash)?;
 
     if let Some(ref exp) = api_key.expires_at {
-        let now = chrono::Utc::now().to_rfc3339();
-        if now.as_str() > exp.as_str() {
+        let expires = chrono::DateTime::parse_from_rfc3339(exp)
+            .map_err(|e| Error::InvalidInput(format!("invalid expires_at '{exp}': {e}")))?;
+        if chrono::Utc::now() >= expires {
             return Err(Error::ApiKeyExpired(api_key.id));
         }
     }
@@ -204,23 +207,25 @@ pub fn resolve_agent_key(
     })?;
     let envelope: owx_vault::CryptoEnvelope = serde_json::from_value(envelope_value.clone())?;
     let secret = decrypt_from_envelope(&envelope, token, wallet.key_type)?;
-    extract_key_hex(&secret, family, index)
+    extract_key_hex(&secret, family, index).map(Zeroizing::new)
 }
 
 /// Resolve signing key: passphrase (owner) or API token (agent).
+///
+/// Returns a [`Zeroizing<String>`] that is automatically scrubbed on drop.
 pub fn resolve_signing_key(
     vault: &Owx,
     wallet_name_or_id: &str,
     credential: &str,
     family: ChainFamily,
     index: u32,
-) -> Result<String, Error> {
+) -> Result<Zeroizing<String>, Error> {
     if crate::token::is_api_token(credential) {
         return resolve_agent_key(vault, wallet_name_or_id, credential, family, index);
     }
     let wallet = crate::wallet::load_wallet(vault, wallet_name_or_id)?;
     let secret = decrypt_secret(&wallet, credential)?;
-    extract_key_hex(&secret, family, index)
+    extract_key_hex(&secret, family, index).map(Zeroizing::new)
 }
 
 /// Extract the hex private key from a decrypted wallet secret.
@@ -241,10 +246,10 @@ fn extract_key_hex(
     }
 }
 
-/// Look up an API key by token hash (linear scan).
+/// Look up an API key by token hash (constant-time comparison).
 fn find_key_by_hash(vault: &Owx, token_hash: &str) -> Result<ApiKeyFile, Error> {
     let keys: Vec<ApiKeyFile> = vault.store().list("keys")?;
     keys.into_iter()
-        .find(|k| k.token_hash == token_hash)
-        .ok_or_else(|| Error::ApiKeyNotFound(token_hash[..8].to_owned()))
+        .find(|k| k.token_hash.as_bytes().ct_eq(token_hash.as_bytes()).into())
+        .ok_or_else(|| Error::ApiKeyNotFound("<redacted>".to_owned()))
 }

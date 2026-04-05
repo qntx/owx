@@ -4009,6 +4009,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "signer",
+ "subtle",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -4053,11 +4054,9 @@ dependencies = [
  "lifiswap",
  "lifiswap-evm",
  "owx",
- "reqwest 0.13.2",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
- "tokio",
  "url",
 ]
 

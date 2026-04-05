@@ -1,4 +1,4 @@
-//! CLI subcommand definitions and dispatch.
+//! CLI subcommand definitions and dispatch — agent-friendly, zero stdin interaction.
 
 pub mod key;
 pub mod policy;
@@ -10,7 +10,7 @@ pub mod wallet;
 use clap::Subcommand;
 use owx::Owx;
 
-use crate::output::{print_json, read_line};
+use crate::output::print_json;
 
 /// Top-level CLI commands.
 #[derive(Subcommand)]
@@ -32,7 +32,11 @@ pub enum Commands {
     },
     /// Derive an address for a chain.
     Derive {
+        wallet: String,
         chain: String,
+        /// Owner passphrase.
+        #[arg(long, env = "OWX_PASSPHRASE")]
+        passphrase: String,
         #[arg(long, default_value = "0")]
         index: u32,
     },
@@ -46,12 +50,21 @@ pub enum Commands {
         wallet: String,
         chain: String,
         tx_hex: String,
+        /// Passphrase or API token.
+        #[arg(long, env = "OWX_CREDENTIAL")]
+        credential: String,
         #[arg(long)]
         rpc: Option<String>,
     },
     /// Make an HTTP request with automatic x402 payment.
     #[cfg(feature = "pay")]
     Pay {
+        /// Wallet name or ID.
+        #[arg(long)]
+        wallet: String,
+        /// Passphrase or API token.
+        #[arg(long, env = "OWX_CREDENTIAL")]
+        credential: String,
         url: String,
         #[arg(long, default_value = "GET")]
         method: String,
@@ -80,7 +93,7 @@ pub enum Commands {
         #[arg(long, default_value = "base")]
         chain: String,
     },
-    /// Cross-chain token swap via LiFi.
+    /// Cross-chain token swap.
     #[cfg(feature = "swap")]
     Swap {
         #[command(subcommand)]
@@ -100,10 +113,13 @@ pub fn dispatch(cmd: Commands, owx: &Owx) -> Result<(), Box<dyn std::error::Erro
         Commands::Wallet { action } => wallet::run(action, owx)?,
         Commands::Key { action } => key::run(action, owx)?,
         Commands::Sign { action } => sign::run(action, owx)?,
-        Commands::Derive { chain, index } => {
-            let wn = read_line("Wallet name or ID: ");
-            let pass = read_line("Passphrase: ");
-            let addr = owx.derive_address(&wn, &chain, &pass, Some(index))?;
+        Commands::Derive {
+            wallet,
+            chain,
+            passphrase,
+            index,
+        } => {
+            let addr = owx.derive_address(&wallet, &chain, &passphrase, Some(index))?;
             print_json(&serde_json::json!({ "chain": chain, "index": index, "address": addr }))?;
         }
         Commands::Generate { words } => {
@@ -114,20 +130,24 @@ pub fn dispatch(cmd: Commands, owx: &Owx) -> Result<(), Box<dyn std::error::Erro
             wallet,
             chain,
             tx_hex,
+            credential,
             rpc,
         } => {
-            let cred_str = read_line("Passphrase or API token: ");
-            let cred = owx::Credential::parse(&cred_str);
+            let cred = owx::Credential::parse(&credential);
             let rt = tokio::runtime::Runtime::new()?;
             let result =
                 rt.block_on(owx.sign_and_send(&wallet, &chain, &tx_hex, cred, rpc.as_deref()))?;
             print_json(&result)?;
         }
         #[cfg(feature = "pay")]
-        Commands::Pay { url, method, body } => {
-            let wn = read_line("Wallet name or ID: ");
-            let cred = read_line("Passphrase or API token: ");
-            let bridge = owx_pay::OwxBridge::new(owx, &wn, &cred, 0);
+        Commands::Pay {
+            wallet,
+            credential,
+            url,
+            method,
+            body,
+        } => {
+            let bridge = owx_pay::OwxBridge::new(owx, &wallet, &credential, 0);
             let result = owx_pay::pay(&bridge, &url, &method, body.as_deref())?;
             print_json(&result)?;
         }

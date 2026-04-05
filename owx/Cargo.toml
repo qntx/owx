@@ -35,6 +35,7 @@ tokio = { version = "1", features = ["rt", "sync", "macros"] }
 reqwest = { workspace = true, default-features = false, features = ["json", "rustls"] }
 serde.workspace = true
 serde_json.workspace = true
+subtle.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 zeroize.workspace = true

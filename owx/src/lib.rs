@@ -208,8 +208,8 @@ impl Owx {
     ) -> Result<SignResult, Error> {
         let resolved = chain::resolve(chain)?;
         let family = resolved.family();
-        let key_hex = key::resolve_signing_key(self, wallet, cred.as_str(), family, 0)?;
-        let out = signer::sign_message(family, &key_hex, message)?;
+        let key = key::resolve_signing_key(self, wallet, cred.as_str(), family, 0)?;
+        let out = signer::sign_message(family, &key, message)?;
         self.audit
             .log_ok("sign_message", Some(wallet), Some(resolved.chain_id()));
         Ok(signer::to_sign_result(&out))
@@ -228,8 +228,8 @@ impl Owx {
         let clean = tx_hex.strip_prefix("0x").unwrap_or(tx_hex);
         let tx_bytes =
             hex::decode(clean).map_err(|e| Error::InvalidInput(format!("invalid hex: {e}")))?;
-        let key_hex = key::resolve_signing_key(self, wallet, cred.as_str(), family, 0)?;
-        let out = signer::sign_transaction(family, &key_hex, &tx_bytes)?;
+        let key = key::resolve_signing_key(self, wallet, cred.as_str(), family, 0)?;
+        let out = signer::sign_transaction(family, &key, &tx_bytes)?;
         self.audit
             .log_ok("sign_transaction", Some(wallet), Some(resolved.chain_id()));
         Ok(signer::to_sign_result(&out))
@@ -247,8 +247,8 @@ impl Owx {
         if resolved.family() != chain::ChainFamily::Evm {
             return Err(Error::InvalidInput("EIP-712 is EVM-only".into()));
         }
-        let key_hex = key::resolve_signing_key(self, wallet, cred.as_str(), resolved.family(), 0)?;
-        let out = signer::sign_typed_data(&key_hex, typed_data)?;
+        let key = key::resolve_signing_key(self, wallet, cred.as_str(), resolved.family(), 0)?;
+        let out = signer::sign_typed_data(&key, typed_data)?;
         self.audit
             .log_ok("sign_typed_data", Some(wallet), Some(resolved.chain_id()));
         Ok(signer::to_sign_result(&out))
@@ -269,8 +269,8 @@ impl Owx {
         let clean = tx_hex.strip_prefix("0x").unwrap_or(tx_hex);
         let tx_bytes =
             hex::decode(clean).map_err(|e| Error::InvalidInput(format!("invalid hex: {e}")))?;
-        let key_hex = key::resolve_signing_key(self, wallet, cred.as_str(), family, 0)?;
-        let sig = signer::sign_transaction(family, &key_hex, &tx_bytes)?;
+        let key = key::resolve_signing_key(self, wallet, cred.as_str(), family, 0)?;
+        let sig = signer::sign_transaction(family, &key, &tx_bytes)?;
         let payload = signer::encode_signed_tx(family, &tx_bytes, &sig)?;
         let rpc = broadcast::resolve_rpc(chain_id, family, rpc_url, &self.config)?;
         let tx_hash = broadcast::broadcast(&self.http, family, &rpc, &payload).await?;
@@ -298,10 +298,9 @@ impl Owx {
     where
         F: FnOnce(&str) -> Result<R, Error>,
     {
-        let mut key_hex = key::resolve_signing_key(self, wallet, cred.as_str(), family, index)?;
-        let result = f(&key_hex);
-        zeroize::Zeroize::zeroize(&mut key_hex);
-        result
+        let key = key::resolve_signing_key(self, wallet, cred.as_str(), family, index)?;
+        f(&key)
+        // `key: Zeroizing<String>` is scrubbed here on drop
     }
 
     /// Create an API key.
