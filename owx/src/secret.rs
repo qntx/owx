@@ -5,7 +5,7 @@
 //! - **Private key pair**: `{"secp256k1":"hex","ed25519":"hex"}` JSON (no type tag)
 
 use owx_vault::{CryptoEnvelope, crypto};
-use zeroize::Zeroize;
+use zeroize::Zeroizing;
 
 use crate::chain::ChainFamily;
 use crate::error::Error;
@@ -16,27 +16,27 @@ use crate::wallet::{EncryptedWallet, KeyType};
 /// All secret material is zeroized on [`Drop`].
 pub enum WalletSecret {
     /// BIP-39 mnemonic phrase.
-    Mnemonic(String),
+    Mnemonic(Zeroizing<String>),
     /// Per-curve hex-encoded private keys.
     KeyPair {
         /// Secp256k1 key hex (EVM/Bitcoin/Cosmos/Tron/Spark/Filecoin).
-        secp256k1: String,
+        secp256k1: Zeroizing<String>,
         /// Ed25519 key hex (Solana/TON/Sui).
-        ed25519: String,
+        ed25519: Zeroizing<String>,
     },
 }
 
 impl WalletSecret {
     /// Create a mnemonic secret.
     pub fn mnemonic(phrase: impl Into<String>) -> Self {
-        Self::Mnemonic(phrase.into())
+        Self::Mnemonic(Zeroizing::new(phrase.into()))
     }
 
     /// Create from explicit dual-curve keys.
     pub fn key_pair(secp256k1: impl Into<String>, ed25519: impl Into<String>) -> Self {
         Self::KeyPair {
-            secp256k1: secp256k1.into(),
-            ed25519: ed25519.into(),
+            secp256k1: Zeroizing::new(secp256k1.into()),
+            ed25519: Zeroizing::new(ed25519.into()),
         }
     }
 
@@ -51,7 +51,7 @@ impl WalletSecret {
     /// Returns the mnemonic phrase (if this is a mnemonic secret).
     pub fn phrase(&self) -> Option<&str> {
         match self {
-            Self::Mnemonic(p) => Some(p),
+            Self::Mnemonic(p) => Some(p.as_str()),
             Self::KeyPair { .. } => None,
         }
     }
@@ -62,9 +62,9 @@ impl WalletSecret {
             Self::Mnemonic(_) => None,
             Self::KeyPair { secp256k1, ed25519 } => {
                 if ct.is_ed25519() {
-                    Some(ed25519)
+                    Some(ed25519.as_str())
                 } else {
-                    Some(secp256k1)
+                    Some(secp256k1.as_str())
                 }
             }
         }
@@ -73,9 +73,9 @@ impl WalletSecret {
     /// Export as a human-readable string (phrase or JSON key pair).
     pub fn export_string(&self) -> Result<String, Error> {
         match self {
-            Self::Mnemonic(p) => Ok(p.clone()),
+            Self::Mnemonic(p) => Ok(p.to_string()),
             Self::KeyPair { secp256k1, ed25519 } => {
-                let obj = serde_json::json!({"secp256k1": secp256k1, "ed25519": ed25519});
+                let obj = serde_json::json!({"secp256k1": secp256k1.as_str(), "ed25519": ed25519.as_str()});
                 serde_json::to_string_pretty(&obj).map_err(Error::from)
             }
         }
@@ -86,20 +86,8 @@ impl WalletSecret {
         match self {
             Self::Mnemonic(p) => Ok(p.as_bytes().to_vec()),
             Self::KeyPair { secp256k1, ed25519 } => {
-                let obj = serde_json::json!({"secp256k1": secp256k1, "ed25519": ed25519});
+                let obj = serde_json::json!({"secp256k1": secp256k1.as_str(), "ed25519": ed25519.as_str()});
                 serde_json::to_vec(&obj).map_err(Error::from)
-            }
-        }
-    }
-}
-
-impl Drop for WalletSecret {
-    fn drop(&mut self) {
-        match self {
-            Self::Mnemonic(p) => p.zeroize(),
-            Self::KeyPair { secp256k1, ed25519 } => {
-                secp256k1.zeroize();
-                ed25519.zeroize();
             }
         }
     }

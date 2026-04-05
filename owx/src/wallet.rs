@@ -202,15 +202,25 @@ pub fn import_private_keys(
     ed25519_hex: &str,
     passphrase: &str,
 ) -> Result<WalletInfo, Error> {
-    import_private_key(
-        owx,
-        name,
-        "",
-        None,
-        passphrase,
-        Some(secp256k1_hex),
-        Some(ed25519_hex),
-    )
+    ensure_name_available(owx, name)?;
+
+    let secp_bytes = decode_hex_key(secp256k1_hex)?;
+    let ed_bytes = decode_hex_key(ed25519_hex)?;
+    validate_key_len(&secp_bytes, "secp256k1")?;
+    validate_key_len(&ed_bytes, "ed25519")?;
+
+    let secret = WalletSecret::key_pair(hex::encode(&secp_bytes), hex::encode(&ed_bytes));
+    let accounts = derive_accounts_from_secret(&secret);
+    let crypto_json = encrypt_secret(&secret, passphrase)?;
+    let wallet = EncryptedWallet::new(
+        uuid::Uuid::new_v4().to_string(),
+        name.to_owned(),
+        accounts,
+        crypto_json,
+        secret.key_type(),
+    );
+    owx.store().save("wallets", &wallet.id, &wallet)?;
+    Ok(to_info(&wallet))
 }
 
 /// List all wallets (newest first).
@@ -371,7 +381,7 @@ fn resolve_key_pair(
     getrandom::getrandom(&mut random)
         .map_err(|e| Error::InvalidInput(format!("CSPRNG failed: {e}")))?;
 
-    if is_ed25519 {
+    let result = if is_ed25519 {
         let secp = secp_override
             .map(decode_hex_key)
             .transpose()?
@@ -383,7 +393,9 @@ fn resolve_key_pair(
             .transpose()?
             .unwrap_or_else(|| random.to_vec());
         Ok((key_bytes, ed))
-    }
+    };
+    random.zeroize();
+    result
 }
 
 /// Decode a hex private key (strips optional `0x` prefix).

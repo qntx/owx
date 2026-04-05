@@ -91,6 +91,9 @@ pub struct TransactionContext {
     /// Calldata / input data (EVM).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,
+    /// Asset identifier (contract address or "native").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asset: Option<String>,
 }
 
 /// Spending context for daily-limit policies.
@@ -100,6 +103,9 @@ pub struct SpendingContext {
     pub daily_total: String,
     /// Date string (YYYY-MM-DD).
     pub date: String,
+    /// Asset identifier (must match the rule's asset).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asset: Option<String>,
 }
 
 /// Context passed to policy evaluation.
@@ -196,27 +202,48 @@ fn evaluate_rule(rule: &PolicyRule, pid: &str, ctx: &PolicyContext) -> PolicyRes
             }
         }
         PolicyRule::ExpiresAt { timestamp } => {
-            if ctx.timestamp.as_str() > timestamp.as_str() {
+            let Ok(expires) = chrono::DateTime::parse_from_rfc3339(timestamp) else {
+                return PolicyResult::denied(pid, format!("invalid expires_at: '{timestamp}'"));
+            };
+            let Ok(now) = chrono::DateTime::parse_from_rfc3339(&ctx.timestamp) else {
+                return PolicyResult::denied(
+                    pid,
+                    format!("invalid context timestamp: '{}'", ctx.timestamp),
+                );
+            };
+            if now >= expires {
                 PolicyResult::denied(pid, format!("policy expired at {timestamp}"))
             } else {
                 PolicyResult::allowed()
             }
         }
-        PolicyRule::MaxAmount { amount, .. } => match &ctx.transaction.value {
-            Some(value) if exceeds(value, amount) => {
-                PolicyResult::denied(pid, format!("amount {value} exceeds max {amount}"))
+        PolicyRule::MaxAmount { amount, asset } => {
+            if !asset_matches(asset, ctx.transaction.asset.as_deref()) {
+                return PolicyResult::allowed();
             }
-            _ => PolicyResult::allowed(),
-        },
-        PolicyRule::DailyLimit { amount, .. } => {
+            match &ctx.transaction.value {
+                Some(value) => match exceeds(value, amount) {
+                    Ok(true) => {
+                        PolicyResult::denied(pid, format!("amount {value} exceeds max {amount}"))
+                    }
+                    Err(reason) => PolicyResult::denied(pid, reason),
+                    _ => PolicyResult::allowed(),
+                },
+                None => PolicyResult::allowed(),
+            }
+        }
+        PolicyRule::DailyLimit { amount, asset } => {
+            if !asset_matches(asset, ctx.spending.asset.as_deref()) {
+                return PolicyResult::allowed();
+            }
             let total = &ctx.spending.daily_total;
-            if exceeds(total, amount) {
-                PolicyResult::denied(
+            match exceeds(total, amount) {
+                Ok(true) => PolicyResult::denied(
                     pid,
                     format!("daily spending {total} exceeds limit {amount}"),
-                )
-            } else {
-                PolicyResult::allowed()
+                ),
+                Err(reason) => PolicyResult::denied(pid, reason),
+                _ => PolicyResult::allowed(),
             }
         }
         PolicyRule::AllowedRecipients { addresses } => match &ctx.transaction.to {
@@ -228,11 +255,30 @@ fn evaluate_rule(rule: &PolicyRule, pid: &str, ctx: &PolicyContext) -> PolicyRes
     }
 }
 
+/// Check if a rule's asset matches the context asset.
+///
+/// Rules: if context has no asset, the rule always applies (conservative).
+/// If both present, compare case-insensitively.
+#[allow(clippy::missing_const_for_fn)]
+fn asset_matches(rule_asset: &str, ctx_asset: Option<&str>) -> bool {
+    match ctx_asset {
+        None => true,
+        Some(a) => a.eq_ignore_ascii_case(rule_asset),
+    }
+}
+
 /// Compare two decimal-string amounts (returns true if value > max).
-fn exceeds(value: &str, max: &str) -> bool {
-    let v: u128 = value.parse().unwrap_or(0);
-    let m: u128 = max.parse().unwrap_or(u128::MAX);
-    v > m
+///
+/// Returns `Err` if either string is not a valid u128, ensuring malformed
+/// amounts are never silently allowed.
+fn exceeds(value: &str, max: &str) -> Result<bool, String> {
+    let v: u128 = value
+        .parse()
+        .map_err(|_| format!("unparseable amount value: '{value}'"))?;
+    let m: u128 = max
+        .parse()
+        .map_err(|_| format!("unparseable amount limit: '{max}'"))?;
+    Ok(v > m)
 }
 
 /// Run an executable policy subprocess and parse its JSON verdict.
@@ -369,10 +415,12 @@ mod tests {
                 value: Some("100000".to_owned()),
                 raw_hex: "0xdead".to_owned(),
                 data: None,
+                asset: Some("native".to_owned()),
             },
             spending: SpendingContext {
                 daily_total: "50000".to_owned(),
                 date: "2026-01-01".to_owned(),
+                asset: Some("native".to_owned()),
             },
             timestamp: "2026-01-01T12:00:00Z".to_owned(),
         }

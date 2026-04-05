@@ -102,6 +102,11 @@ pub fn create_api_key(
         policy::load_policy(vault.store(), pid)?;
     }
 
+    if let Some(exp) = expires_at {
+        chrono::DateTime::parse_from_rfc3339(exp)
+            .map_err(|e| Error::InvalidInput(format!("invalid expires_at '{exp}': {e}")))?;
+    }
+
     let key_file = ApiKeyFile {
         id: uuid::Uuid::new_v4().to_string(),
         name: name.to_owned(),
@@ -170,8 +175,8 @@ pub fn resolve_agent_key(
     let policies: Vec<Policy> = api_key
         .policy_ids
         .iter()
-        .filter_map(|pid| policy::load_policy(vault.store(), pid).ok())
-        .collect();
+        .map(|pid| policy::load_policy(vault.store(), pid))
+        .collect::<Result<Vec<_>, _>>()?;
 
     if !policies.is_empty() {
         let ctx = PolicyContext {
@@ -183,10 +188,12 @@ pub fn resolve_agent_key(
                 value: None,
                 raw_hex: String::new(),
                 data: None,
+                asset: None,
             },
             spending: SpendingContext {
                 daily_total: "0".to_owned(),
                 date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+                asset: None,
             },
             timestamp: chrono::Utc::now().to_rfc3339(),
         };

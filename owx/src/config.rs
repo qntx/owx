@@ -98,15 +98,6 @@ impl Config {
         self.rpc.get(chain_id).map(String::as_str)
     }
 
-    /// Load `<vault>/config.json`, merging user overrides on top of defaults.
-    /// Returns built-in defaults if the file doesn't exist.
-    #[must_use]
-    pub fn load_or_default() -> Self {
-        let default = Self::default();
-        let config_path = default.vault_path.join("config.json");
-        Self::load_or_default_from(&config_path)
-    }
-
     /// Load config from a specific path, merging user overrides on top of defaults.
     #[must_use]
     pub fn load_or_default_from(path: &Path) -> Self {
@@ -140,7 +131,7 @@ impl Default for Config {
 }
 
 /// Best-effort default vault path.
-fn default_vault_path() -> PathBuf {
+pub fn default_vault_path() -> PathBuf {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| "/tmp".to_owned());

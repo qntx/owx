@@ -38,7 +38,6 @@ fn main() {
         Err(e) => exit_with_error(&e),
     };
     if let Err(e) = commands::dispatch(cli.command, &owx) {
-        let owx_err = owx::Error::InvalidInput(e.to_string());
-        exit_with_error(&owx_err);
+        exit_with_error(&e);
     }
 }

@@ -1,7 +1,5 @@
 //! Authentication credentials and secret key material.
 
-use zeroize::Zeroize;
-
 use crate::error::Error;
 
 /// Authentication credential for wallet operations.
@@ -64,18 +62,6 @@ impl SecretKey {
     #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
-    }
-
-    /// Convert to hex string (crate-internal only).
-    #[allow(dead_code)]
-    pub(crate) fn to_hex(&self) -> zeroize::Zeroizing<String> {
-        zeroize::Zeroizing::new(hex::encode(&*self.0))
-    }
-}
-
-impl Drop for SecretKey {
-    fn drop(&mut self) {
-        self.0.zeroize();
     }
 }
 

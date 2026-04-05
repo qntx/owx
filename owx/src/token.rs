@@ -9,9 +9,11 @@ use sha2::{Digest, Sha256};
 pub const TOKEN_PREFIX: &str = "owx_key_";
 
 /// Check whether a credential string is an API token.
+///
+/// Must start with the prefix **and** contain payload characters after it.
 #[must_use]
 pub fn is_api_token(credential: &str) -> bool {
-    credential.starts_with(TOKEN_PREFIX)
+    credential.len() > TOKEN_PREFIX.len() && credential.starts_with(TOKEN_PREFIX)
 }
 
 /// Generate a random API token: `owx_key_<64 hex chars>` (256 bits of entropy).
@@ -65,6 +67,7 @@ mod tests {
         assert!(is_api_token("owx_key_abc"));
         assert!(!is_api_token("password123"));
         assert!(!is_api_token(""));
-        assert!(!is_api_token("owx_key")); // missing trailing content but still matches prefix — correct behavior
+        assert!(!is_api_token("owx_key")); // missing prefix tail
+        assert!(!is_api_token("owx_key_")); // prefix only, no payload
     }
 }

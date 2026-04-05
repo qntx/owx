@@ -47,9 +47,6 @@ pub struct Owx {
     audit: audit::AuditLog,
     /// Shared async HTTP client for broadcast/pay/swap.
     http: reqwest::Client,
-    /// Derived-key cache (instance-owned, not global).
-    #[allow(dead_code)]
-    key_cache: owx_vault::KeyCache,
 }
 
 impl Owx {
@@ -60,19 +57,17 @@ impl Owx {
         let config = config::Config::load_or_default_from(&path.join("config.json"));
         let audit = audit::AuditLog::new(&path);
         let http = build_http_client();
-        let key_cache = owx_vault::KeyCache::new(Duration::from_secs(5), 32);
         Ok(Self {
             store,
             config: Arc::new(config),
             audit,
             http,
-            key_cache,
         })
     }
 
     /// Open the default vault at `~/.owx`.
     pub fn open_default() -> Result<Self, Error> {
-        Self::open(default_vault_path())
+        Self::open(config::default_vault_path())
     }
 
     /// Access the underlying generic store.
@@ -340,12 +335,4 @@ fn build_http_client() -> reqwest::Client {
         .connect_timeout(Duration::from_secs(10))
         .build()
         .expect("failed to build HTTP client")
-}
-
-/// Best-effort default vault path.
-fn default_vault_path() -> PathBuf {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| "/tmp".to_owned());
-    PathBuf::from(home).join(".owx")
 }
