@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::{PayError, PayErrorCode};
-use crate::x402::http::CLIENT as HTTP;
+use crate::http::CLIENT as HTTP;
 
 const MOONPAY_API: &str = "https://agents.moonpay.com";
 

@@ -11,6 +11,7 @@
 
 mod bridge;
 mod error;
+mod http;
 
 #[cfg(feature = "x402")]
 mod discovery;

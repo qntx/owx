@@ -172,7 +172,15 @@ pub fn encode_signed_tx(
         ChainFamily::Evm => {
             signer::evm::Signer::encode_signed_transaction(tx_bytes, &sig.signature).map_err(s_err)
         }
-        _ => Ok(sig.signature.clone()),
+        ChainFamily::Bitcoin
+        | ChainFamily::Solana
+        | ChainFamily::Cosmos
+        | ChainFamily::Tron
+        | ChainFamily::Ton
+        | ChainFamily::Spark
+        | ChainFamily::Filecoin
+        | ChainFamily::Sui
+        | ChainFamily::Xrpl => Ok(sig.signature.clone()),
     }
 }
 

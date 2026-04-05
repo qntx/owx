@@ -3,10 +3,10 @@
 use base64::Engine as _;
 
 use super::eip3009;
-use super::http;
 use super::types::{PayResult, PaymentInfo, PaymentRequirements, X402Response};
 use crate::bridge::WalletBridge;
 use crate::error::{PayError, PayErrorCode};
+use crate::http::CLIENT;
 
 /// Parse payment requirements from a 402 response (headers or body).
 pub fn parse_requirements(
@@ -72,9 +72,16 @@ pub fn handle_402(
     let payload_json = serde_json::to_string(&payload)?;
     let payload_b64 = base64::engine::general_purpose::STANDARD.encode(payload_json.as_bytes());
 
-    let retry = http::send_request(url, method, req_body, Some(&payload_b64))?;
+    let retry = send_request(url, method, req_body, Some(&payload_b64))?;
     let status = retry.status().as_u16();
     let response_body = retry.text().unwrap_or_default();
+
+    let token_symbol = req
+        .extra
+        .get("symbol")
+        .and_then(|v| v.as_str())
+        .unwrap_or("USDC")
+        .to_owned();
 
     Ok(PayResult {
         status,
@@ -82,7 +89,7 @@ pub fn handle_402(
         payment: Some(PaymentInfo {
             amount: format!("${}", format_amount(&req.amount, 6)),
             network: display_network(&req.network),
-            token: "USDC".to_owned(),
+            token: token_symbol,
         }),
     })
 }
@@ -192,6 +199,31 @@ fn display_network(network: &str) -> String {
         "eip155:10" => "Optimism".to_owned(),
         other => other.to_owned(),
     }
+}
+
+pub(super) fn send_request(
+    url: &str,
+    method: &str,
+    body: Option<&str>,
+    payment_header: Option<&str>,
+) -> Result<reqwest::blocking::Response, PayError> {
+    let mut req = match method.to_uppercase().as_str() {
+        "POST" => CLIENT.post(url),
+        "PUT" => CLIENT.put(url),
+        "DELETE" => CLIENT.delete(url),
+        "PATCH" => CLIENT.patch(url),
+        "HEAD" => CLIENT.head(url),
+        _ => CLIENT.get(url),
+    };
+    if let Some(b) = body {
+        req = req
+            .header("Content-Type", "application/json")
+            .body(b.to_owned());
+    }
+    if let Some(ph) = payment_header {
+        req = req.header("X-PAYMENT", ph);
+    }
+    Ok(req.send()?)
 }
 
 #[cfg(test)]

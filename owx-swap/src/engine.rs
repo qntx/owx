@@ -45,19 +45,21 @@ impl SwapEngine {
     /// Fan out a request to **all** backends and collect quotes.
     ///
     /// Backends that return errors are silently skipped — only quotes from
-    /// responsive backends are included. Returns [`SwapError::NoQuotes`] if
-    /// every backend fails or returns zero results.
+    /// responsive backends are included. Returns the last backend error if
+    /// every backend fails, or [`SwapError::NoQuotes`] if all succeed but
+    /// return zero results.
     pub async fn get_quotes(&self, req: &SwapRequest) -> Result<Vec<SwapQuote>, SwapError> {
         let mut all = Vec::new();
+        let mut last_err: Option<SwapError> = None;
         for backend in &self.backends {
-            if let Ok(quotes) = backend.get_quotes(req).await {
-                all.extend(quotes);
+            match backend.get_quotes(req).await {
+                Ok(quotes) => all.extend(quotes),
+                Err(e) => last_err = Some(e),
             }
         }
         if all.is_empty() {
-            return Err(SwapError::NoQuotes);
+            return Err(last_err.unwrap_or(SwapError::NoQuotes));
         }
-        sort_quotes(&mut all, SelectionStrategy::BestOutput);
         Ok(all)
     }
 

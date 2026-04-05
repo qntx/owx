@@ -1,7 +1,6 @@
 //! x402 payment protocol implementation (blocking).
 
 mod eip3009;
-pub mod http;
 mod negotiate;
 mod types;
 
@@ -17,7 +16,7 @@ pub fn pay(
     method: &str,
     body: Option<&str>,
 ) -> Result<PayResult, PayError> {
-    let initial = http::send_request(url, method, body, None)?;
+    let initial = negotiate::send_request(url, method, body, None)?;
     if initial.status().as_u16() != 402 {
         let status = initial.status().as_u16();
         let text = initial.text().unwrap_or_default();

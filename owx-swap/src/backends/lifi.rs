@@ -72,9 +72,9 @@ impl SwapBackend for LiFiBackend {
 
             let quotes: Vec<SwapQuote> = resp
                 .routes
-                .into_iter()
-                .map(|route| route_to_quote(&route))
-                .collect();
+                .iter()
+                .map(route_to_quote)
+                .collect::<Result<Vec<_>, _>>()?;
 
             Ok(quotes)
         })
@@ -132,14 +132,14 @@ impl SwapBackend for LiFiBackend {
 }
 
 /// Convert a LiFi `Route` into a generic `SwapQuote`.
-fn route_to_quote(route: &lifiswap::types::Route) -> SwapQuote {
+fn route_to_quote(route: &lifiswap::types::Route) -> Result<SwapQuote, SwapError> {
     let tools: Vec<&str> = route
         .steps
         .iter()
         .filter_map(|s| s.tool.as_deref())
         .collect();
 
-    SwapQuote {
+    Ok(SwapQuote {
         id: format!("lifi:{}", route.id),
         provider: "lifi".into(),
         from_token: TokenInfo {
@@ -162,8 +162,8 @@ fn route_to_quote(route: &lifiswap::types::Route) -> SwapQuote {
         route_summary: tools.join(" → "),
         tags: route.tags.clone().unwrap_or_default(),
         estimated_seconds: None,
-        opaque: serde_json::to_value(route).unwrap_or_default(),
-    }
+        opaque: serde_json::to_value(route)?,
+    })
 }
 
 /// Parse a chain ID string (supports both numeric `"42161"` and CAIP-2 `"eip155:42161"`).

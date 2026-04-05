@@ -5,7 +5,7 @@ use std::fmt::Write as _;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{PayError, PayErrorCode};
-use crate::x402::http::CLIENT as HTTP;
+use crate::http::CLIENT as HTTP;
 
 const DIRECTORY_URL: &str = "https://x402.org/api/services";
 
@@ -160,21 +160,23 @@ fn format_price(raw: &str) -> String {
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max {
+    if s.chars().count() <= max {
         s.to_owned()
     } else {
-        format!("{}…", &s[..max - 1])
+        let end = s.char_indices().nth(max - 1).map_or(s.len(), |(i, _)| i);
+        format!("{}…", &s[..end])
     }
 }
 
 fn urlencoding(s: &str) -> String {
-    s.chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '~' {
-                c.to_string()
-            } else {
-                format!("%{:02X}", c as u32)
-            }
-        })
-        .collect()
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(s.len());
+    for byte in s.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            out.push(byte as char);
+        } else {
+            let _ = write!(out, "%{byte:02X}");
+        }
+    }
+    out
 }
