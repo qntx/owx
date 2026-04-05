@@ -7,6 +7,7 @@
 
 use kobe::DerivedAccount;
 use signer::{Sign, SignOutput};
+use zeroize::Zeroizing;
 
 use crate::chain::{ALL_FAMILIES, ChainFamily, default_chain, for_each_chain};
 use crate::error::Error;
@@ -95,10 +96,12 @@ pub fn derive_private_key_hex(
     wallet: &kobe::Wallet,
     family: ChainFamily,
     index: u32,
-) -> Result<String, Error> {
-    Ok(derive_account(family, wallet, index)?
-        .private_key
-        .to_string())
+) -> Result<Zeroizing<String>, Error> {
+    Ok(Zeroizing::new(
+        derive_account(family, wallet, index)?
+            .private_key
+            .to_string(),
+    ))
 }
 
 /// Derive accounts for all 10 chain families from a mnemonic at `index`.

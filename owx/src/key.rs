@@ -54,12 +54,23 @@ pub struct ApiKeyInfo {
 }
 
 /// Result of creating an API key (shown once to the user).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ApiKeyCreateResult {
     /// The raw API token (`owx_key_…`). Only returned at creation time.
-    pub token: String,
+    /// Wrapped in [`Zeroizing`] so it is scrubbed when this struct is dropped.
+    pub token: Zeroizing<String>,
     /// Public key metadata.
     pub key: ApiKeyInfo,
+}
+
+impl Serialize for ApiKeyCreateResult {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut s = serializer.serialize_struct("ApiKeyCreateResult", 2)?;
+        s.serialize_field("token", self.token.as_str())?;
+        s.serialize_field("key", &self.key)?;
+        s.end()
+    }
 }
 
 /// Convert an [`ApiKeyFile`] to the public-facing [`ApiKeyInfo`].
@@ -120,7 +131,7 @@ pub fn create_api_key(
     vault.store().save("keys", &key_file.id, &key_file)?;
 
     Ok(ApiKeyCreateResult {
-        token,
+        token: Zeroizing::new(token),
         key: to_info(&key_file),
     })
 }
@@ -213,7 +224,7 @@ pub fn resolve_agent_key(
     })?;
     let envelope: owx_vault::CryptoEnvelope = serde_json::from_value(envelope_value.clone())?;
     let secret = decrypt_from_envelope(&envelope, token, wallet.key_type)?;
-    extract_key_hex(&secret, family, index).map(Zeroizing::new)
+    extract_key_hex(&secret, family, index)
 }
 
 /// Resolve signing key: passphrase (owner) or API token (agent).
@@ -231,7 +242,7 @@ pub fn resolve_signing_key(
     }
     let wallet = crate::wallet::load_wallet(vault, wallet_name_or_id)?;
     let secret = decrypt_secret(&wallet, credential)?;
-    extract_key_hex(&secret, family, index).map(Zeroizing::new)
+    extract_key_hex(&secret, family, index)
 }
 
 /// Extract the hex private key from a decrypted wallet secret.
@@ -239,7 +250,7 @@ fn extract_key_hex(
     secret: &WalletSecret,
     family: ChainFamily,
     index: u32,
-) -> Result<String, Error> {
+) -> Result<Zeroizing<String>, Error> {
     if let Some(phrase) = secret.phrase() {
         let kw = kobe::Wallet::from_mnemonic(phrase, None)
             .map_err(|e| Error::Derivation(e.to_string()))?;
@@ -247,7 +258,7 @@ fn extract_key_hex(
     } else {
         secret
             .private_key_hex(family)
-            .map(ToOwned::to_owned)
+            .map(|s| Zeroizing::new(s.to_owned()))
             .ok_or_else(|| Error::InvalidInput(format!("no private key for chain family {family}")))
     }
 }

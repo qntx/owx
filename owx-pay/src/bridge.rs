@@ -2,6 +2,7 @@
 
 use owx::Owx;
 use owx::chain::ChainFamily;
+use zeroize::Zeroizing;
 
 /// Trait abstracting wallet access for payment operations.
 ///
@@ -25,7 +26,7 @@ pub trait WalletBridge: Send + Sync {
 pub struct OwxBridge<'a> {
     owx: &'a Owx,
     wallet: String,
-    credential: String,
+    credential: Zeroizing<String>,
     index: u32,
 }
 
@@ -49,7 +50,7 @@ impl<'a> OwxBridge<'a> {
         Self {
             owx,
             wallet: wallet.into(),
-            credential: credential.into(),
+            credential: Zeroizing::new(credential.into()),
             index,
         }
     }
@@ -77,9 +78,13 @@ impl WalletBridge for OwxBridge<'_> {
 
     fn address(&self, network: &str) -> Result<String, owx::Error> {
         let info = self.owx.get_wallet(&self.wallet)?;
+        if let Some(a) = info.accounts.iter().find(|a| a.chain_id == network) {
+            return Ok(a.address.clone());
+        }
+        let ns = network.split_once(':').map_or(network, |(ns, _)| ns);
         info.accounts
             .iter()
-            .find(|a| a.chain_id == network)
+            .find(|a| a.chain_id.starts_with(ns))
             .map(|a| a.address.clone())
             .ok_or_else(|| owx::Error::InvalidInput(format!("no account for chain {network}")))
     }

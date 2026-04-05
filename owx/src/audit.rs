@@ -92,6 +92,25 @@ impl AuditLog {
         });
     }
 
+    /// Convenience: log a failed operation.
+    pub fn log_err(
+        &self,
+        operation: &str,
+        wallet_id: Option<&str>,
+        chain_id: Option<&str>,
+        error_msg: &str,
+    ) {
+        self.log(&AuditEntry {
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            operation: operation.to_owned(),
+            wallet_id: wallet_id.map(ToOwned::to_owned),
+            api_key_id: None,
+            chain_id: chain_id.map(ToOwned::to_owned),
+            success: false,
+            error: Some(error_msg.to_owned()),
+        });
+    }
+
     /// Read all audit entries from the log file.
     ///
     /// Returns an empty vec if the file does not exist.

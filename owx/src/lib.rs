@@ -190,7 +190,18 @@ impl Owx {
         name_or_id: &str,
         passphrase: &str,
     ) -> Result<zeroize::Zeroizing<String>, Error> {
-        wallet::export_wallet(self, name_or_id, passphrase)
+        match wallet::export_wallet(self, name_or_id, passphrase) {
+            Ok(secret) => {
+                self.audit
+                    .log_ok("export_wallet", Some(name_or_id), None, None);
+                Ok(secret)
+            }
+            Err(e) => {
+                self.audit
+                    .log_err("export_wallet", Some(name_or_id), None, &e.to_string());
+                Err(e)
+            }
+        }
     }
 
     /// Derive an address for a chain.
@@ -214,7 +225,18 @@ impl Owx {
     ) -> Result<SignResult, Error> {
         let resolved = chain::resolve(chain)?;
         let family = resolved.family();
-        let key = key::resolve_signing_key(self, wallet, cred.as_str(), family, 0)?;
+        let key = match key::resolve_signing_key(self, wallet, cred.as_str(), family, 0) {
+            Ok(k) => k,
+            Err(e) => {
+                self.audit.log_err(
+                    "sign_message",
+                    Some(wallet),
+                    Some(resolved.chain_id()),
+                    &e.to_string(),
+                );
+                return Err(e);
+            }
+        };
         let out = signer::sign_message(family, &key, message)?;
         let audit_id = credential_audit_id(&cred);
         self.audit.log_ok(
@@ -239,7 +261,18 @@ impl Owx {
         let clean = tx_hex.strip_prefix("0x").unwrap_or(tx_hex);
         let tx_bytes =
             hex::decode(clean).map_err(|e| Error::InvalidInput(format!("invalid hex: {e}")))?;
-        let key = key::resolve_signing_key(self, wallet, cred.as_str(), family, 0)?;
+        let key = match key::resolve_signing_key(self, wallet, cred.as_str(), family, 0) {
+            Ok(k) => k,
+            Err(e) => {
+                self.audit.log_err(
+                    "sign_transaction",
+                    Some(wallet),
+                    Some(resolved.chain_id()),
+                    &e.to_string(),
+                );
+                return Err(e);
+            }
+        };
         let out = signer::sign_transaction(family, &key, &tx_bytes)?;
         let audit_id = credential_audit_id(&cred);
         self.audit.log_ok(
@@ -263,7 +296,19 @@ impl Owx {
         if resolved.family() != chain::ChainFamily::Evm {
             return Err(Error::InvalidInput("EIP-712 is EVM-only".into()));
         }
-        let key = key::resolve_signing_key(self, wallet, cred.as_str(), resolved.family(), 0)?;
+        let key = match key::resolve_signing_key(self, wallet, cred.as_str(), resolved.family(), 0)
+        {
+            Ok(k) => k,
+            Err(e) => {
+                self.audit.log_err(
+                    "sign_typed_data",
+                    Some(wallet),
+                    Some(resolved.chain_id()),
+                    &e.to_string(),
+                );
+                return Err(e);
+            }
+        };
         let out = signer::sign_typed_data(&key, typed_data)?;
         let audit_id = credential_audit_id(&cred);
         self.audit.log_ok(

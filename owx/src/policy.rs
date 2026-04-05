@@ -271,6 +271,24 @@ fn exceeds(value: &str, max: &str) -> Result<bool, String> {
     Ok(v > m)
 }
 
+/// Validate an executable policy path.
+///
+/// Rejects empty paths, path-traversal attempts (`..`), and relative paths.
+/// Only absolute paths are allowed to prevent ambient `PATH`-based attacks.
+fn validate_executable_path(exe: &str) -> Result<(), String> {
+    if exe.is_empty() {
+        return Err("empty executable path".into());
+    }
+    if exe.contains("..") {
+        return Err(format!("path traversal rejected: '{exe}'"));
+    }
+    let p = std::path::Path::new(exe);
+    if !p.is_absolute() {
+        return Err(format!("executable must be an absolute path, got '{exe}'"));
+    }
+    Ok(())
+}
+
 /// Run an executable policy subprocess and parse its JSON verdict.
 fn evaluate_executable(
     exe: &str,
@@ -279,6 +297,10 @@ fn evaluate_executable(
     ctx: &PolicyContext,
     timeout_seconds: Option<u64>,
 ) -> PolicyResult {
+    if let Err(reason) = validate_executable_path(exe) {
+        return PolicyResult::denied(pid, reason);
+    }
+
     let mut payload = match serde_json::to_value(ctx) {
         Ok(v) => v,
         Err(e) => return PolicyResult::denied(pid, format!("serialize context: {e}")),

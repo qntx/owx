@@ -131,17 +131,20 @@ pub fn decrypt_from_envelope(
 fn parse_secret(bytes: &[u8], key_type: KeyType) -> Result<WalletSecret, Error> {
     match key_type {
         KeyType::Mnemonic => {
-            let phrase = String::from_utf8(bytes.to_vec())
-                .map_err(|_| Error::InvalidInput("invalid UTF-8 mnemonic".into()))?;
-            Ok(WalletSecret::mnemonic(phrase))
+            let phrase = match String::from_utf8(bytes.to_vec()) {
+                Ok(s) => Zeroizing::new(s),
+                Err(e) => {
+                    let mut bad = e.into_bytes();
+                    zeroize::Zeroize::zeroize(&mut bad[..]);
+                    return Err(Error::InvalidInput("invalid UTF-8 mnemonic".into()));
+                }
+            };
+            Ok(WalletSecret::Mnemonic(phrase))
         }
         KeyType::PrivateKey => {
-            /// Untagged key pair JSON layout.
             #[derive(serde::Deserialize)]
             struct KeyPairJson {
-                /// Secp256k1 hex key.
                 secp256k1: String,
-                /// Ed25519 hex key.
                 ed25519: String,
             }
             let kp: KeyPairJson = serde_json::from_slice(bytes)
