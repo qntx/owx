@@ -62,6 +62,7 @@ impl Store {
 
     /// Load all entries from a subdirectory (skips malformed files).
     pub fn list<T: DeserializeOwned>(&self, subdir: &str) -> Result<Vec<T>, VaultError> {
+        sanitize_segment(subdir, "subdir")?;
         let dir = self.root.join(subdir);
         let mut items = Vec::new();
         for json_str in read_json_dir(&dir)? {
@@ -118,6 +119,7 @@ impl Store {
 
     /// List all raw JSON strings from a subdirectory.
     pub fn list_raw(&self, subdir: &str) -> Result<Vec<String>, VaultError> {
+        sanitize_segment(subdir, "subdir")?;
         read_json_dir(&self.root.join(subdir))
     }
 

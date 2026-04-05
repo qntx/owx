@@ -96,7 +96,16 @@ pub async fn broadcast(
             let body = serde_json::json!({"tx_bytes": b64, "mode": "BROADCAST_MODE_SYNC"});
             let resp = post_json(client, &url, &body).await?;
             let parsed: serde_json::Value = serde_json::from_str(&resp)?;
-            parsed["tx_response"]["txhash"]
+            let tx_resp = &parsed["tx_response"];
+            if let Some(code) = tx_resp["code"].as_u64()
+                && code != 0
+            {
+                let log = tx_resp["raw_log"].as_str().unwrap_or("unknown error");
+                return Err(Error::BroadcastFailed(format!(
+                    "cosmos tx failed (code {code}): {log}"
+                )));
+            }
+            tx_resp["txhash"]
                 .as_str()
                 .map(ToOwned::to_owned)
                 .ok_or_else(|| Error::BroadcastFailed(format!("no txhash: {resp}")))
@@ -105,7 +114,18 @@ pub async fn broadcast(
             let url = format!("{}/wallet/broadcasthex", rpc_url.trim_end_matches('/'));
             let body = serde_json::json!({"transaction": hex::encode(payload)});
             let resp = post_json(client, &url, &body).await?;
-            extract_json_field(&resp, "txid")
+            let parsed: serde_json::Value = serde_json::from_str(&resp)?;
+            if parsed["result"].as_bool() == Some(false) {
+                let code = parsed["code"].as_str().unwrap_or("UNKNOWN");
+                let msg = parsed["message"].as_str().unwrap_or("");
+                return Err(Error::BroadcastFailed(format!(
+                    "tron broadcast failed ({code}): {msg}"
+                )));
+            }
+            parsed["txid"]
+                .as_str()
+                .map(ToOwned::to_owned)
+                .ok_or_else(|| Error::BroadcastFailed(format!("no txid in Tron response: {resp}")))
         }
         ChainFamily::Ton => {
             use base64::Engine as _;

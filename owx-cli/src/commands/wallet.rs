@@ -104,7 +104,8 @@ pub fn run(action: WalletAction, owx: &Owx) -> Result<(), owx::Error> {
         WalletAction::List => print_json(&owx.list_wallets()?),
         WalletAction::Info { name } => print_json(&owx.get_wallet(&name)?),
         WalletAction::Export { name, passphrase } => {
-            print_json(&owx.export_wallet(&name, &passphrase)?)
+            let secret = owx.export_wallet(&name, &passphrase)?;
+            print_json(&*secret)
         }
         WalletAction::Rename { name, new_name } => {
             owx.rename_wallet(&name, &new_name)?;

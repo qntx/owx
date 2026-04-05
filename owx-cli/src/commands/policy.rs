@@ -26,6 +26,8 @@ pub fn run(action: PolicyAction, owx: &Owx) -> Result<(), owx::Error> {
     let store = owx.store();
     match action {
         PolicyAction::Create { id, json } => {
+            serde_json::from_str::<owx::policy::Policy>(&json)
+                .map_err(|e| owx::Error::InvalidInput(format!("invalid policy JSON: {e}")))?;
             store.save_raw("policies", &id, &json)?;
             print_json(&serde_json::json!({ "status": "created", "id": id }))
         }

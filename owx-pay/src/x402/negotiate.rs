@@ -83,11 +83,18 @@ pub fn handle_402(
         .unwrap_or("USDC")
         .to_owned();
 
+    let decimals = req
+        .extra
+        .get("decimals")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|v| u32::try_from(v).ok())
+        .unwrap_or(6);
+
     Ok(PayResult {
         status,
         body: response_body,
         payment: Some(PaymentInfo {
-            amount: format!("${}", format_amount(&req.amount, 6)),
+            amount: format!("${}", format_amount(&req.amount, decimals)),
             network: display_network(&req.network),
             token: token_symbol,
         }),

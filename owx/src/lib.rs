@@ -67,7 +67,7 @@ impl Owx {
 
     /// Open the default vault at `~/.owx`.
     pub fn open_default() -> Result<Self, Error> {
-        Self::open(config::default_vault_path())
+        Self::open(config::default_vault_path()?)
     }
 
     /// Access the underlying generic store.
@@ -185,7 +185,11 @@ impl Owx {
     }
 
     /// Export a wallet secret.
-    pub fn export_wallet(&self, name_or_id: &str, passphrase: &str) -> Result<String, Error> {
+    pub fn export_wallet(
+        &self,
+        name_or_id: &str,
+        passphrase: &str,
+    ) -> Result<zeroize::Zeroizing<String>, Error> {
         wallet::export_wallet(self, name_or_id, passphrase)
     }
 

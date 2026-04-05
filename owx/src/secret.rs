@@ -71,12 +71,16 @@ impl WalletSecret {
     }
 
     /// Export as a human-readable string (phrase or JSON key pair).
-    pub fn export_string(&self) -> Result<String, Error> {
+    ///
+    /// Returns [`Zeroizing<String>`] so the secret is scrubbed on drop.
+    pub fn export_string(&self) -> Result<Zeroizing<String>, Error> {
         match self {
-            Self::Mnemonic(p) => Ok(p.to_string()),
+            Self::Mnemonic(p) => Ok(Zeroizing::new(p.to_string())),
             Self::KeyPair { secp256k1, ed25519 } => {
                 let obj = serde_json::json!({"secp256k1": secp256k1.as_str(), "ed25519": ed25519.as_str()});
-                serde_json::to_string_pretty(&obj).map_err(Error::from)
+                serde_json::to_string_pretty(&obj)
+                    .map(Zeroizing::new)
+                    .map_err(Error::from)
             }
         }
     }

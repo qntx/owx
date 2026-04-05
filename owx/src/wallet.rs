@@ -255,7 +255,11 @@ pub fn rename_wallet(owx: &Owx, name_or_id: &str, new_name: &str) -> Result<(), 
 }
 
 /// Export a wallet's secret (mnemonic phrase or JSON key pair).
-pub fn export_wallet(owx: &Owx, name_or_id: &str, passphrase: &str) -> Result<String, Error> {
+pub fn export_wallet(
+    owx: &Owx,
+    name_or_id: &str,
+    passphrase: &str,
+) -> Result<Zeroizing<String>, Error> {
     let wallet = load_wallet(owx, name_or_id)?;
     let secret = decrypt_secret(&wallet, passphrase)?;
     secret.export_string()

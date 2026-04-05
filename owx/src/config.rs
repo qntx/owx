@@ -23,7 +23,7 @@ pub struct BackupConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Path to the vault directory.
-    #[serde(default = "default_vault_path")]
+    #[serde(default)]
     pub vault_path: PathBuf,
     /// RPC endpoints keyed by CAIP-2 chain ID.
     #[serde(default)]
@@ -131,7 +131,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            vault_path: default_vault_path(),
+            vault_path: PathBuf::new(),
             rpc: Self::default_rpc().clone(),
             plugins: HashMap::new(),
             backup: None,
@@ -139,10 +139,17 @@ impl Default for Config {
     }
 }
 
-/// Best-effort default vault path.
-pub fn default_vault_path() -> PathBuf {
+/// Default vault path derived from the user's home directory.
+///
+/// Returns an error if neither `HOME` nor `USERPROFILE` is set, rather than
+/// falling back to `/tmp` which would be world-readable.
+pub fn default_vault_path() -> Result<PathBuf, crate::Error> {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| "/tmp".to_owned());
-    PathBuf::from(home).join(".owx")
+        .map_err(|_| {
+            crate::Error::InvalidInput(
+                "cannot determine home directory (HOME / USERPROFILE not set)".into(),
+            )
+        })?;
+    Ok(PathBuf::from(home).join(".owx"))
 }
