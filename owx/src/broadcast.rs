@@ -127,7 +127,14 @@ pub async fn broadcast(
                 "params": [b64, [], null, null], "id": 1
             });
             let resp = post_json(client, rpc_url, &body).await?;
-            extract_json_field(&resp, "result")
+            let parsed: serde_json::Value = serde_json::from_str(&resp)?;
+            if let Some(error) = parsed.get("error") {
+                return Err(Error::BroadcastFailed(format!("RPC error: {error}")));
+            }
+            parsed["result"]["digest"]
+                .as_str()
+                .map(ToOwned::to_owned)
+                .ok_or_else(|| Error::BroadcastFailed(format!("no digest in Sui response: {resp}")))
         }
         ChainFamily::Xrpl => {
             let hex_tx = hex::encode(payload);
@@ -154,7 +161,6 @@ pub async fn broadcast(
 /// Resolve the RPC URL: explicit > user config > built-in default.
 pub fn resolve_rpc(
     chain_id: &str,
-    family: ChainFamily,
     explicit: Option<&str>,
     config: &Config,
 ) -> Result<String, Error> {
@@ -167,17 +173,6 @@ pub fn resolve_rpc(
     let defaults = Config::default_rpc();
     if let Some(url) = defaults.get(chain_id) {
         return Ok(url.clone());
-    }
-    let ns = family.namespace();
-    for (k, v) in &config.rpc {
-        if k.starts_with(ns) {
-            return Ok(v.clone());
-        }
-    }
-    for (k, v) in defaults {
-        if k.starts_with(ns) {
-            return Ok(v.clone());
-        }
     }
     Err(Error::InvalidInput(format!(
         "no RPC URL for chain '{chain_id}'"

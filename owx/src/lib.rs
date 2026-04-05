@@ -54,7 +54,7 @@ impl Owx {
     pub fn open(path: impl Into<PathBuf>) -> Result<Self, Error> {
         let path = path.into();
         let store = owx_vault::Store::open(&path)?;
-        let config = config::Config::load_or_default_from(&path.join("config.json"));
+        let config = config::Config::load_or_default_from(&path.join("config.json"))?;
         let audit = audit::AuditLog::new(&path);
         let http = build_http_client();
         Ok(Self {
@@ -289,7 +289,7 @@ impl Owx {
         let key = key::resolve_signing_key(self, wallet, cred.as_str(), family, 0)?;
         let sig = signer::sign_transaction(family, &key, &tx_bytes)?;
         let payload = signer::encode_signed_tx(family, &tx_bytes, &sig)?;
-        let rpc = broadcast::resolve_rpc(chain_id, family, rpc_url, &self.config)?;
+        let rpc = broadcast::resolve_rpc(chain_id, rpc_url, &self.config)?;
         let tx_hash = broadcast::broadcast(&self.http, family, &rpc, &payload).await?;
         let audit_id = credential_audit_id(&cred);
         self.audit.log_ok(

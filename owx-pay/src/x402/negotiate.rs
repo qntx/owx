@@ -207,13 +207,20 @@ pub(super) fn send_request(
     body: Option<&str>,
     payment_header: Option<&str>,
 ) -> Result<reqwest::blocking::Response, PayError> {
-    let mut req = match method.to_uppercase().as_str() {
+    let upper = method.to_uppercase();
+    let mut req = match upper.as_str() {
+        "GET" => CLIENT.get(url),
         "POST" => CLIENT.post(url),
         "PUT" => CLIENT.put(url),
         "DELETE" => CLIENT.delete(url),
         "PATCH" => CLIENT.patch(url),
         "HEAD" => CLIENT.head(url),
-        _ => CLIENT.get(url),
+        _ => {
+            return Err(PayError::new(
+                PayErrorCode::HttpStatus,
+                format!("unsupported HTTP method: {method}"),
+            ));
+        }
     };
     if let Some(b) = body {
         req = req

@@ -38,7 +38,8 @@ impl Store {
 
     /// Save a value as `<subdir>/<id>.json` with strict file permissions.
     pub fn save<T: Serialize>(&self, subdir: &str, id: &str, value: &T) -> Result<(), VaultError> {
-        sanitize_id(id)?;
+        sanitize_segment(subdir, "subdir")?;
+        sanitize_segment(id, "identifier")?;
         let dir = self.ensure_subdir(subdir)?;
         let path = dir.join(format!("{id}.json"));
         let json = serde_json::to_string_pretty(value)?;
@@ -49,7 +50,8 @@ impl Store {
 
     /// Load a value from `<subdir>/<id>.json`.
     pub fn load<T: DeserializeOwned>(&self, subdir: &str, id: &str) -> Result<T, VaultError> {
-        sanitize_id(id)?;
+        sanitize_segment(subdir, "subdir")?;
+        sanitize_segment(id, "identifier")?;
         let path = self.entry_path(subdir, id);
         if !path.exists() {
             return Err(VaultError::NotFound(format!("{subdir}/{id}")));
@@ -72,7 +74,8 @@ impl Store {
 
     /// Delete `<subdir>/<id>.json`.
     pub fn delete(&self, subdir: &str, id: &str) -> Result<(), VaultError> {
-        sanitize_id(id)?;
+        sanitize_segment(subdir, "subdir")?;
+        sanitize_segment(id, "identifier")?;
         let path = self.entry_path(subdir, id);
         if !path.exists() {
             return Err(VaultError::NotFound(format!("{subdir}/{id}")));
@@ -83,14 +86,17 @@ impl Store {
     /// Check whether `<subdir>/<id>.json` exists on disk.
     #[must_use]
     pub fn exists(&self, subdir: &str, id: &str) -> bool {
-        sanitize_id(id).is_ok() && self.entry_path(subdir, id).exists()
+        sanitize_segment(subdir, "subdir").is_ok()
+            && sanitize_segment(id, "identifier").is_ok()
+            && self.entry_path(subdir, id).exists()
     }
 
     /// Save a raw JSON string as `<subdir>/<id>.json`.
     ///
     /// Validates that the input is well-formed JSON before writing.
     pub fn save_raw(&self, subdir: &str, id: &str, json: &str) -> Result<(), VaultError> {
-        sanitize_id(id)?;
+        sanitize_segment(subdir, "subdir")?;
+        sanitize_segment(id, "identifier")?;
         serde_json::from_str::<serde_json::Value>(json)?;
         let dir = self.ensure_subdir(subdir)?;
         let path = dir.join(format!("{id}.json"));
@@ -101,7 +107,8 @@ impl Store {
 
     /// Load a raw JSON string from `<subdir>/<id>.json`.
     pub fn load_raw(&self, subdir: &str, id: &str) -> Result<String, VaultError> {
-        sanitize_id(id)?;
+        sanitize_segment(subdir, "subdir")?;
+        sanitize_segment(id, "identifier")?;
         let path = self.entry_path(subdir, id);
         if !path.exists() {
             return Err(VaultError::NotFound(format!("{subdir}/{id}")));
@@ -128,14 +135,19 @@ impl Store {
     }
 }
 
-/// Reject IDs that could escape the subdirectory.
-fn sanitize_id(id: &str) -> Result<&str, VaultError> {
-    if id.is_empty() || id.contains('/') || id.contains('\\') || id.contains("..") || id == "." {
+/// Reject names that could escape the intended directory.
+fn sanitize_segment(name: &str, label: &str) -> Result<(), VaultError> {
+    if name.is_empty()
+        || name.contains('/')
+        || name.contains('\\')
+        || name.contains("..")
+        || name == "."
+    {
         return Err(VaultError::InvalidInput(format!(
-            "invalid identifier (path traversal rejected): '{id}'"
+            "invalid {label} (path traversal rejected): '{name}'"
         )));
     }
-    Ok(id)
+    Ok(())
 }
 
 /// Read all `.json` files from a directory, returning their raw contents.

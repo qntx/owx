@@ -30,7 +30,7 @@ pub enum SwapAction {
         #[arg(long, default_value = "best-output")]
         strategy: String,
     },
-    /// Execute a previously obtained quote by ID.
+    /// Auto-select the best quote and execute a swap.
     Execute {
         /// Wallet name or ID.
         #[arg(long)]
@@ -38,10 +38,6 @@ pub enum SwapAction {
         /// Passphrase or API token (`OWX_CREDENTIAL` env var also accepted).
         #[arg(long, env = "OWX_CREDENTIAL")]
         credential: String,
-        /// Quote ID from a prior `quotes` call (e.g. `"lifi:route-abc"`).
-        /// If omitted, fetches fresh quotes and auto-selects per `--strategy`.
-        #[arg(long)]
-        quote_id: Option<String>,
         #[arg(long)]
         from_chain: String,
         #[arg(long)]
@@ -52,7 +48,7 @@ pub enum SwapAction {
         to_chain: String,
         #[arg(long)]
         to_token: String,
-        /// Optional RPC URL override.
+        /// Optional RPC URL override for the source chain.
         #[arg(long)]
         rpc: Option<String>,
         /// Sort strategy for auto-selection: best-output (default), cheapest, fastest.
@@ -95,7 +91,6 @@ pub fn run(action: SwapAction, owx: &Owx) -> Result<(), owx::Error> {
         SwapAction::Execute {
             wallet,
             credential,
-            quote_id: _,
             from_chain,
             from_token,
             from_amount,
@@ -106,7 +101,7 @@ pub fn run(action: SwapAction, owx: &Owx) -> Result<(), owx::Error> {
         } => {
             let cred = owx::Credential::parse(&credential);
             let default_rpc = resolve_evm_rpc(owx, &from_chain, rpc.as_deref())?;
-            let rpc_map = build_rpc_map(owx, rpc.as_deref());
+            let rpc_map = build_rpc_map(owx, &from_chain, rpc.as_deref());
 
             let (provider, from_addr) =
                 owx.with_signing_key(&wallet, cred, ChainFamily::Evm, 0, |key_hex| {
@@ -131,15 +126,8 @@ pub fn run(action: SwapAction, owx: &Owx) -> Result<(), owx::Error> {
             };
 
             let strat = parse_strategy(&strategy)?;
-            let quotes = rt
-                .block_on(engine.get_quotes_sorted(&req, strat))
-                .map_err(swap_err)?;
-            let best = quotes
-                .first()
-                .ok_or_else(|| swap_err(owx_swap::SwapError::NoQuotes))?;
-
             let receipt = rt
-                .block_on(engine.execute(best, &NoopSigner))
+                .block_on(engine.auto_execute(&req, strat, &NoopSigner))
                 .map_err(swap_err)?;
             print_json(&receipt)?;
         }
@@ -230,7 +218,15 @@ fn resolve_evm_rpc(
 }
 
 /// Build a numeric chain_id → RPC URL map from OWX config.
-fn build_rpc_map(owx: &Owx, rpc_override: Option<&str>) -> HashMap<u64, String> {
+///
+/// If `rpc_override` is provided, it only applies to `from_chain_id` (the
+/// source chain), not all chains — otherwise multi-hop cross-chain swaps
+/// would send every hop to the same RPC.
+fn build_rpc_map(
+    owx: &Owx,
+    from_chain_id: &str,
+    rpc_override: Option<&str>,
+) -> HashMap<u64, String> {
     let mut map = HashMap::new();
     let defaults = owx::config::Config::default_rpc();
     for (caip2, url) in defaults.iter().chain(owx.config().rpc.iter()) {
@@ -241,8 +237,11 @@ fn build_rpc_map(owx: &Owx, rpc_override: Option<&str>) -> HashMap<u64, String> 
         }
     }
     if let Some(url) = rpc_override {
-        for v in map.values_mut() {
-            url.clone_into(v);
+        let numeric = from_chain_id
+            .strip_prefix("eip155:")
+            .unwrap_or(from_chain_id);
+        if let Ok(id) = numeric.parse::<u64>() {
+            map.insert(id, url.to_owned());
         }
     }
     map

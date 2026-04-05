@@ -103,23 +103,28 @@ impl Config {
     }
 
     /// Load config from a specific path, merging user overrides on top of defaults.
-    #[must_use]
-    pub fn load_or_default_from(path: &Path) -> Self {
+    ///
+    /// Returns `Ok(defaults)` if the file does not exist. Returns `Err` if the
+    /// file exists but cannot be read or contains invalid JSON — this ensures a
+    /// corrupted config is never silently ignored.
+    pub fn load_or_default_from(path: &Path) -> Result<Self, crate::Error> {
         let mut config = Self::default();
-        if path.exists()
-            && let Ok(contents) = std::fs::read_to_string(path)
-            && let Ok(user_config) = serde_json::from_str::<Self>(&contents)
-        {
-            for (k, v) in user_config.rpc {
-                config.rpc.insert(k, v);
-            }
-            config.plugins = user_config.plugins;
-            config.backup = user_config.backup;
-            if !user_config.vault_path.as_os_str().is_empty() {
-                config.vault_path = user_config.vault_path;
-            }
+        if !path.exists() {
+            return Ok(config);
         }
-        config
+        let contents = std::fs::read_to_string(path).map_err(|e| {
+            crate::Error::InvalidInput(format!("read config {}: {e}", path.display()))
+        })?;
+        let user_config: Self = serde_json::from_str(&contents)?;
+        for (k, v) in user_config.rpc {
+            config.rpc.insert(k, v);
+        }
+        config.plugins = user_config.plugins;
+        config.backup = user_config.backup;
+        if !user_config.vault_path.as_os_str().is_empty() {
+            config.vault_path = user_config.vault_path;
+        }
+        Ok(config)
     }
 }
 
