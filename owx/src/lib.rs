@@ -101,7 +101,8 @@ impl Owx {
         words: usize,
     ) -> Result<WalletInfo, Error> {
         let info = wallet::create_wallet(self, name, passphrase, words)?;
-        self.audit.log_ok("create_wallet", Some(&info.id), None);
+        self.audit
+            .log_ok("create_wallet", Some(&info.id), None, None);
         Ok(info)
     }
 
@@ -114,7 +115,8 @@ impl Owx {
         index: u32,
     ) -> Result<WalletInfo, Error> {
         let info = wallet::import_mnemonic(self, name, phrase, passphrase, index)?;
-        self.audit.log_ok("import_mnemonic", Some(&info.id), None);
+        self.audit
+            .log_ok("import_mnemonic", Some(&info.id), None, None);
         Ok(info)
     }
 
@@ -138,7 +140,7 @@ impl Owx {
             ed25519_hex,
         )?;
         self.audit
-            .log_ok("import_private_key", Some(&info.id), None);
+            .log_ok("import_private_key", Some(&info.id), None, None);
         Ok(info)
     }
 
@@ -152,7 +154,7 @@ impl Owx {
     ) -> Result<WalletInfo, Error> {
         let info = wallet::import_private_keys(self, name, secp, ed, passphrase)?;
         self.audit
-            .log_ok("import_private_keys", Some(&info.id), None);
+            .log_ok("import_private_keys", Some(&info.id), None, None);
         Ok(info)
     }
 
@@ -169,14 +171,16 @@ impl Owx {
     /// Delete a wallet.
     pub fn delete_wallet(&self, name_or_id: &str) -> Result<(), Error> {
         wallet::delete_wallet(self, name_or_id)?;
-        self.audit.log_ok("delete_wallet", Some(name_or_id), None);
+        self.audit
+            .log_ok("delete_wallet", Some(name_or_id), None, None);
         Ok(())
     }
 
     /// Rename a wallet.
     pub fn rename_wallet(&self, name_or_id: &str, new_name: &str) -> Result<(), Error> {
         wallet::rename_wallet(self, name_or_id, new_name)?;
-        self.audit.log_ok("rename_wallet", Some(name_or_id), None);
+        self.audit
+            .log_ok("rename_wallet", Some(name_or_id), None, None);
         Ok(())
     }
 
@@ -208,8 +212,13 @@ impl Owx {
         let family = resolved.family();
         let key = key::resolve_signing_key(self, wallet, cred.as_str(), family, 0)?;
         let out = signer::sign_message(family, &key, message)?;
-        self.audit
-            .log_ok("sign_message", Some(wallet), Some(resolved.chain_id()));
+        let audit_id = credential_audit_id(&cred);
+        self.audit.log_ok(
+            "sign_message",
+            Some(wallet),
+            Some(resolved.chain_id()),
+            audit_id.as_deref(),
+        );
         Ok(signer::to_sign_result(&out))
     }
 
@@ -228,8 +237,13 @@ impl Owx {
             hex::decode(clean).map_err(|e| Error::InvalidInput(format!("invalid hex: {e}")))?;
         let key = key::resolve_signing_key(self, wallet, cred.as_str(), family, 0)?;
         let out = signer::sign_transaction(family, &key, &tx_bytes)?;
-        self.audit
-            .log_ok("sign_transaction", Some(wallet), Some(resolved.chain_id()));
+        let audit_id = credential_audit_id(&cred);
+        self.audit.log_ok(
+            "sign_transaction",
+            Some(wallet),
+            Some(resolved.chain_id()),
+            audit_id.as_deref(),
+        );
         Ok(signer::to_sign_result(&out))
     }
 
@@ -247,8 +261,13 @@ impl Owx {
         }
         let key = key::resolve_signing_key(self, wallet, cred.as_str(), resolved.family(), 0)?;
         let out = signer::sign_typed_data(&key, typed_data)?;
-        self.audit
-            .log_ok("sign_typed_data", Some(wallet), Some(resolved.chain_id()));
+        let audit_id = credential_audit_id(&cred);
+        self.audit.log_ok(
+            "sign_typed_data",
+            Some(wallet),
+            Some(resolved.chain_id()),
+            audit_id.as_deref(),
+        );
         Ok(signer::to_sign_result(&out))
     }
 
@@ -272,8 +291,13 @@ impl Owx {
         let payload = signer::encode_signed_tx(family, &tx_bytes, &sig)?;
         let rpc = broadcast::resolve_rpc(chain_id, family, rpc_url, &self.config)?;
         let tx_hash = broadcast::broadcast(&self.http, family, &rpc, &payload).await?;
-        self.audit
-            .log_ok("sign_and_send", Some(wallet), Some(chain_id));
+        let audit_id = credential_audit_id(&cred);
+        self.audit.log_ok(
+            "sign_and_send",
+            Some(wallet),
+            Some(chain_id),
+            audit_id.as_deref(),
+        );
         Ok(SendResult { tx_hash })
     }
 
@@ -312,7 +336,7 @@ impl Owx {
     ) -> Result<ApiKeyCreateResult, Error> {
         let result =
             key::create_api_key(self, name, wallet_ids, policy_ids, passphrase, expires_at)?;
-        self.audit.log_ok("create_api_key", None, None);
+        self.audit.log_ok("create_api_key", None, None, None);
         Ok(result)
     }
 
@@ -324,8 +348,19 @@ impl Owx {
     /// Revoke an API key.
     pub fn revoke_api_key(&self, id: &str) -> Result<(), Error> {
         key::revoke_api_key(self, id)?;
-        self.audit.log_ok("revoke_api_key", None, None);
+        self.audit.log_ok("revoke_api_key", None, None, None);
         Ok(())
+    }
+}
+
+/// Extract an audit-safe identifier from a credential.
+///
+/// For API tokens, returns the SHA-256 token hash (same value stored in
+/// `ApiKeyFile.token_hash`). For passphrases, returns `None`.
+fn credential_audit_id(cred: &Credential<'_>) -> Option<String> {
+    match cred {
+        Credential::ApiToken(t) => Some(token::hash_token(t)),
+        Credential::Passphrase(_) => None,
     }
 }
 

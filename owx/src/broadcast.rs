@@ -145,7 +145,7 @@ pub async fn broadcast(
                 )))
             }
         }
-        _ => Err(Error::BroadcastFailed(format!(
+        ChainFamily::Spark | ChainFamily::Filecoin => Err(Error::BroadcastFailed(format!(
             "broadcast not yet supported for {family}"
         ))),
     }

@@ -1,7 +1,7 @@
 //! Wallet types and CRUD operations.
 
 use serde::{Deserialize, Serialize};
-use zeroize::Zeroize;
+use zeroize::Zeroizing;
 
 use crate::Owx;
 use crate::chain::{ALL_FAMILIES, default_chain};
@@ -366,7 +366,7 @@ fn resolve_key_pair(
     chain: Option<&str>,
     secp_override: Option<&str>,
     ed_override: Option<&str>,
-) -> Result<(Vec<u8>, Vec<u8>), Error> {
+) -> Result<(Zeroizing<Vec<u8>>, Zeroizing<Vec<u8>>), Error> {
     if let (Some(s), Some(e)) = (secp_override, ed_override) {
         return Ok((decode_hex_key(s)?, decode_hex_key(e)?));
     }
@@ -375,31 +375,31 @@ fn resolve_key_pair(
     let is_ed25519 =
         chain.is_some_and(|c| crate::chain::resolve(c).is_ok_and(|r| r.family().is_ed25519()));
 
-    let mut random = [0u8; 32];
-    getrandom::getrandom(&mut random)
+    let mut random = Zeroizing::new([0u8; 32]);
+    getrandom::getrandom(&mut *random)
         .map_err(|e| Error::InvalidInput(format!("CSPRNG failed: {e}")))?;
 
-    let result = if is_ed25519 {
+    if is_ed25519 {
         let secp = secp_override
             .map(decode_hex_key)
             .transpose()?
-            .unwrap_or_else(|| random.to_vec());
+            .unwrap_or_else(|| Zeroizing::new(random.to_vec()));
         Ok((secp, key_bytes))
     } else {
         let ed = ed_override
             .map(decode_hex_key)
             .transpose()?
-            .unwrap_or_else(|| random.to_vec());
+            .unwrap_or_else(|| Zeroizing::new(random.to_vec()));
         Ok((key_bytes, ed))
-    };
-    random.zeroize();
-    result
+    }
 }
 
 /// Decode a hex private key (strips optional `0x` prefix).
-fn decode_hex_key(hex_str: &str) -> Result<Vec<u8>, Error> {
+fn decode_hex_key(hex_str: &str) -> Result<Zeroizing<Vec<u8>>, Error> {
     let clean = hex_str.strip_prefix("0x").unwrap_or(hex_str);
-    hex::decode(clean).map_err(|e| Error::InvalidInput(format!("invalid hex key: {e}")))
+    hex::decode(clean)
+        .map(Zeroizing::new)
+        .map_err(|e| Error::InvalidInput(format!("invalid hex key: {e}")))
 }
 
 /// Validate that a decoded key is exactly 32 bytes.

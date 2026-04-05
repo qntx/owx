@@ -8,14 +8,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::Error;
 
-/// Action taken when a policy rule matches.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PolicyAction {
-    /// Deny the request.
-    Deny,
-}
-
 /// A declarative policy rule evaluated in-process.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -70,8 +62,6 @@ pub struct Policy {
     /// Opaque configuration passed to the executable.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub config: Option<serde_json::Value>,
-    /// Action to take on rule match.
-    pub action: PolicyAction,
     /// Executable timeout in seconds (default: 5).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout_seconds: Option<u64>,
@@ -403,7 +393,6 @@ mod tests {
             rules,
             executable: None,
             config: None,
-            action: PolicyAction::Deny,
             timeout_seconds: None,
         }
     }

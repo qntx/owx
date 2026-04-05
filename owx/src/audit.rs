@@ -71,12 +71,21 @@ impl AuditLog {
     }
 
     /// Convenience: log a successful operation.
-    pub fn log_ok(&self, operation: &str, wallet_id: Option<&str>, chain_id: Option<&str>) {
+    ///
+    /// Pass `api_key_id` when the operation is performed via an agent API
+    /// token so the audit trail can identify which key was used.
+    pub fn log_ok(
+        &self,
+        operation: &str,
+        wallet_id: Option<&str>,
+        chain_id: Option<&str>,
+        api_key_id: Option<&str>,
+    ) {
         self.log(&AuditEntry {
             timestamp: chrono::Utc::now().to_rfc3339(),
             operation: operation.to_owned(),
             wallet_id: wallet_id.map(ToOwned::to_owned),
-            api_key_id: None,
+            api_key_id: api_key_id.map(ToOwned::to_owned),
             chain_id: chain_id.map(ToOwned::to_owned),
             success: true,
             error: None,

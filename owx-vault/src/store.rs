@@ -87,8 +87,11 @@ impl Store {
     }
 
     /// Save a raw JSON string as `<subdir>/<id>.json`.
+    ///
+    /// Validates that the input is well-formed JSON before writing.
     pub fn save_raw(&self, subdir: &str, id: &str, json: &str) -> Result<(), VaultError> {
         sanitize_id(id)?;
+        serde_json::from_str::<serde_json::Value>(json)?;
         let dir = self.ensure_subdir(subdir)?;
         let path = dir.join(format!("{id}.json"));
         fs::write(&path, json).map_err(|e| VaultError::io(&path, e))?;
