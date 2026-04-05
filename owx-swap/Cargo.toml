@@ -9,14 +9,21 @@ readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
+[features]
+default = ["evm"]
+evm = ["dep:lifiswap-evm", "dep:url", "dep:alloy"]
+
 [dependencies]
 owx.workspace = true
 lifiswap.workspace = true
+lifiswap-evm = { workspace = true, optional = true }
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { version = "1", features = ["sync"] }
+alloy = { workspace = true, optional = true }
+url = { version = "2", optional = true }
 
 [lints]
 workspace = true

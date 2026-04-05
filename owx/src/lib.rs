@@ -279,6 +279,31 @@ impl Owx {
         Ok(SendResult { tx_hash })
     }
 
+    /// Execute a closure with temporary access to a wallet's signing key.
+    ///
+    /// The raw hex key is passed by reference to the closure and **zeroized
+    /// immediately** after the closure returns.  The key never escapes as an
+    /// owned `String`, so callers cannot accidentally retain it.
+    ///
+    /// Use this to build chain-specific signers (e.g. `EvmProvider`) inside
+    /// the closure and return the constructed object.
+    pub fn with_signing_key<F, R>(
+        &self,
+        wallet: &str,
+        cred: Credential<'_>,
+        family: chain::ChainFamily,
+        index: u32,
+        f: F,
+    ) -> Result<R, Error>
+    where
+        F: FnOnce(&str) -> Result<R, Error>,
+    {
+        let mut key_hex = key::resolve_signing_key(self, wallet, cred.as_str(), family, index)?;
+        let result = f(&key_hex);
+        zeroize::Zeroize::zeroize(&mut key_hex);
+        result
+    }
+
     /// Create an API key.
     pub fn create_api_key(
         &self,

@@ -55,6 +55,8 @@ reqwest = { version = "0.13.2", features = ["json", "rustls", "blocking"], defau
 
 # Swap
 lifiswap = { version = "0.4", default-features = false }
+lifiswap-evm = { version = "0.4", default-features = false }
+alloy = { version = "1", default-features = false, features = ["signers", "signer-local"] }
 
 # Utility
 chrono = { version = "0.4.44", features = ["serde"] }

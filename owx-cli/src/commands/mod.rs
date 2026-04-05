@@ -149,7 +149,7 @@ pub fn dispatch(cmd: Commands, owx: &Owx) -> Result<(), Box<dyn std::error::Erro
             print_json(&balances)?;
         }
         #[cfg(feature = "swap")]
-        Commands::Swap { action } => swap::run(action)?,
+        Commands::Swap { action } => swap::run(action, owx)?,
         Commands::Policy { action } => policy::run(action, owx)?,
     }
     Ok(())

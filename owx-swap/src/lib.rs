@@ -12,10 +12,16 @@
 
 mod client;
 mod error;
+#[cfg(feature = "evm")]
+mod provider;
 
 pub use client::SwapClient;
 pub use error::SwapError;
 pub use lifiswap;
+#[cfg(feature = "evm")]
+pub use lifiswap_evm;
+#[cfg(feature = "evm")]
+pub use provider::{evm_provider_from_key, evm_provider_from_key_with_rpcs};
 
 /// Re-export key types from lifiswap for convenience.
 pub mod types {
