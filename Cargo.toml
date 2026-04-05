@@ -39,7 +39,7 @@ signer = { version = "0.5.0", features = ["kobe"] }
 aes-gcm = "0.10.3"
 hkdf = "0.12.4"
 scrypt = "0.11.0"
-sha2 = "0.10.9"
+sha2 = "0.11.0"
 zeroize = { version = "1.8.2", features = ["derive"] }
 
 # Serialization
