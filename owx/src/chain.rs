@@ -7,7 +7,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize, de};
+use serde::{Deserialize, Serialize};
 
 /// Master chain table. Every row is:
 ///
@@ -122,98 +122,6 @@ macro_rules! impl_chain_family_methods {
     };
 }
 for_each_chain!(impl_chain_family_methods);
-
-/// CAIP-2 chain identifier (`namespace:reference`).
-#[derive(Debug, Clone, Eq)]
-pub struct ChainId {
-    /// CAIP-2 namespace (e.g. "eip155", "solana").
-    pub namespace: String,
-    /// CAIP-2 reference (e.g. "1", "mainnet").
-    pub reference: String,
-}
-
-impl ChainId {
-    /// Validate a CAIP-2 namespace: 3–8 chars, `[a-z0-9]` only.
-    fn validate_namespace(ns: &str) -> Result<(), String> {
-        if !(3..=8).contains(&ns.len()) {
-            return Err(format!(
-                "namespace must be 3–8 chars, got {} ('{ns}')",
-                ns.len()
-            ));
-        }
-        if !ns
-            .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
-        {
-            return Err(format!("namespace must be [a-z0-9], got '{ns}'"));
-        }
-        Ok(())
-    }
-
-    /// Validate a CAIP-2 reference: 1–64 chars, `[a-zA-Z0-9-_]` only.
-    fn validate_reference(r: &str) -> Result<(), String> {
-        if r.is_empty() || r.len() > 64 {
-            return Err(format!(
-                "reference must be 1–64 chars, got {} ('{r}')",
-                r.len()
-            ));
-        }
-        if !r
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-        {
-            return Err(format!("reference contains invalid chars: '{r}'"));
-        }
-        Ok(())
-    }
-}
-
-impl FromStr for ChainId {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (ns, reference) = s
-            .split_once(':')
-            .ok_or_else(|| format!("expected 'namespace:reference', got '{s}'"))?;
-        Self::validate_namespace(ns)?;
-        Self::validate_reference(reference)?;
-        Ok(Self {
-            namespace: ns.to_owned(),
-            reference: reference.to_owned(),
-        })
-    }
-}
-
-impl fmt::Display for ChainId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}", self.namespace, self.reference)
-    }
-}
-
-impl PartialEq for ChainId {
-    fn eq(&self, other: &Self) -> bool {
-        self.namespace == other.namespace && self.reference == other.reference
-    }
-}
-
-impl std::hash::Hash for ChainId {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.namespace.hash(state);
-        self.reference.hash(state);
-    }
-}
-
-impl Serialize for ChainId {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.to_string())
-    }
-}
-
-impl<'de> Deserialize<'de> for ChainId {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        s.parse().map_err(de::Error::custom)
-    }
-}
 
 /// A resolved chain: name + family + CAIP-2 identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -468,22 +376,6 @@ mod tests {
             let parsed: ChainFamily = s.parse().unwrap();
             assert_eq!(parsed, fam);
         }
-    }
-
-    #[test]
-    fn chain_id_parse_valid() {
-        let id: ChainId = "eip155:1".parse().unwrap();
-        assert_eq!(id.namespace, "eip155");
-        assert_eq!(id.reference, "1");
-        assert_eq!(id.to_string(), "eip155:1");
-    }
-
-    #[test]
-    fn chain_id_reject_invalid() {
-        assert!("".parse::<ChainId>().is_err());
-        assert!("ab:1".parse::<ChainId>().is_err());
-        assert!("eip1551".parse::<ChainId>().is_err());
-        assert!("EIP155:1".parse::<ChainId>().is_err());
     }
 
     #[test]

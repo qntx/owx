@@ -82,12 +82,17 @@ impl WalletSecret {
     }
 
     /// Serialize to bytes for encryption (OWS-compatible format).
-    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+    ///
+    /// Returns [`Zeroizing<Vec<u8>>`] so the plaintext is automatically
+    /// scrubbed on drop, even if the caller forgets explicit cleanup.
+    pub fn to_bytes(&self) -> Result<Zeroizing<Vec<u8>>, Error> {
         match self {
-            Self::Mnemonic(p) => Ok(p.as_bytes().to_vec()),
+            Self::Mnemonic(p) => Ok(Zeroizing::new(p.as_bytes().to_vec())),
             Self::KeyPair { secp256k1, ed25519 } => {
                 let obj = serde_json::json!({"secp256k1": secp256k1.as_str(), "ed25519": ed25519.as_str()});
-                serde_json::to_vec(&obj).map_err(Error::from)
+                serde_json::to_vec(&obj)
+                    .map(Zeroizing::new)
+                    .map_err(Error::from)
             }
         }
     }

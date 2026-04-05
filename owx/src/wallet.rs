@@ -181,7 +181,7 @@ pub fn import_private_key(
     validate_key_len(&ed_bytes, "ed25519")?;
 
     let secret = WalletSecret::key_pair(hex::encode(&secp_bytes), hex::encode(&ed_bytes));
-    let accounts = derive_accounts_from_secret(&secret);
+    let accounts = derive_accounts_from_secret(&secret)?;
     let crypto_json = encrypt_secret(&secret, passphrase)?;
     let wallet = EncryptedWallet::new(
         uuid::Uuid::new_v4().to_string(),
@@ -210,7 +210,7 @@ pub fn import_private_keys(
     validate_key_len(&ed_bytes, "ed25519")?;
 
     let secret = WalletSecret::key_pair(hex::encode(&secp_bytes), hex::encode(&ed_bytes));
-    let accounts = derive_accounts_from_secret(&secret);
+    let accounts = derive_accounts_from_secret(&secret)?;
     let crypto_json = encrypt_secret(&secret, passphrase)?;
     let wallet = EncryptedWallet::new(
         uuid::Uuid::new_v4().to_string(),
@@ -336,30 +336,28 @@ fn to_info(w: &EncryptedWallet) -> WalletInfo {
 
 /// Encrypt a wallet secret and return the envelope as a JSON value.
 fn encrypt_secret(secret: &WalletSecret, passphrase: &str) -> Result<serde_json::Value, Error> {
-    let mut bytes = secret.to_bytes()?;
+    let bytes = secret.to_bytes()?;
     let envelope = owx_vault::crypto::encrypt(&bytes, passphrase)?;
-    bytes.zeroize();
     serde_json::to_value(&envelope).map_err(Error::from)
 }
 
 /// Derive accounts for all chain families from a [`WalletSecret`] key pair.
-fn derive_accounts_from_secret(secret: &WalletSecret) -> Vec<WalletAccount> {
+fn derive_accounts_from_secret(secret: &WalletSecret) -> Result<Vec<WalletAccount>, Error> {
     let mut accounts = Vec::new();
     for &fam in &ALL_FAMILIES {
         let Some(key_hex) = secret.private_key_hex(fam) else {
             continue;
         };
         let chain = default_chain(fam);
-        if let Ok(addr) = signer::address_from_hex(fam, key_hex) {
-            accounts.push(WalletAccount {
-                account_id: format!("{}:{addr}", chain.chain_id),
-                address: addr,
-                chain_id: chain.chain_id.to_owned(),
-                derivation_path: None,
-            });
-        }
+        let addr = signer::address_from_hex(fam, key_hex)?;
+        accounts.push(WalletAccount {
+            account_id: format!("{}:{addr}", chain.chain_id),
+            address: addr,
+            chain_id: chain.chain_id.to_owned(),
+            derivation_path: None,
+        });
     }
-    accounts
+    Ok(accounts)
 }
 
 /// Resolve the dual-curve key pair from import parameters.

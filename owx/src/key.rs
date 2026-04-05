@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroizing;
 
 use crate::Owx;
 use crate::chain::{ChainFamily, default_chain};
@@ -90,9 +90,8 @@ pub fn create_api_key(
     for wid in wallet_ids {
         let wallet = crate::wallet::load_wallet(vault, wid)?;
         let secret = decrypt_secret(&wallet, passphrase)?;
-        let mut secret_bytes = secret.to_bytes()?;
+        let secret_bytes = secret.to_bytes()?;
         let hkdf_envelope = owx_vault::crypto::encrypt_hkdf(&secret_bytes, &token)?;
-        secret_bytes.zeroize();
         let envelope_json = serde_json::to_value(&hkdf_envelope)?;
         wallet_secrets.insert(wallet.id.clone(), envelope_json);
         resolved_ids.push(wallet.id.clone());

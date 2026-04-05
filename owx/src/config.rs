@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use serde::{Deserialize, Serialize};
 
@@ -36,60 +37,63 @@ pub struct Config {
 }
 
 impl Config {
-    /// Built-in default RPC endpoints for well-known chains.
+    /// Built-in default RPC endpoints for well-known chains (lazily initialized).
     #[must_use]
-    pub fn default_rpc() -> HashMap<String, String> {
-        HashMap::from([
-            ("eip155:1".into(), "https://eth.llamarpc.com".into()),
-            ("eip155:137".into(), "https://polygon-rpc.com".into()),
-            ("eip155:42161".into(), "https://arb1.arbitrum.io/rpc".into()),
-            ("eip155:10".into(), "https://mainnet.optimism.io".into()),
-            ("eip155:8453".into(), "https://mainnet.base.org".into()),
-            (
-                "eip155:56".into(),
-                "https://bsc-dataseed.binance.org".into(),
-            ),
-            ("eip155:9745".into(), "https://rpc.plasma.to".into()),
-            (
-                "eip155:43114".into(),
-                "https://api.avax.network/ext/bc/C/rpc".into(),
-            ),
-            (
-                "eip155:42793".into(),
-                "https://node.mainnet.etherlink.com".into(),
-            ),
-            (
-                "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp".into(),
-                "https://api.mainnet-beta.solana.com".into(),
-            ),
-            (
-                "bip122:000000000019d6689c085ae165831e93".into(),
-                "https://mempool.space/api".into(),
-            ),
-            (
-                "cosmos:cosmoshub-4".into(),
-                "https://cosmos-rest.publicnode.com".into(),
-            ),
-            ("tron:mainnet".into(), "https://api.trongrid.io".into()),
-            ("ton:mainnet".into(), "https://toncenter.com/api/v2".into()),
-            (
-                "fil:mainnet".into(),
-                "https://api.node.glif.io/rpc/v1".into(),
-            ),
-            (
-                "sui:mainnet".into(),
-                "https://fullnode.mainnet.sui.io:443".into(),
-            ),
-            ("xrpl:mainnet".into(), "https://s1.ripple.com:51234".into()),
-            (
-                "xrpl:testnet".into(),
-                "https://s.altnet.rippletest.net:51234".into(),
-            ),
-            (
-                "xrpl:devnet".into(),
-                "https://s.devnet.rippletest.net:51234".into(),
-            ),
-        ])
+    pub fn default_rpc() -> &'static HashMap<String, String> {
+        static RPC: LazyLock<HashMap<String, String>> = LazyLock::new(|| {
+            HashMap::from([
+                ("eip155:1".into(), "https://eth.llamarpc.com".into()),
+                ("eip155:137".into(), "https://polygon-rpc.com".into()),
+                ("eip155:42161".into(), "https://arb1.arbitrum.io/rpc".into()),
+                ("eip155:10".into(), "https://mainnet.optimism.io".into()),
+                ("eip155:8453".into(), "https://mainnet.base.org".into()),
+                (
+                    "eip155:56".into(),
+                    "https://bsc-dataseed.binance.org".into(),
+                ),
+                ("eip155:9745".into(), "https://rpc.plasma.to".into()),
+                (
+                    "eip155:43114".into(),
+                    "https://api.avax.network/ext/bc/C/rpc".into(),
+                ),
+                (
+                    "eip155:42793".into(),
+                    "https://node.mainnet.etherlink.com".into(),
+                ),
+                (
+                    "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp".into(),
+                    "https://api.mainnet-beta.solana.com".into(),
+                ),
+                (
+                    "bip122:000000000019d6689c085ae165831e93".into(),
+                    "https://mempool.space/api".into(),
+                ),
+                (
+                    "cosmos:cosmoshub-4".into(),
+                    "https://cosmos-rest.publicnode.com".into(),
+                ),
+                ("tron:mainnet".into(), "https://api.trongrid.io".into()),
+                ("ton:mainnet".into(), "https://toncenter.com/api/v2".into()),
+                (
+                    "fil:mainnet".into(),
+                    "https://api.node.glif.io/rpc/v1".into(),
+                ),
+                (
+                    "sui:mainnet".into(),
+                    "https://fullnode.mainnet.sui.io:443".into(),
+                ),
+                ("xrpl:mainnet".into(), "https://s1.ripple.com:51234".into()),
+                (
+                    "xrpl:testnet".into(),
+                    "https://s.altnet.rippletest.net:51234".into(),
+                ),
+                (
+                    "xrpl:devnet".into(),
+                    "https://s.devnet.rippletest.net:51234".into(),
+                ),
+            ])
+        });
+        &RPC
     }
 
     /// Look up an RPC URL by CAIP-2 chain ID.
@@ -123,7 +127,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             vault_path: default_vault_path(),
-            rpc: Self::default_rpc(),
+            rpc: Self::default_rpc().clone(),
             plugins: HashMap::new(),
             backup: None,
         }

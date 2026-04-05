@@ -289,7 +289,10 @@ fn evaluate_executable(
     ctx: &PolicyContext,
     timeout_seconds: Option<u64>,
 ) -> PolicyResult {
-    let mut payload = serde_json::to_value(ctx).unwrap_or_default();
+    let mut payload = match serde_json::to_value(ctx) {
+        Ok(v) => v,
+        Err(e) => return PolicyResult::denied(pid, format!("serialize context: {e}")),
+    };
     if let Some(cfg) = config
         && let Some(map) = payload.as_object_mut()
     {
@@ -298,7 +301,7 @@ fn evaluate_executable(
 
     let stdin_bytes = match serde_json::to_vec(&payload) {
         Ok(b) => b,
-        Err(e) => return PolicyResult::denied(pid, format!("serialize context: {e}")),
+        Err(e) => return PolicyResult::denied(pid, format!("serialize payload: {e}")),
     };
 
     let mut child = match Command::new(exe)

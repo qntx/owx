@@ -27,7 +27,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-pub use credential::{Credential, SecretKey};
+pub use credential::Credential;
 pub use error::{Error, ErrorCode};
 pub use key::{ApiKeyCreateResult, ApiKeyInfo};
 pub use signer::{SendResult, SignResult};
@@ -150,7 +150,10 @@ impl Owx {
         ed: &str,
         passphrase: &str,
     ) -> Result<WalletInfo, Error> {
-        self.import_private_key(name, "", None, passphrase, Some(secp), Some(ed))
+        let info = wallet::import_private_keys(self, name, secp, ed, passphrase)?;
+        self.audit
+            .log_ok("import_private_keys", Some(&info.id), None);
+        Ok(info)
     }
 
     /// List all wallets (newest first).

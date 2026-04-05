@@ -83,27 +83,6 @@ impl AuditLog {
         });
     }
 
-    /// Convenience: log an agent operation.
-    pub fn log_agent(
-        &self,
-        operation: &str,
-        wallet_id: Option<&str>,
-        api_key_id: &str,
-        chain_id: Option<&str>,
-        success: bool,
-        error: Option<&str>,
-    ) {
-        self.log(&AuditEntry {
-            timestamp: chrono::Utc::now().to_rfc3339(),
-            operation: operation.to_owned(),
-            wallet_id: wallet_id.map(ToOwned::to_owned),
-            api_key_id: Some(api_key_id.to_owned()),
-            chain_id: chain_id.map(ToOwned::to_owned),
-            success,
-            error: error.map(ToOwned::to_owned),
-        });
-    }
-
     /// Read all audit entries from the log file.
     ///
     /// Returns an empty vec if the file does not exist.

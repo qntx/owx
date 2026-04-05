@@ -174,7 +174,7 @@ pub fn resolve_rpc(
             return Ok(v.clone());
         }
     }
-    for (k, v) in &defaults {
+    for (k, v) in defaults {
         if k.starts_with(ns) {
             return Ok(v.clone());
         }
