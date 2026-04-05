@@ -127,8 +127,16 @@ pub fn run(action: SwapAction, owx: &Owx) -> Result<(), Box<dyn std::error::Erro
             auto,
         } => {
             run_execute(
-                owx, &rt, &wallet, &from_chain, &from_token, &from_amount, &to_chain, &to_token,
-                rpc.as_deref(), auto,
+                owx,
+                &rt,
+                &wallet,
+                &from_chain,
+                &from_token,
+                &from_amount,
+                &to_chain,
+                &to_token,
+                rpc.as_deref(),
+                auto,
             )?;
         }
     }
@@ -160,18 +168,13 @@ fn run_execute(
 
     // Key is passed by reference to the closure and zeroized immediately after.
     // It lives only inside EvmProvider's PrivateKeySigner (k256, which zeroizes on drop).
-    let (provider, from_addr) = owx.with_signing_key(
-        wallet,
-        cred,
-        ChainFamily::Evm,
-        0,
-        |key_hex| {
+    let (provider, from_addr) =
+        owx.with_signing_key(wallet, cred, ChainFamily::Evm, 0, |key_hex| {
             let addr = owx::signer::address_from_hex(ChainFamily::Evm, key_hex)?;
             let p = owx_swap::evm_provider_from_key_with_rpcs(key_hex, &default_rpc, rpc_map)
                 .map_err(|e| owx::Error::InvalidInput(e.to_string()))?;
             Ok((p, addr))
-        },
-    )?;
+        })?;
 
     let client = owx_swap::SwapClient::new("owx")?;
     client.add_provider(provider);
