@@ -694,7 +694,7 @@ dependencies = [
  "async-trait",
  "coins-ledger",
  "futures-util",
- "semver 1.0.27",
+ "semver 1.0.28",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -2546,9 +2546,9 @@ dependencies = [
 
 [[package]]
 name = "fastrand"
-version = "2.3.0"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
+checksum = "a043dc74da1e37d6afe657061213aa6f425f855399a11d3463c6ecccc4dfda1f"
 
 [[package]]
 name = "fastrlp"
@@ -3719,9 +3719,9 @@ dependencies = [
 
 [[package]]
 name = "lifiswap"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72a6d96a7dcee44c13cf6e2f9330ba9ef4f4f552fc8637d3ff88e261b96f1eae"
+checksum = "2cd1d298dc374f145123b9fe70f7e3cb680d957e6e0052198f3967e20510e793"
 dependencies = [
  "backon",
  "bon",
@@ -3737,9 +3737,9 @@ dependencies = [
 
 [[package]]
 name = "lifiswap-evm"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b6f709b4e7ba33b5d0b81059cd33279ad0c1eb49b68bb8f428a2ab44920044f"
+checksum = "9b4b9b651c8d575babaa7ba5dc9fec5d30012670c30027caa4a93b10eec2acba"
 dependencies = [
  "alloy",
  "lifiswap",
@@ -4874,7 +4874,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
 dependencies = [
- "semver 1.0.27",
+ "semver 1.0.28",
 ]
 
 [[package]]
@@ -5169,9 +5169,9 @@ dependencies = [
 
 [[package]]
 name = "semver"
-version = "1.0.27"
+version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
+checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
 
 [[package]]
 name = "semver-parser"
@@ -5334,9 +5334,9 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "signal-hook"
-version = "0.3.18"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d881a16cf4426aa584979d30bd82cb33429027e42122b169753d6ef1085ed6e2"
+checksum = "b2a0c28ca5908dbdbcd52e6fdaa00358ab88637f8ab33e1f188dd510eb44b53d"
 dependencies = [
  "libc",
  "signal-hook-registry",
@@ -6431,7 +6431,7 @@ dependencies = [
  "bitflags 2.11.0",
  "hashbrown 0.15.5",
  "indexmap 2.13.1",
- "semver 1.0.27",
+ "semver 1.0.28",
 ]
 
 [[package]]
@@ -6889,7 +6889,7 @@ dependencies = [
  "id-arena",
  "indexmap 2.13.1",
  "log",
- "semver 1.0.27",
+ "semver 1.0.28",
  "serde",
  "serde_derive",
  "serde_json",

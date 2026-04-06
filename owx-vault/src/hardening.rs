@@ -199,6 +199,7 @@ fn disable_ptrace() -> bool {
 
 /// Lock a memory region to prevent it from being swapped to disk.
 #[cfg(unix)]
+#[must_use]
 pub fn mlock_slice(ptr: *const u8, len: usize) -> bool {
     if len == 0 {
         return true;
