@@ -279,8 +279,8 @@ pub fn resolve(s: &str) -> Result<ResolvedChain, crate::Error> {
             chain_id: s.to_owned(),
         });
     }
-    Err(crate::Error::InvalidInput(format!(
-        "unknown chain: '{s}'. Use a chain name (ethereum, solana, …) or CAIP-2 ID (eip155:1, …)"
+    Err(crate::Error::UnknownChain(format!(
+        "'{s}'. Use a chain name (ethereum, solana, …) or CAIP-2 ID (eip155:1, …)"
     )))
 }
 

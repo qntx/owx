@@ -1,8 +1,15 @@
 //! Async transaction broadcast to chain RPC endpoints.
 
+use base64::Engine as _;
+
 use crate::chain::ChainFamily;
 use crate::config::Config;
 use crate::error::Error;
+
+/// Shorthand constructor for [`Error::BroadcastFailed`].
+fn broadcast_err(msg: impl Into<String>) -> Error {
+    Error::BroadcastFailed(msg.into())
+}
 
 /// POST JSON to an RPC endpoint, return the response body.
 async fn post_json(
@@ -15,13 +22,13 @@ async fn post_json(
         .json(body)
         .send()
         .await
-        .map_err(|e| Error::BroadcastFailed(format!("HTTP: {e}")))?;
+        .map_err(|e| broadcast_err(format!("HTTP: {e}")))?;
     if !resp.status().is_success() {
-        return Err(Error::BroadcastFailed(format!("HTTP {}", resp.status())));
+        return Err(broadcast_err(format!("HTTP {}", resp.status())));
     }
     resp.text()
         .await
-        .map_err(|e| Error::BroadcastFailed(format!("read body: {e}")))
+        .map_err(|e| broadcast_err(format!("read body: {e}")))
 }
 
 /// POST plain text to an endpoint, return the trimmed response body.
@@ -32,30 +39,52 @@ async fn post_text(client: &reqwest::Client, url: &str, body: &str) -> Result<St
         .body(body.to_owned())
         .send()
         .await
-        .map_err(|e| Error::BroadcastFailed(format!("HTTP: {e}")))?;
+        .map_err(|e| broadcast_err(format!("HTTP: {e}")))?;
     if !resp.status().is_success() {
-        return Err(Error::BroadcastFailed(format!("HTTP {}", resp.status())));
+        return Err(broadcast_err(format!("HTTP {}", resp.status())));
     }
     resp.text()
         .await
-        .map_err(|e| Error::BroadcastFailed(format!("read body: {e}")))
+        .map_err(|e| broadcast_err(format!("read body: {e}")))
         .map(|s| s.trim().to_owned())
 }
 
-/// Extract a string field from a JSON-RPC response.
-fn extract_json_field(json_str: &str, field: &str) -> Result<String, Error> {
-    let parsed: serde_json::Value = serde_json::from_str(json_str)?;
+/// Send a JSON-RPC request and extract the `"result"` field.
+async fn json_rpc(
+    client: &reqwest::Client,
+    url: &str,
+    method: &str,
+    params: serde_json::Value,
+) -> Result<serde_json::Value, Error> {
+    let body = serde_json::json!({"jsonrpc": "2.0", "method": method, "params": params, "id": 1});
+    let text = post_json(client, url, &body).await?;
+    let parsed: serde_json::Value = serde_json::from_str(&text)?;
     if let Some(error) = parsed.get("error") {
-        return Err(Error::BroadcastFailed(format!("RPC error: {error}")));
+        return Err(broadcast_err(format!("RPC error: {error}")));
     }
-    parsed[field]
-        .as_str()
+    Ok(parsed)
+}
+
+/// Extract a string at a JSON pointer path, or return a broadcast error.
+fn extract_str(value: &serde_json::Value, pointer: &str, raw: &str) -> Result<String, Error> {
+    value
+        .pointer(pointer)
+        .and_then(serde_json::Value::as_str)
         .map(ToOwned::to_owned)
-        .ok_or_else(|| Error::BroadcastFailed(format!("no '{field}' in response")))
+        .ok_or_else(|| broadcast_err(format!("no '{pointer}' in response: {raw}")))
+}
+
+/// Base64-encode payload bytes.
+fn b64(payload: &[u8]) -> String {
+    base64::engine::general_purpose::STANDARD.encode(payload)
+}
+
+/// Append a path segment to a base URL.
+fn rpc_path(base: &str, path: &str) -> String {
+    format!("{}{path}", base.trim_end_matches('/'))
 }
 
 /// Broadcast a signed transaction to the appropriate chain RPC.
-#[allow(clippy::too_many_lines)]
 pub async fn broadcast(
     client: &reqwest::Client,
     family: ChainFamily,
@@ -63,119 +92,139 @@ pub async fn broadcast(
     payload: &[u8],
 ) -> Result<String, Error> {
     match family {
-        ChainFamily::Evm => {
-            let hex_tx = format!("0x{}", hex::encode(payload));
-            let body = serde_json::json!({
-                "jsonrpc": "2.0", "method": "eth_sendRawTransaction",
-                "params": [hex_tx], "id": 1
-            });
-            let resp = post_json(client, rpc_url, &body).await?;
-            extract_json_field(&resp, "result")
-        }
-        ChainFamily::Solana => {
-            use base64::Engine as _;
-            let b64 = base64::engine::general_purpose::STANDARD.encode(payload);
-            let body = serde_json::json!({
-                "jsonrpc": "2.0", "method": "sendTransaction",
-                "params": [b64, {"encoding": "base64"}], "id": 1
-            });
-            let resp = post_json(client, rpc_url, &body).await?;
-            extract_json_field(&resp, "result")
-        }
-        ChainFamily::Bitcoin => {
-            let url = format!("{}/tx", rpc_url.trim_end_matches('/'));
-            let resp = post_text(client, &url, &hex::encode(payload)).await?;
-            if resp.is_empty() {
-                return Err(Error::BroadcastFailed("empty response".into()));
-            }
-            Ok(resp)
-        }
-        ChainFamily::Cosmos => {
-            use base64::Engine as _;
-            let b64 = base64::engine::general_purpose::STANDARD.encode(payload);
-            let url = format!("{}/cosmos/tx/v1beta1/txs", rpc_url.trim_end_matches('/'));
-            let body = serde_json::json!({"tx_bytes": b64, "mode": "BROADCAST_MODE_SYNC"});
-            let resp = post_json(client, &url, &body).await?;
-            let parsed: serde_json::Value = serde_json::from_str(&resp)?;
-            let tx_resp = &parsed["tx_response"];
-            if let Some(code) = tx_resp["code"].as_u64()
-                && code != 0
-            {
-                let log = tx_resp["raw_log"].as_str().unwrap_or("unknown error");
-                return Err(Error::BroadcastFailed(format!(
-                    "cosmos tx failed (code {code}): {log}"
-                )));
-            }
-            tx_resp["txhash"]
-                .as_str()
-                .map(ToOwned::to_owned)
-                .ok_or_else(|| Error::BroadcastFailed(format!("no txhash: {resp}")))
-        }
-        ChainFamily::Tron => {
-            let url = format!("{}/wallet/broadcasthex", rpc_url.trim_end_matches('/'));
-            let body = serde_json::json!({"transaction": hex::encode(payload)});
-            let resp = post_json(client, &url, &body).await?;
-            let parsed: serde_json::Value = serde_json::from_str(&resp)?;
-            if parsed["result"].as_bool() == Some(false) {
-                let code = parsed["code"].as_str().unwrap_or("UNKNOWN");
-                let msg = parsed["message"].as_str().unwrap_or("");
-                return Err(Error::BroadcastFailed(format!(
-                    "tron broadcast failed ({code}): {msg}"
-                )));
-            }
-            parsed["txid"]
-                .as_str()
-                .map(ToOwned::to_owned)
-                .ok_or_else(|| Error::BroadcastFailed(format!("no txid in Tron response: {resp}")))
-        }
-        ChainFamily::Ton => {
-            use base64::Engine as _;
-            let b64 = base64::engine::general_purpose::STANDARD.encode(payload);
-            let url = format!("{}/sendBoc", rpc_url.trim_end_matches('/'));
-            let body = serde_json::json!({"boc": b64});
-            let resp = post_json(client, &url, &body).await?;
-            let parsed: serde_json::Value = serde_json::from_str(&resp)?;
-            parsed["result"]["hash"]
-                .as_str()
-                .map(ToOwned::to_owned)
-                .ok_or_else(|| Error::BroadcastFailed(format!("no hash: {resp}")))
-        }
-        ChainFamily::Sui => {
-            use base64::Engine as _;
-            let b64 = base64::engine::general_purpose::STANDARD.encode(payload);
-            let body = serde_json::json!({
-                "jsonrpc": "2.0", "method": "sui_executeTransactionBlock",
-                "params": [b64, [], null, null], "id": 1
-            });
-            let resp = post_json(client, rpc_url, &body).await?;
-            let parsed: serde_json::Value = serde_json::from_str(&resp)?;
-            if let Some(error) = parsed.get("error") {
-                return Err(Error::BroadcastFailed(format!("RPC error: {error}")));
-            }
-            parsed["result"]["digest"]
-                .as_str()
-                .map(ToOwned::to_owned)
-                .ok_or_else(|| Error::BroadcastFailed(format!("no digest in Sui response: {resp}")))
-        }
-        ChainFamily::Xrpl => {
-            let hex_tx = hex::encode(payload);
-            let body = serde_json::json!({
-                "method": "submit",
-                "params": [{ "tx_blob": hex_tx }]
-            });
-            let resp = post_json(client, rpc_url, &body).await?;
-            let parsed: serde_json::Value = serde_json::from_str(&resp)?;
-            parsed["result"]["tx_json"]["hash"]
-                .as_str()
-                .map(ToOwned::to_owned)
-                .ok_or_else(|| {
-                    Error::BroadcastFailed(format!("no tx hash in XRPL response: {resp}"))
-                })
-        }
-        ChainFamily::Spark | ChainFamily::Filecoin => Err(Error::BroadcastFailed(format!(
+        ChainFamily::Evm => broadcast_evm(client, rpc_url, payload).await,
+        ChainFamily::Bitcoin => broadcast_bitcoin(client, rpc_url, payload).await,
+        ChainFamily::Solana => broadcast_solana(client, rpc_url, payload).await,
+        ChainFamily::Cosmos => broadcast_cosmos(client, rpc_url, payload).await,
+        ChainFamily::Tron => broadcast_tron(client, rpc_url, payload).await,
+        ChainFamily::Ton => broadcast_ton(client, rpc_url, payload).await,
+        ChainFamily::Sui => broadcast_sui(client, rpc_url, payload).await,
+        ChainFamily::Xrpl => broadcast_xrpl(client, rpc_url, payload).await,
+        ChainFamily::Spark | ChainFamily::Filecoin => Err(broadcast_err(format!(
             "broadcast not yet supported for {family}"
         ))),
     }
+}
+
+/// Broadcast a signed EVM transaction via `eth_sendRawTransaction`.
+async fn broadcast_evm(
+    client: &reqwest::Client,
+    url: &str,
+    payload: &[u8],
+) -> Result<String, Error> {
+    let hex_tx = format!("0x{}", hex::encode(payload));
+    let resp = json_rpc(
+        client,
+        url,
+        "eth_sendRawTransaction",
+        serde_json::json!([hex_tx]),
+    )
+    .await?;
+    extract_str(&resp, "/result", &resp.to_string())
+}
+
+/// Broadcast a signed Solana transaction via `sendTransaction`.
+async fn broadcast_solana(
+    client: &reqwest::Client,
+    url: &str,
+    payload: &[u8],
+) -> Result<String, Error> {
+    let params = serde_json::json!([b64(payload), {"encoding": "base64"}]);
+    let resp = json_rpc(client, url, "sendTransaction", params).await?;
+    extract_str(&resp, "/result", &resp.to_string())
+}
+
+/// Broadcast a signed Bitcoin transaction via blockstream-style REST API.
+async fn broadcast_bitcoin(
+    client: &reqwest::Client,
+    rpc_url: &str,
+    payload: &[u8],
+) -> Result<String, Error> {
+    let url = rpc_path(rpc_url, "/tx");
+    let resp = post_text(client, &url, &hex::encode(payload)).await?;
+    if resp.is_empty() {
+        return Err(broadcast_err("empty response"));
+    }
+    Ok(resp)
+}
+
+/// Broadcast a signed Cosmos transaction via REST `txs` endpoint.
+async fn broadcast_cosmos(
+    client: &reqwest::Client,
+    rpc_url: &str,
+    payload: &[u8],
+) -> Result<String, Error> {
+    let url = rpc_path(rpc_url, "/cosmos/tx/v1beta1/txs");
+    let body = serde_json::json!({"tx_bytes": b64(payload), "mode": "BROADCAST_MODE_SYNC"});
+    let text = post_json(client, &url, &body).await?;
+    let parsed: serde_json::Value = serde_json::from_str(&text)?;
+    let tx_resp = &parsed["tx_response"];
+    if let Some(code) = tx_resp["code"].as_u64()
+        && code != 0
+    {
+        let log = tx_resp["raw_log"].as_str().unwrap_or("unknown error");
+        return Err(broadcast_err(format!(
+            "cosmos tx failed (code {code}): {log}"
+        )));
+    }
+    extract_str(&parsed, "/tx_response/txhash", &text)
+}
+
+/// Broadcast a signed Tron transaction via `broadcasthex`.
+async fn broadcast_tron(
+    client: &reqwest::Client,
+    rpc_url: &str,
+    payload: &[u8],
+) -> Result<String, Error> {
+    let url = rpc_path(rpc_url, "/wallet/broadcasthex");
+    let body = serde_json::json!({"transaction": hex::encode(payload)});
+    let text = post_json(client, &url, &body).await?;
+    let parsed: serde_json::Value = serde_json::from_str(&text)?;
+    if parsed["result"].as_bool() == Some(false) {
+        let code = parsed["code"].as_str().unwrap_or("UNKNOWN");
+        let msg = parsed["message"].as_str().unwrap_or("");
+        return Err(broadcast_err(format!(
+            "tron broadcast failed ({code}): {msg}"
+        )));
+    }
+    extract_str(&parsed, "/txid", &text)
+}
+
+/// Broadcast a signed TON transaction via `sendBoc`.
+async fn broadcast_ton(
+    client: &reqwest::Client,
+    rpc_url: &str,
+    payload: &[u8],
+) -> Result<String, Error> {
+    let url = rpc_path(rpc_url, "/sendBoc");
+    let body = serde_json::json!({"boc": b64(payload)});
+    let text = post_json(client, &url, &body).await?;
+    let parsed: serde_json::Value = serde_json::from_str(&text)?;
+    extract_str(&parsed, "/result/hash", &text)
+}
+
+/// Broadcast a signed Sui transaction via `sui_executeTransactionBlock`.
+async fn broadcast_sui(
+    client: &reqwest::Client,
+    url: &str,
+    payload: &[u8],
+) -> Result<String, Error> {
+    let params = serde_json::json!([b64(payload), [], null, null]);
+    let resp = json_rpc(client, url, "sui_executeTransactionBlock", params).await?;
+    extract_str(&resp, "/result/digest", &resp.to_string())
+}
+
+/// Broadcast a signed XRPL transaction via `submit`.
+async fn broadcast_xrpl(
+    client: &reqwest::Client,
+    url: &str,
+    payload: &[u8],
+) -> Result<String, Error> {
+    let body =
+        serde_json::json!({"method": "submit", "params": [{"tx_blob": hex::encode(payload)}]});
+    let text = post_json(client, url, &body).await?;
+    let parsed: serde_json::Value = serde_json::from_str(&text)?;
+    extract_str(&parsed, "/result/tx_json/hash", &text)
 }
 
 /// Resolve the RPC URL: explicit > user config > built-in default.
@@ -194,7 +243,5 @@ pub fn resolve_rpc(
     if let Some(url) = defaults.get(chain_id) {
         return Ok(url.clone());
     }
-    Err(Error::InvalidInput(format!(
-        "no RPC URL for chain '{chain_id}'"
-    )))
+    Err(Error::NoRpcUrl(chain_id.to_owned()))
 }

@@ -38,6 +38,19 @@ pub enum VaultError {
 }
 
 impl VaultError {
+    /// Machine-readable `SCREAMING_SNAKE_CASE` error code.
+    #[must_use]
+    pub const fn code(&self) -> &'static str {
+        match self {
+            Self::Crypto(_) => "CRYPTO",
+            Self::InvalidParams(_) => "INVALID_PARAMS",
+            Self::NotFound(_) => "NOT_FOUND",
+            Self::InvalidInput(_) => "INVALID_INPUT",
+            Self::Io { .. } => "IO",
+            Self::Json(_) => "JSON",
+        }
+    }
+
     /// Create an I/O error with path context.
     pub fn io(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
         Self::Io {

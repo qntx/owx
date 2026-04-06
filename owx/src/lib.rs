@@ -19,7 +19,7 @@ mod error;
 pub(crate) mod key;
 pub mod policy;
 pub(crate) mod secret;
-pub mod signer;
+pub(crate) mod signer;
 mod token;
 pub(crate) mod wallet;
 
@@ -27,10 +27,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+pub use audit::AuditEntry;
 pub use credential::Credential;
-pub use error::{Error, ErrorCode};
+pub use error::Error;
 pub use key::{ApiKeyCreateResult, ApiKeyInfo};
-pub use signer::{SendResult, SignResult};
+pub use signer::{SendResult, SignResult, address_from_hex};
 pub use wallet::{AccountInfo, ImportKeyOptions, WalletInfo};
 
 /// The OWX orchestrator — stateful entry point for all operations.
@@ -422,6 +423,15 @@ impl Owx {
         key::revoke_api_key(self, id)?;
         self.audit.log_ok("revoke_api_key", None, None, None);
         Ok(())
+    }
+
+    /// Read all audit log entries.
+    ///
+    /// Returns an empty vec if the log file does not exist.
+    /// Malformed lines are silently skipped.
+    #[must_use]
+    pub fn audit_log(&self) -> Vec<AuditEntry> {
+        self.audit.read_all()
     }
 
     /// Resolve a signing key with audit logging on failure.

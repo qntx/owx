@@ -111,20 +111,23 @@ pub struct AccountInfo {
     pub derivation_path: Option<String>,
 }
 
-/// Convert an [`EncryptedWallet`] to the public-facing [`WalletInfo`].
-pub fn to_info(w: &EncryptedWallet) -> WalletInfo {
-    WalletInfo {
-        id: w.id.clone(),
-        name: w.name.clone(),
-        accounts: w
-            .accounts
-            .iter()
-            .map(|a| AccountInfo {
-                chain_id: a.chain_id.clone(),
-                address: a.address.clone(),
-                derivation_path: a.derivation_path.clone(),
-            })
-            .collect(),
-        created_at: w.created_at.clone(),
+impl From<&WalletAccount> for AccountInfo {
+    fn from(a: &WalletAccount) -> Self {
+        Self {
+            chain_id: a.chain_id.clone(),
+            address: a.address.clone(),
+            derivation_path: a.derivation_path.clone(),
+        }
+    }
+}
+
+impl From<&EncryptedWallet> for WalletInfo {
+    fn from(w: &EncryptedWallet) -> Self {
+        Self {
+            id: w.id.clone(),
+            name: w.name.clone(),
+            accounts: w.accounts.iter().map(AccountInfo::from).collect(),
+            created_at: w.created_at.clone(),
+        }
     }
 }

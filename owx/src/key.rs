@@ -75,15 +75,16 @@ impl Serialize for ApiKeyCreateResult {
     }
 }
 
-/// Convert an [`ApiKeyFile`] to the public-facing [`ApiKeyInfo`].
-fn to_info(k: &ApiKeyFile) -> ApiKeyInfo {
-    ApiKeyInfo {
-        id: k.id.clone(),
-        name: k.name.clone(),
-        created_at: k.created_at.clone(),
-        wallet_ids: k.wallet_ids.clone(),
-        policy_ids: k.policy_ids.clone(),
-        expires_at: k.expires_at.clone(),
+impl From<&ApiKeyFile> for ApiKeyInfo {
+    fn from(k: &ApiKeyFile) -> Self {
+        Self {
+            id: k.id.clone(),
+            name: k.name.clone(),
+            created_at: k.created_at.clone(),
+            wallet_ids: k.wallet_ids.clone(),
+            policy_ids: k.policy_ids.clone(),
+            expires_at: k.expires_at.clone(),
+        }
     }
 }
 
@@ -134,7 +135,7 @@ pub fn create_api_key(
 
     Ok(ApiKeyCreateResult {
         token: Zeroizing::new(token),
-        key: to_info(&key_file),
+        key: ApiKeyInfo::from(&key_file),
     })
 }
 
@@ -142,7 +143,7 @@ pub fn create_api_key(
 pub fn list_api_keys(vault: &Owx) -> Result<Vec<ApiKeyInfo>, Error> {
     let mut keys: Vec<ApiKeyFile> = vault.store().list("keys")?;
     keys.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-    Ok(keys.iter().map(to_info).collect())
+    Ok(keys.iter().map(ApiKeyInfo::from).collect())
 }
 
 /// Revoke (delete) an API key by ID.
@@ -177,7 +178,7 @@ pub fn resolve_agent_key(
 
     let wallet = crate::wallet::load_wallet(vault, wallet_name_or_id)?;
     if !api_key.wallet_ids.contains(&wallet.id) {
-        return Err(Error::InvalidInput(format!(
+        return Err(Error::AccessDenied(format!(
             "API key '{}' does not have access to wallet '{}'",
             api_key.id, wallet.id
         )));
@@ -219,7 +220,7 @@ pub fn resolve_agent_key(
     }
 
     let envelope_value = api_key.wallet_secrets.get(&wallet.id).ok_or_else(|| {
-        Error::InvalidInput(format!(
+        Error::AccessDenied(format!(
             "API key has no encrypted secret for wallet '{}'",
             wallet.id
         ))

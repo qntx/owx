@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 /// A single audit log entry.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditEntry {
     /// ISO-8601 timestamp of the event.
@@ -115,7 +116,6 @@ impl AuditLog {
     ///
     /// Returns an empty vec if the file does not exist.
     /// Malformed lines are silently skipped.
-    #[allow(dead_code)]
     pub fn read_all(&self) -> Vec<AuditEntry> {
         let Ok(contents) = fs::read_to_string(&self.path) else {
             return Vec::new();

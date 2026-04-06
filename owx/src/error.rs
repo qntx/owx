@@ -1,43 +1,6 @@
 //! Unified error type for OWX.
 
-use serde::{Serialize, Serializer};
-
-/// Machine-readable error codes for API consumers.
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ErrorCode {
-    /// Vault encryption / decryption failed.
-    Crypto,
-    /// Invalid KDF parameters.
-    InvalidParams,
-    /// Wallet not found.
-    WalletNotFound,
-    /// Wallet name already exists.
-    WalletNameExists,
-    /// Multiple wallets match the given name.
-    AmbiguousWallet,
-    /// API key not found.
-    ApiKeyNotFound,
-    /// Policy not found.
-    PolicyNotFound,
-    /// Invalid input.
-    InvalidInput,
-    /// File-system I/O error.
-    Io,
-    /// JSON serialization error.
-    Json,
-    /// Policy denied the request.
-    PolicyDenied,
-    /// API key expired.
-    ApiKeyExpired,
-    /// HD key derivation error.
-    Derivation,
-    /// Cryptographic signing error.
-    Signing,
-    /// Transaction broadcast failed.
-    BroadcastFailed,
-}
+use serde::{Serialize, Serializer, ser::SerializeStruct};
 
 /// Unified error type for all `owx` operations.
 #[non_exhaustive]
@@ -90,6 +53,22 @@ pub enum Error {
     #[error("invalid input: {0}")]
     InvalidInput(String),
 
+    /// Unknown or unresolvable chain.
+    #[error("unknown chain: {0}")]
+    UnknownChain(String),
+
+    /// No RPC URL configured for the given chain.
+    #[error("no RPC URL for chain '{0}'")]
+    NoRpcUrl(String),
+
+    /// API key does not have access to the requested resource.
+    #[error("access denied: {0}")]
+    AccessDenied(String),
+
+    /// Home directory cannot be determined.
+    #[error("cannot determine home directory (HOME / USERPROFILE not set)")]
+    HomeNotFound,
+
     /// HD derivation error.
     #[error("derivation: {0}")]
     Derivation(String),
@@ -108,49 +87,99 @@ pub enum Error {
 }
 
 impl Error {
-    /// Returns the machine-readable error code.
+    /// Machine-readable `SCREAMING_SNAKE_CASE` error code for API consumers.
     #[must_use]
-    pub const fn code(&self) -> ErrorCode {
+    pub const fn code(&self) -> &'static str {
         match self {
-            Self::Vault(v) => match v {
-                owx_vault::VaultError::InvalidParams(_) => ErrorCode::InvalidParams,
-                owx_vault::VaultError::NotFound(_) => ErrorCode::WalletNotFound,
-                owx_vault::VaultError::InvalidInput(_) => ErrorCode::InvalidInput,
-                owx_vault::VaultError::Io { .. } => ErrorCode::Io,
-                owx_vault::VaultError::Json(_) => ErrorCode::Json,
-                _ => ErrorCode::Crypto,
-            },
-            Self::WalletNotFound(_) => ErrorCode::WalletNotFound,
-            Self::WalletNameExists(_) => ErrorCode::WalletNameExists,
-            Self::AmbiguousWallet { .. } => ErrorCode::AmbiguousWallet,
-            Self::ApiKeyNotFound(_) => ErrorCode::ApiKeyNotFound,
-            Self::PolicyNotFound(_) => ErrorCode::PolicyNotFound,
-            Self::PolicyDenied { .. } => ErrorCode::PolicyDenied,
-            Self::ApiKeyExpired(_) => ErrorCode::ApiKeyExpired,
-            Self::InvalidInput(_) => ErrorCode::InvalidInput,
-            Self::Derivation(_) => ErrorCode::Derivation,
-            Self::Signing(_) => ErrorCode::Signing,
-            Self::BroadcastFailed(_) => ErrorCode::BroadcastFailed,
-            Self::Json(_) => ErrorCode::Json,
+            Self::Vault(v) => v.code(),
+            Self::WalletNotFound(_) => "WALLET_NOT_FOUND",
+            Self::WalletNameExists(_) => "WALLET_NAME_EXISTS",
+            Self::AmbiguousWallet { .. } => "AMBIGUOUS_WALLET",
+            Self::ApiKeyNotFound(_) => "API_KEY_NOT_FOUND",
+            Self::PolicyNotFound(_) => "POLICY_NOT_FOUND",
+            Self::PolicyDenied { .. } => "POLICY_DENIED",
+            Self::ApiKeyExpired(_) => "API_KEY_EXPIRED",
+            Self::InvalidInput(_) => "INVALID_INPUT",
+            Self::UnknownChain(_) => "UNKNOWN_CHAIN",
+            Self::NoRpcUrl(_) => "NO_RPC_URL",
+            Self::AccessDenied(_) => "ACCESS_DENIED",
+            Self::HomeNotFound => "HOME_NOT_FOUND",
+            Self::Derivation(_) => "DERIVATION",
+            Self::Signing(_) => "SIGNING",
+            Self::BroadcastFailed(_) => "BROADCAST_FAILED",
+            Self::Json(_) => "JSON",
         }
     }
 }
 
-/// JSON serialization: `{"code": "...", "message": "..."}`.
-#[derive(Serialize)]
-struct ErrorPayload {
-    /// Machine-readable code.
-    code: ErrorCode,
-    /// Human-readable message.
-    message: String,
-}
-
+/// Serializes as `{"code": "SCREAMING_SNAKE_CASE", "message": "..."}`.
 impl Serialize for Error {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        ErrorPayload {
-            code: self.code(),
-            message: self.to_string(),
+        let mut s = serializer.serialize_struct("Error", 2)?;
+        s.serialize_field("code", self.code())?;
+        s.serialize_field("message", &self.to_string())?;
+        s.end()
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn code_returns_screaming_snake_case() {
+        let cases: Vec<(Error, &str)> = vec![
+            (Error::WalletNotFound("w1".into()), "WALLET_NOT_FOUND"),
+            (Error::WalletNameExists("w1".into()), "WALLET_NAME_EXISTS"),
+            (
+                Error::AmbiguousWallet {
+                    name: "w".into(),
+                    count: 2,
+                },
+                "AMBIGUOUS_WALLET",
+            ),
+            (Error::ApiKeyNotFound("k1".into()), "API_KEY_NOT_FOUND"),
+            (Error::PolicyNotFound("p1".into()), "POLICY_NOT_FOUND"),
+            (
+                Error::PolicyDenied {
+                    policy_id: "p".into(),
+                    reason: "r".into(),
+                },
+                "POLICY_DENIED",
+            ),
+            (Error::ApiKeyExpired("k1".into()), "API_KEY_EXPIRED"),
+            (Error::InvalidInput("bad".into()), "INVALID_INPUT"),
+            (Error::UnknownChain("x".into()), "UNKNOWN_CHAIN"),
+            (Error::NoRpcUrl("eip155:1".into()), "NO_RPC_URL"),
+            (Error::AccessDenied("no".into()), "ACCESS_DENIED"),
+            (Error::HomeNotFound, "HOME_NOT_FOUND"),
+            (Error::Derivation("err".into()), "DERIVATION"),
+            (Error::Signing("err".into()), "SIGNING"),
+            (Error::BroadcastFailed("err".into()), "BROADCAST_FAILED"),
+        ];
+        for (err, expected) in &cases {
+            assert_eq!(err.code(), *expected, "failed for {err:?}");
         }
-        .serialize(serializer)
+    }
+
+    #[test]
+    fn serialize_produces_code_and_message() {
+        let err = Error::WalletNotFound("my-wallet".into());
+        let json = serde_json::to_value(&err).unwrap();
+        assert_eq!(json["code"], "WALLET_NOT_FOUND");
+        assert_eq!(json["message"], "wallet not found: my-wallet");
+    }
+
+    #[test]
+    fn serialize_roundtrip_all_variants() {
+        let err = Error::PolicyDenied {
+            policy_id: "daily-limit".into(),
+            reason: "exceeded $100".into(),
+        };
+        let json = serde_json::to_string(&err).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["code"], "POLICY_DENIED");
+        assert!(parsed["message"].as_str().unwrap().contains("daily-limit"));
     }
 }

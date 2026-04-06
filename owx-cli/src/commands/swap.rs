@@ -106,7 +106,7 @@ pub fn run(action: SwapAction, owx: &Owx) -> Result<(), owx::Error> {
 
             let (provider, from_addr) =
                 owx.with_signing_key(&wallet, cred, ChainFamily::Evm, 0, |key_hex| {
-                    let addr = owx::signer::address_from_hex(ChainFamily::Evm, key_hex)?;
+                    let addr = owx::address_from_hex(ChainFamily::Evm, key_hex)?;
                     let p =
                         owx_swap::evm_provider_from_key_with_rpcs(key_hex, &default_rpc, rpc_map)
                             .map_err(|e| owx::Error::InvalidInput(e.to_string()))?;

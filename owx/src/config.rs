@@ -155,14 +155,10 @@ impl Default for Config {
 ///
 /// # Errors
 ///
-/// Returns [`Error::InvalidInput`] if the home directory cannot be determined.
+/// Returns [`Error::HomeNotFound`] if the home directory cannot be determined.
 pub fn default_vault_path() -> Result<PathBuf, crate::Error> {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
-        .map_err(|_| {
-            crate::Error::InvalidInput(
-                "cannot determine home directory (HOME / USERPROFILE not set)".into(),
-            )
-        })?;
+        .map_err(|_| crate::Error::HomeNotFound)?;
     Ok(PathBuf::from(home).join(".owx"))
 }

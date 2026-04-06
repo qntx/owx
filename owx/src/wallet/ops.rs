@@ -2,7 +2,7 @@
 
 use zeroize::Zeroizing;
 
-use super::types::{EncryptedWallet, ImportKeyOptions, WalletAccount, WalletInfo, to_info};
+use super::types::{EncryptedWallet, ImportKeyOptions, WalletAccount, WalletInfo};
 use crate::Owx;
 use crate::chain::{ALL_FAMILIES, default_chain};
 use crate::error::Error;
@@ -38,7 +38,7 @@ pub fn create_wallet(
         secret.key_type(),
     );
     owx.store().save("wallets", &wallet.id, &wallet)?;
-    Ok(to_info(&wallet))
+    Ok(WalletInfo::from(&wallet))
 }
 
 /// Import a wallet from an existing mnemonic phrase.
@@ -61,7 +61,7 @@ pub fn import_mnemonic(
         secret.key_type(),
     );
     owx.store().save("wallets", &wallet.id, &wallet)?;
-    Ok(to_info(&wallet))
+    Ok(WalletInfo::from(&wallet))
 }
 
 /// Import a wallet from a single hex-encoded private key.
@@ -98,7 +98,7 @@ pub fn import_private_key(
         secret.key_type(),
     );
     owx.store().save("wallets", &wallet.id, &wallet)?;
-    Ok(to_info(&wallet))
+    Ok(WalletInfo::from(&wallet))
 }
 
 /// Import a wallet from explicit dual-curve private keys.
@@ -127,19 +127,19 @@ pub fn import_private_keys(
         secret.key_type(),
     );
     owx.store().save("wallets", &wallet.id, &wallet)?;
-    Ok(to_info(&wallet))
+    Ok(WalletInfo::from(&wallet))
 }
 
 /// List all wallets (newest first).
 pub fn list_wallets(owx: &Owx) -> Result<Vec<WalletInfo>, Error> {
     let mut wallets: Vec<EncryptedWallet> = owx.store().list("wallets")?;
     wallets.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-    Ok(wallets.iter().map(to_info).collect())
+    Ok(wallets.iter().map(WalletInfo::from).collect())
 }
 
 /// Get a wallet by name or ID.
 pub fn get_wallet(owx: &Owx, name_or_id: &str) -> Result<WalletInfo, Error> {
-    Ok(to_info(&load_wallet(owx, name_or_id)?))
+    Ok(WalletInfo::from(&load_wallet(owx, name_or_id)?))
 }
 
 /// Delete a wallet.
@@ -216,10 +216,13 @@ pub fn load_wallet(owx: &Owx, name_or_id: &str) -> Result<EncryptedWallet, Error
         return Ok(w);
     }
     let wallets: Vec<EncryptedWallet> = owx.store().list("wallets")?;
-    let matches: Vec<&EncryptedWallet> = wallets.iter().filter(|w| w.name == name_or_id).collect();
+    let mut matches: Vec<EncryptedWallet> = wallets
+        .into_iter()
+        .filter(|w| w.name == name_or_id)
+        .collect();
     match matches.len() {
         0 => Err(Error::WalletNotFound(name_or_id.to_owned())),
-        1 => Ok(matches[0].clone()),
+        1 => Ok(matches.swap_remove(0)),
         n => Err(Error::AmbiguousWallet {
             name: name_or_id.to_owned(),
             count: n,
