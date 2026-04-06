@@ -79,19 +79,16 @@ pub enum ChainFamily {
     Xrpl,
 }
 
-/// All supported chain families in canonical order.
-pub const ALL_FAMILIES: [ChainFamily; 10] = [
-    ChainFamily::Evm,
-    ChainFamily::Bitcoin,
-    ChainFamily::Solana,
-    ChainFamily::Cosmos,
-    ChainFamily::Tron,
-    ChainFamily::Ton,
-    ChainFamily::Spark,
-    ChainFamily::Filecoin,
-    ChainFamily::Sui,
-    ChainFamily::Xrpl,
-];
+/// Generate the `ALL_FAMILIES` constant from the chain table.
+macro_rules! impl_all_families {
+    ( $( [ $variant:ident, $display:expr, $ns:expr, $coin:expr, $ed:expr, $signer:path ] ),+ $(,)? ) => {
+        /// All supported chain families in canonical order (generated from `for_each_chain!`).
+        pub const ALL_FAMILIES: &[ChainFamily] = &[
+            $( ChainFamily::$variant, )+
+        ];
+    };
+}
+for_each_chain!(impl_all_families);
 
 /// Implement `ChainFamily` methods, `Display`, and `FromStr` from the chain table.
 macro_rules! impl_chain_family_methods {
@@ -393,7 +390,7 @@ mod tests {
 
     #[test]
     fn chain_family_from_namespace_roundtrip() {
-        for &fam in &ALL_FAMILIES {
+        for &fam in ALL_FAMILIES {
             let ns = fam.namespace();
             assert_eq!(ChainFamily::from_namespace(ns), Some(fam));
         }
@@ -401,7 +398,7 @@ mod tests {
 
     #[test]
     fn chain_family_display_parse_roundtrip() {
-        for &fam in &ALL_FAMILIES {
+        for &fam in ALL_FAMILIES {
             let s = fam.to_string();
             let parsed: ChainFamily = s.parse().unwrap();
             assert_eq!(parsed, fam);
@@ -410,7 +407,7 @@ mod tests {
 
     #[test]
     fn default_chain_all_families() {
-        for &fam in &ALL_FAMILIES {
+        for &fam in ALL_FAMILIES {
             let chain = default_chain(fam);
             assert_eq!(chain.family, fam);
         }

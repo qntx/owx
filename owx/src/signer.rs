@@ -123,7 +123,7 @@ pub fn derive_private_key_hex(
 pub fn derive_all_accounts(mnemonic: &str, index: u32) -> Result<Vec<WalletAccount>, Error> {
     let wallet = kobe::Wallet::from_mnemonic(mnemonic, None).map_err(d_err)?;
     let mut accounts = Vec::with_capacity(ALL_FAMILIES.len());
-    for &fam in &ALL_FAMILIES {
+    for &fam in ALL_FAMILIES {
         let chain = default_chain(fam);
         let d = derive_account(fam, &wallet, index)?;
         accounts.push(WalletAccount {
