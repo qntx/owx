@@ -6,6 +6,7 @@ use owx::Owx;
 use crate::output::print_json;
 
 #[derive(Subcommand)]
+#[allow(clippy::module_name_repetitions)]
 pub enum PolicyAction {
     Create {
         id: String,

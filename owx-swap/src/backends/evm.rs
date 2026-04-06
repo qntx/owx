@@ -11,6 +11,11 @@ use lifiswap_evm::{EvmProvider, LocalSigner};
 use crate::error::SwapError;
 
 /// Build an [`EvmProvider`] from a raw private key hex and default RPC URL.
+///
+/// # Errors
+///
+/// Returns [`SwapError::InvalidInput`] if the key or URL is malformed.
+#[allow(clippy::module_name_repetitions)]
 pub fn evm_provider_from_key(
     private_key_hex: &str,
     rpc_url: &str,
@@ -29,6 +34,11 @@ pub fn evm_provider_from_key(
 }
 
 /// Build an [`EvmProvider`] with multi-chain RPC resolution.
+///
+/// # Errors
+///
+/// Returns [`SwapError::InvalidInput`] if the key or URL is malformed.
+#[allow(clippy::module_name_repetitions, clippy::implicit_hasher)]
 pub fn evm_provider_from_key_with_rpcs(
     private_key_hex: &str,
     default_rpc_url: &str,

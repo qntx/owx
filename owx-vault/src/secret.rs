@@ -8,6 +8,7 @@ use crate::hardening::{mlock_slice, munlock_slice};
 ///
 /// On Unix, the buffer is mlocked to prevent swapping to disk.
 /// The inner key material is securely wiped from memory on [`Drop`].
+#[allow(clippy::module_name_repetitions)]
 pub struct SecretBytes(Vec<u8>);
 
 impl Clone for SecretBytes {
@@ -22,7 +23,7 @@ impl SecretBytes {
     #[allow(clippy::missing_const_for_fn)] // calls mlock on unix
     pub fn new(bytes: Vec<u8>) -> Self {
         if !bytes.is_empty() {
-            mlock_slice(bytes.as_ptr(), bytes.len());
+            let _ = mlock_slice(bytes.as_ptr(), bytes.len());
         }
         Self(bytes)
     }

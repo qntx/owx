@@ -1,8 +1,5 @@
 //! Crypto envelope, secret-bytes, and generic file-system store for OWX.
 //!
-//! This crate is **domain-agnostic** — it knows nothing about wallets,
-//! chains, or policies.  It provides:
-//!
 //! - [`crypto`] — scrypt / HKDF-SHA256 + AES-256-GCM encryption envelopes
 //! - [`secret`] — Zeroize-on-drop secret bytes wrapper with mlock support
 //! - [`store`] — Generic JSON file-system store

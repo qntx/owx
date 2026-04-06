@@ -29,11 +29,8 @@ struct Cli {
 #[allow(clippy::print_stderr)]
 fn main() {
     let cli = Cli::parse();
-    let owx = match &cli.vault {
-        Some(path) => Owx::open(path),
-        None => Owx::open_default(),
-    };
-    let owx = match owx {
+    let owx_result = cli.vault.as_ref().map_or_else(Owx::open_default, Owx::open);
+    let owx = match owx_result {
         Ok(v) => v,
         Err(e) => exit_with_error(&e),
     };

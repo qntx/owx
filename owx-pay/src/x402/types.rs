@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Result of a payment flow.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize)]
 pub struct PayResult {
     /// HTTP status code of the final response.
@@ -14,6 +15,7 @@ pub struct PayResult {
 }
 
 /// Information about a completed payment.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize)]
 pub struct PaymentInfo {
     /// Human-readable amount (e.g. "$0.01").

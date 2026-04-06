@@ -10,6 +10,7 @@ use crate::secret::{WalletSecret, decrypt_secret};
 use crate::signer;
 
 /// Options for importing a wallet from a single private key.
+#[allow(clippy::exhaustive_structs)]
 #[derive(Debug, Default)]
 pub struct ImportKeyOptions<'a> {
     /// Target chain (determines which curve the primary key belongs to).
@@ -91,6 +92,7 @@ impl EncryptedWallet {
 }
 
 /// Public wallet information (no secret material exposed).
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletInfo {
     /// Unique wallet identifier.
@@ -104,6 +106,7 @@ pub struct WalletInfo {
 }
 
 /// A single account within a wallet (one per chain family).
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccountInfo {
     /// CAIP-2 chain identifier.

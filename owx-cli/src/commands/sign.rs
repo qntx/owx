@@ -7,6 +7,7 @@ use crate::output::print_json;
 
 /// Signing actions.
 #[derive(Subcommand)]
+#[allow(clippy::module_name_repetitions)]
 pub enum SignAction {
     /// Sign a message.
     #[command(name = "msg")]

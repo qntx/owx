@@ -56,6 +56,7 @@ impl KeyCache {
         if let Some(e) = map.get_mut(id) {
             e.last_accessed = Instant::now();
         }
+        drop(map);
         Some(cloned)
     }
 

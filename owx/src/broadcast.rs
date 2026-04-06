@@ -55,6 +55,7 @@ fn extract_json_field(json_str: &str, field: &str) -> Result<String, Error> {
 }
 
 /// Broadcast a signed transaction to the appropriate chain RPC.
+#[allow(clippy::too_many_lines)]
 pub async fn broadcast(
     client: &reqwest::Client,
     family: ChainFamily,
@@ -164,13 +165,12 @@ pub async fn broadcast(
             });
             let resp = post_json(client, rpc_url, &body).await?;
             let parsed: serde_json::Value = serde_json::from_str(&resp)?;
-            if let Some(hash) = parsed["result"]["tx_json"]["hash"].as_str() {
-                Ok(hash.to_owned())
-            } else {
-                Err(Error::BroadcastFailed(format!(
-                    "no tx hash in XRPL response: {resp}"
-                )))
-            }
+            parsed["result"]["tx_json"]["hash"]
+                .as_str()
+                .map(ToOwned::to_owned)
+                .ok_or_else(|| {
+                    Error::BroadcastFailed(format!("no tx hash in XRPL response: {resp}"))
+                })
         }
         ChainFamily::Spark | ChainFamily::Filecoin => Err(Error::BroadcastFailed(format!(
             "broadcast not yet supported for {family}"

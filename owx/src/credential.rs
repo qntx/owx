@@ -4,6 +4,7 @@
 ///
 /// Compile-time distinction between owner passphrase and agent API token,
 /// eliminating runtime string-prefix checks.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub enum Credential<'a> {
     /// Owner passphrase (scrypt-encrypted wallet).

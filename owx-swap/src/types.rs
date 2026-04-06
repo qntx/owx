@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 
 /// A cross-chain or same-chain swap request.
+#[allow(clippy::exhaustive_structs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SwapRequest {
     /// Source chain (CAIP-2 or numeric ID, e.g. `"eip155:42161"` or `"42161"`).
@@ -29,6 +30,7 @@ pub struct SwapRequest {
 }
 
 /// Token metadata included in a quote.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenInfo {
     /// Contract address (or `"0x0…0"` / native identifier).
@@ -45,6 +47,7 @@ pub struct TokenInfo {
 ///
 /// Quotes are **serializable**: an agent can persist the JSON, analyse it
 /// offline, and later pass the `id` back to `execute` without re-querying.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SwapQuote {
     /// Unique quote identifier (`<backend>:<backend-route-id>`).
@@ -81,6 +84,7 @@ pub struct SwapQuote {
 }
 
 /// Execution receipt returned after a swap completes (or fails).
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SwapReceipt {
     /// Transaction hash (or first tx hash for multi-step routes).
@@ -95,6 +99,7 @@ pub struct SwapReceipt {
 }
 
 /// Terminal swap status.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SwapStatus {
@@ -110,6 +115,7 @@ pub enum SwapStatus {
 }
 
 /// Strategy for auto-selecting a quote from multiple candidates.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SelectionStrategy {

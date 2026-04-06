@@ -7,6 +7,7 @@ use crate::output::print_json;
 
 /// API key actions.
 #[derive(Subcommand)]
+#[allow(clippy::module_name_repetitions)]
 pub enum KeyAction {
     /// Create an API key for agent access.
     Create {

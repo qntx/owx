@@ -85,8 +85,9 @@ const MOONPAY_CHAINS: &[(&str, MoonPayChain)] = &[
 
 /// Resolve a user-facing chain name to a `MoonPay` chain entry.
 fn resolve_moonpay_chain(chain: Option<&str>) -> Result<&'static MoonPayChain, PayError> {
-    match chain {
-        Some(name) => {
+    chain.map_or_else(
+        || Ok(&MOONPAY_CHAINS[0].1),
+        |name| {
             let lower = name.to_lowercase();
             MOONPAY_CHAINS
                 .iter()
@@ -98,12 +99,12 @@ fn resolve_moonpay_chain(chain: Option<&str>) -> Result<&'static MoonPayChain, P
                         format!("unknown chain: {name}"),
                     )
                 })
-        }
-        None => Ok(&MOONPAY_CHAINS[0].1),
-    }
+        },
+    )
 }
 
 /// Result of a fund operation.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize)]
 pub struct FundResult {
     /// `MoonPay` deposit ID.
@@ -117,6 +118,7 @@ pub struct FundResult {
 }
 
 /// Token balance entry.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenBalance {
     /// Token contract address.
@@ -203,13 +205,13 @@ pub fn fund_blocking(
     token: Option<&str>,
 ) -> Result<FundResult, PayError> {
     let mapping = resolve_moonpay_chain(chain)?;
-    let token = token.unwrap_or("USDC");
+    let token_sym = token.unwrap_or("USDC");
 
     let req = DepositRequest {
-        name: format!("OWX deposit ({token} on {})", mapping.display_name),
+        name: format!("OWX deposit ({token_sym} on {})", mapping.display_name),
         wallet: wallet_address.to_owned(),
         chain: mapping.moonpay_name.to_owned(),
-        token: token.to_owned(),
+        token: token_sym.to_owned(),
     };
 
     let resp = HTTP

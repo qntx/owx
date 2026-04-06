@@ -3,7 +3,9 @@
 use std::path::PathBuf;
 
 /// Errors from vault-level operations (encryption, storage, I/O).
+#[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
+#[allow(clippy::module_name_repetitions)]
 pub enum VaultError {
     /// Encryption or decryption failed.
     #[error("crypto: {0}")]

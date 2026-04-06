@@ -3,6 +3,7 @@
 use serde::Serialize;
 
 /// Payment error codes.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum PayErrorCode {
@@ -23,6 +24,7 @@ pub enum PayErrorCode {
 }
 
 /// Payment error.
+#[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 #[error("{code:?}: {message}")]
 pub struct PayError {

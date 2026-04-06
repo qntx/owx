@@ -7,6 +7,7 @@ use crate::output::print_json;
 
 /// Wallet actions.
 #[derive(Subcommand)]
+#[allow(clippy::module_name_repetitions)]
 pub enum WalletAction {
     /// Create a new wallet.
     Create {

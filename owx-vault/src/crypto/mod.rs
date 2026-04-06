@@ -12,6 +12,7 @@ pub mod hkdf;
 mod rand;
 pub mod scrypt;
 
+#[allow(clippy::module_name_repetitions)]
 pub use envelope::{
     CipherParams, CryptoEnvelope, HkdfKdfParams, KdfParamsVariant, ScryptKdfParams,
 };
@@ -26,16 +27,29 @@ compile_error!(
 );
 
 /// Encrypt plaintext with a passphrase (scrypt KDF + AES-256-GCM).
+///
+/// # Errors
+///
+/// Returns [`VaultError::Crypto`] if encryption fails.
 pub fn encrypt(plaintext: &[u8], passphrase: &str) -> Result<CryptoEnvelope, VaultError> {
     scrypt::encrypt(plaintext, passphrase)
 }
 
 /// Encrypt plaintext with an API token (HKDF-SHA256 + AES-256-GCM).
+///
+/// # Errors
+///
+/// Returns [`VaultError::Crypto`] if encryption fails.
 pub fn encrypt_hkdf(plaintext: &[u8], token: &str) -> Result<CryptoEnvelope, VaultError> {
     hkdf::encrypt(plaintext, token)
 }
 
 /// Decrypt a [`CryptoEnvelope`]. Dispatches on the `kdf` field.
+///
+/// # Errors
+///
+/// Returns [`VaultError::InvalidParams`] for unsupported KDF algorithms,
+/// or [`VaultError::Crypto`] if decryption / authentication fails.
 pub fn decrypt(envelope: &CryptoEnvelope, credential: &str) -> Result<SecretBytes, VaultError> {
     match envelope.kdf.as_str() {
         "scrypt" => scrypt::decrypt(envelope, credential),

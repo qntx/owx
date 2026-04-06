@@ -16,6 +16,10 @@ const INFO: &[u8] = b"owx-api-key-v1";
 const DKLEN: u32 = 32;
 
 /// Encrypt plaintext with an API token (HKDF-SHA256 + AES-256-GCM).
+///
+/// # Errors
+///
+/// Returns [`VaultError::Crypto`] if HKDF expansion or AES encryption fails.
 pub fn encrypt(plaintext: &[u8], token: &str) -> Result<CryptoEnvelope, VaultError> {
     let mut salt = [0u8; 32];
     fill_random(&mut salt);
@@ -47,6 +51,11 @@ pub fn encrypt(plaintext: &[u8], token: &str) -> Result<CryptoEnvelope, VaultErr
 }
 
 /// Decrypt an HKDF-encrypted envelope.
+///
+/// # Errors
+///
+/// Returns [`VaultError::InvalidParams`] if the derived key length is wrong,
+/// or [`VaultError::Crypto`] if HKDF expansion or AES decryption fails.
 pub fn decrypt(envelope: &CryptoEnvelope, token: &str) -> Result<SecretBytes, VaultError> {
     let KdfParamsVariant::Hkdf(kp) = &envelope.kdfparams else {
         return Err(VaultError::InvalidParams("expected HKDF kdfparams".into()));

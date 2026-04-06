@@ -3,6 +3,7 @@
 use serde::{Serialize, Serializer};
 
 /// Machine-readable error codes for API consumers.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ErrorCode {
@@ -39,6 +40,8 @@ pub enum ErrorCode {
 }
 
 /// Unified error type for all `owx` operations.
+#[non_exhaustive]
+#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// Vault (storage / crypto) error.
@@ -110,12 +113,12 @@ impl Error {
     pub const fn code(&self) -> ErrorCode {
         match self {
             Self::Vault(v) => match v {
-                owx_vault::VaultError::Crypto(_) => ErrorCode::Crypto,
                 owx_vault::VaultError::InvalidParams(_) => ErrorCode::InvalidParams,
                 owx_vault::VaultError::NotFound(_) => ErrorCode::WalletNotFound,
                 owx_vault::VaultError::InvalidInput(_) => ErrorCode::InvalidInput,
                 owx_vault::VaultError::Io { .. } => ErrorCode::Io,
                 owx_vault::VaultError::Json(_) => ErrorCode::Json,
+                _ => ErrorCode::Crypto,
             },
             Self::WalletNotFound(_) => ErrorCode::WalletNotFound,
             Self::WalletNameExists(_) => ErrorCode::WalletNameExists,

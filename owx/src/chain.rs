@@ -10,6 +10,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 /// Error returned when parsing a [`ChainFamily`] from a string fails.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseChainFamilyError {
     /// The input that could not be parsed.
@@ -51,6 +52,8 @@ macro_rules! for_each_chain {
 pub(crate) use for_each_chain;
 
 /// Supported chain families grouped by elliptic curve.
+#[non_exhaustive]
+#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ChainFamily {
@@ -139,6 +142,8 @@ macro_rules! impl_chain_family_methods {
 for_each_chain!(impl_chain_family_methods);
 
 /// A resolved chain: name + family + CAIP-2 identifier.
+#[non_exhaustive]
+#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Chain {
     /// Human-readable name (e.g. "ethereum", "base").
@@ -255,6 +260,10 @@ pub const KNOWN: &[Chain] = &[
 
 /// Resolve a chain string into a known [`Chain`], or synthesize one for
 /// unregistered CAIP-2 IDs with a recognized namespace.
+///
+/// # Errors
+///
+/// Returns [`Error::InvalidInput`] if the chain string is not recognized.
 pub fn resolve(s: &str) -> Result<ResolvedChain, crate::Error> {
     let lower = s.to_lowercase();
     let lookup = if lower == "evm" { "ethereum" } else { &lower };
@@ -279,6 +288,8 @@ pub fn resolve(s: &str) -> Result<ResolvedChain, crate::Error> {
 }
 
 /// Result of chain resolution — either a static reference or a dynamic CAIP-2 chain.
+#[non_exhaustive]
+#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone)]
 pub enum ResolvedChain {
     /// A known chain from the static registry.
@@ -322,8 +333,12 @@ impl ResolvedChain {
 }
 
 /// Returns the default [`Chain`] for a given [`ChainFamily`].
+///
+/// # Panics
+///
+/// Panics if the given family has no entry in [`KNOWN`].
 #[must_use]
-#[allow(clippy::expect_used)]
+#[allow(clippy::expect_used, clippy::module_name_repetitions)]
 pub fn default_chain(family: ChainFamily) -> &'static Chain {
     KNOWN
         .iter()

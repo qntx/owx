@@ -14,6 +14,7 @@ use crate::error::Error;
 use crate::wallet::WalletAccount;
 
 /// Result of a signing operation.
+#[non_exhaustive]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SignResult {
     /// Hex-encoded signature.
@@ -24,6 +25,7 @@ pub struct SignResult {
 }
 
 /// Result of a sign-and-send operation.
+#[non_exhaustive]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SendResult {
     /// On-chain transaction hash.
@@ -52,6 +54,10 @@ fn s_err(e: impl std::fmt::Display) -> Error {
 ///
 /// This is a manual match because `kobe_btc::Deriver::new` returns a `Result`
 /// with its own error type, while all other chains' constructors are infallible.
+///
+/// # Errors
+///
+/// Returns [`Error::Derivation`] if HD derivation fails.
 pub fn derive_account(
     family: ChainFamily,
     wallet: &kobe::Wallet,
@@ -93,6 +99,10 @@ pub fn derive_account(
 }
 
 /// Derive the hex private key for a chain family.
+///
+/// # Errors
+///
+/// Returns [`Error::Derivation`] if HD derivation fails.
 pub fn derive_private_key_hex(
     wallet: &kobe::Wallet,
     family: ChainFamily,
@@ -106,6 +116,10 @@ pub fn derive_private_key_hex(
 }
 
 /// Derive accounts for all 10 chain families from a mnemonic at `index`.
+///
+/// # Errors
+///
+/// Returns [`Error::Derivation`] if mnemonic parsing or derivation fails.
 pub fn derive_all_accounts(mnemonic: &str, index: u32) -> Result<Vec<WalletAccount>, Error> {
     let wallet = kobe::Wallet::from_mnemonic(mnemonic, None).map_err(d_err)?;
     let mut accounts = Vec::with_capacity(ALL_FAMILIES.len());
@@ -123,6 +137,10 @@ pub fn derive_all_accounts(mnemonic: &str, index: u32) -> Result<Vec<WalletAccou
 }
 
 /// Sign a message with a hex private key.
+///
+/// # Errors
+///
+/// Returns [`Error::Signing`] if key parsing or signing fails.
 pub fn sign_message(
     family: ChainFamily,
     key_hex: &str,
@@ -142,6 +160,10 @@ pub fn sign_message(
 }
 
 /// Sign a transaction with a hex private key.
+///
+/// # Errors
+///
+/// Returns [`Error::Signing`] if key parsing or signing fails.
 pub fn sign_transaction(
     family: ChainFamily,
     key_hex: &str,
@@ -161,12 +183,20 @@ pub fn sign_transaction(
 }
 
 /// Sign EIP-712 typed data (EVM only).
+///
+/// # Errors
+///
+/// Returns [`Error::Signing`] if key parsing or signing fails.
 pub fn sign_typed_data(key_hex: &str, typed_data_json: &str) -> Result<SignOutput, Error> {
     let s = signer::evm::Signer::from_hex(key_hex).map_err(s_err)?;
     s.sign_typed_data(typed_data_json).map_err(s_err)
 }
 
 /// Encode a signed transaction for broadcasting.
+///
+/// # Errors
+///
+/// Returns [`Error::Signing`] if encoding fails (EVM only).
 pub fn encode_signed_tx(
     family: ChainFamily,
     tx_bytes: &[u8],
@@ -189,6 +219,10 @@ pub fn encode_signed_tx(
 }
 
 /// Derive an on-chain address from a hex private key.
+///
+/// # Errors
+///
+/// Returns [`Error::Signing`] if the hex key is invalid.
 pub fn address_from_hex(family: ChainFamily, key_hex: &str) -> Result<String, Error> {
     macro_rules! dispatch {
         ( $( [ $var:ident, $disp:expr, $ns:expr, $coin:expr, $ed:expr, $signer:path ] ),+ $(,)? ) => {

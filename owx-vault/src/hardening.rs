@@ -21,6 +21,10 @@ fn hooks() -> &'static Mutex<Vec<Box<dyn Fn() + Send>>> {
 /// Register a cleanup function to run when a termination signal is received.
 ///
 /// Typical usage: register a closure that clears a key cache.
+///
+/// # Panics
+///
+/// Panics if the internal cleanup hooks mutex is poisoned.
 pub fn register_cleanup(f: impl Fn() + Send + 'static) {
     #[allow(clippy::expect_used)]
     hooks()
@@ -41,7 +45,9 @@ fn run_cleanup_hooks() {
 }
 
 /// Report of which hardening measures succeeded.
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
+#[allow(clippy::module_name_repetitions)]
 pub struct HardeningReport {
     /// Whether core dumps were successfully disabled.
     pub core_dumps_disabled: bool,

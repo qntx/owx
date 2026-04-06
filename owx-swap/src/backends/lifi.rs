@@ -21,6 +21,10 @@ pub struct LiFiBackend {
 
 impl LiFiBackend {
     /// Create a new `LiFi` backend with the given integrator name.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SwapError::LiFi`] if the client cannot be initialized.
     pub fn new(integrator: &str) -> Result<Self, SwapError> {
         let config = LiFiConfig::builder().integrator(integrator).build();
         let client = LiFiClient::new(config)?;
@@ -28,6 +32,10 @@ impl LiFiBackend {
     }
 
     /// Create from an existing [`LiFiConfig`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SwapError::LiFi`] if the client cannot be initialized.
     pub fn with_config(config: LiFiConfig) -> Result<Self, SwapError> {
         let client = LiFiClient::new(config)?;
         Ok(Self { client })

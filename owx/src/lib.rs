@@ -51,8 +51,13 @@ pub struct Owx {
 
 impl Owx {
     /// Open (or create) an OWX instance at the given vault path.
-    pub fn open(path: impl Into<PathBuf>) -> Result<Self, Error> {
-        let path = path.into();
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Vault`] if the store cannot be opened, or [`Error::Json`]
+    /// if the config file is malformed.
+    pub fn open(vault_path: impl Into<PathBuf>) -> Result<Self, Error> {
+        let path = vault_path.into();
         let store = owx_vault::Store::open(&path)?;
         let config = config::Config::load_or_default_from(&path.join("config.json"))?;
         let audit = audit::AuditLog::new(&path);
@@ -66,6 +71,11 @@ impl Owx {
     }
 
     /// Open the default vault at `~/.owx`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error`] if the default path cannot be resolved or the vault
+    /// cannot be opened.
     pub fn open_default() -> Result<Self, Error> {
         Self::open(config::default_vault_path()?)
     }
@@ -89,11 +99,19 @@ impl Owx {
     }
 
     /// Generate a new BIP-39 mnemonic phrase.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidInput`] if `words` is not 12 or 24.
     pub fn generate_mnemonic(&self, words: usize) -> Result<String, Error> {
         wallet::generate_mnemonic(words)
     }
 
     /// Create a new wallet.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error`] if mnemonic generation, encryption, or storage fails.
     pub fn create_wallet(
         &self,
         name: &str,
@@ -107,6 +125,10 @@ impl Owx {
     }
 
     /// Import from mnemonic.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error`] if the mnemonic is invalid or encryption/storage fails.
     pub fn import_mnemonic(
         &self,
         name: &str,
@@ -121,6 +143,10 @@ impl Owx {
     }
 
     /// Import from private key.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error`] if the key is invalid or encryption/storage fails.
     pub fn import_private_key(
         &self,
         name: &str,
@@ -135,6 +161,10 @@ impl Owx {
     }
 
     /// Import from dual-curve keys.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error`] if either key is invalid or encryption/storage fails.
     pub fn import_private_keys(
         &self,
         name: &str,
@@ -149,16 +179,28 @@ impl Owx {
     }
 
     /// List all wallets (newest first).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Vault`] if the store cannot be read.
     pub fn list_wallets(&self) -> Result<Vec<WalletInfo>, Error> {
         wallet::list_wallets(self)
     }
 
     /// Get a wallet by name or ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::WalletNotFound`] or [`Error::AmbiguousWallet`] on lookup failure.
     pub fn get_wallet(&self, name_or_id: &str) -> Result<WalletInfo, Error> {
         wallet::get_wallet(self, name_or_id)
     }
 
     /// Delete a wallet.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::WalletNotFound`] if the wallet does not exist.
     pub fn delete_wallet(&self, name_or_id: &str) -> Result<(), Error> {
         wallet::delete_wallet(self, name_or_id)?;
         self.audit
@@ -167,6 +209,10 @@ impl Owx {
     }
 
     /// Rename a wallet.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::WalletNotFound`] or [`Error::WalletNameExists`] on conflict.
     pub fn rename_wallet(&self, name_or_id: &str, new_name: &str) -> Result<(), Error> {
         wallet::rename_wallet(self, name_or_id, new_name)?;
         self.audit
@@ -175,6 +221,10 @@ impl Owx {
     }
 
     /// Export a wallet secret.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error`] if the wallet is not found or decryption fails.
     pub fn export_wallet(
         &self,
         name_or_id: &str,
@@ -195,6 +245,10 @@ impl Owx {
     }
 
     /// Derive an address for a chain.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error`] if the chain is unknown, wallet not found, or derivation fails.
     pub fn derive_address(
         &self,
         wallet: &str,
@@ -206,6 +260,10 @@ impl Owx {
     }
 
     /// Sign a message.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error`] if key resolution, policy check, or signing fails.
     pub fn sign_message(
         &self,
         wallet: &str,
@@ -221,6 +279,10 @@ impl Owx {
     }
 
     /// Sign a transaction (hex-encoded).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error`] if the hex is invalid, key resolution, or signing fails.
     pub fn sign_transaction(
         &self,
         wallet: &str,
@@ -239,6 +301,11 @@ impl Owx {
     }
 
     /// Sign EIP-712 typed data (EVM only).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidInput`] for non-EVM chains, or [`Error`] if
+    /// key resolution or signing fails.
     pub fn sign_typed_data(
         &self,
         wallet: &str,
@@ -257,6 +324,10 @@ impl Owx {
     }
 
     /// Sign and broadcast a transaction.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error`] if signing, RPC resolution, or broadcast fails.
     pub async fn sign_and_send(
         &self,
         wallet: &str,
@@ -294,6 +365,10 @@ impl Owx {
     ///
     /// Use this to build chain-specific signers (e.g. `EvmProvider`) inside
     /// the closure and return the constructed object.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error`] if key resolution fails or the closure returns an error.
     pub fn with_signing_key<F, R>(
         &self,
         wallet: &str,
@@ -311,6 +386,10 @@ impl Owx {
     }
 
     /// Create an API key.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error`] if encryption or storage fails.
     pub fn create_api_key(
         &self,
         name: &str,
@@ -326,11 +405,19 @@ impl Owx {
     }
 
     /// List all API keys.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Vault`] if the store cannot be read.
     pub fn list_api_keys(&self) -> Result<Vec<ApiKeyInfo>, Error> {
         key::list_api_keys(self)
     }
 
     /// Revoke an API key.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::ApiKeyNotFound`] if the key does not exist.
     pub fn revoke_api_key(&self, id: &str) -> Result<(), Error> {
         key::revoke_api_key(self, id)?;
         self.audit.log_ok("revoke_api_key", None, None, None);

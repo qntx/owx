@@ -12,8 +12,16 @@ pub trait WalletBridge: Send + Sync {
     /// Chain families this wallet supports.
     fn supported_families(&self) -> Vec<ChainFamily>;
     /// Get the address for a CAIP-2 network string.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`owx::Error`] if the network is unsupported or wallet lookup fails.
     fn address(&self, network: &str) -> Result<String, owx::Error>;
     /// Sign a payment payload for a scheme/network. Returns hex signature.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`owx::Error`] if signing fails.
     fn sign_payload(
         &self,
         scheme: &str,

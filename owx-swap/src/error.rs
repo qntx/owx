@@ -1,6 +1,7 @@
 //! Swap error types.
 
 /// Unified error type for all `owx-swap` operations.
+#[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum SwapError {
     /// No backend registered for the requested provider name.

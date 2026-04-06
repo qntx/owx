@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// A declarative policy rule evaluated in-process.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PolicyRule {
@@ -38,6 +39,7 @@ pub enum PolicyRule {
 }
 
 /// A stored policy definition.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Policy {
     /// Unique policy identifier.
@@ -62,6 +64,7 @@ pub struct Policy {
 }
 
 /// Transaction fields available for policy evaluation.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionContext {
     /// Destination address.
@@ -81,6 +84,7 @@ pub struct TransactionContext {
 }
 
 /// Spending context for daily-limit policies.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpendingContext {
     /// Cumulative daily spending so far (smallest unit).
@@ -93,6 +97,7 @@ pub struct SpendingContext {
 }
 
 /// Context passed to policy evaluation.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicyContext {
     /// CAIP-2 chain ID.
@@ -110,6 +115,7 @@ pub struct PolicyContext {
 }
 
 /// Result of policy evaluation.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicyResult {
     /// Whether the request is allowed.

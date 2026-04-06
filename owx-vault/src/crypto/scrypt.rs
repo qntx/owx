@@ -26,6 +26,11 @@ pub(crate) const P: u32 = 1;
 pub(crate) const DKLEN: u32 = 32;
 
 /// Encrypt plaintext with a passphrase (scrypt KDF + AES-256-GCM).
+///
+/// # Errors
+///
+/// Returns [`VaultError::InvalidParams`] if scrypt parameters are invalid,
+/// or [`VaultError::Crypto`] if key derivation or AES encryption fails.
 pub fn encrypt(plaintext: &[u8], passphrase: &str) -> Result<CryptoEnvelope, VaultError> {
     let mut salt = [0u8; 32];
     fill_random(&mut salt);
@@ -60,6 +65,11 @@ pub fn encrypt(plaintext: &[u8], passphrase: &str) -> Result<CryptoEnvelope, Vau
 }
 
 /// Decrypt a scrypt-encrypted envelope.
+///
+/// # Errors
+///
+/// Returns [`VaultError::InvalidParams`] if scrypt parameters are invalid or
+/// out of allowed bounds, or [`VaultError::Crypto`] if decryption fails.
 pub fn decrypt(envelope: &CryptoEnvelope, passphrase: &str) -> Result<SecretBytes, VaultError> {
     let KdfParamsVariant::Scrypt(kp) = &envelope.kdfparams else {
         return Err(VaultError::InvalidParams(

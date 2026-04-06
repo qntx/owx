@@ -48,6 +48,10 @@ impl SwapEngine {
     /// responsive backends are included. Returns the last backend error if
     /// every backend fails, or [`SwapError::NoQuotes`] if all succeed but
     /// return zero results.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SwapError`] if all backends fail or no quotes are returned.
     pub async fn get_quotes(&self, req: &SwapRequest) -> Result<Vec<SwapQuote>, SwapError> {
         let mut all = Vec::new();
         let mut last_err: Option<SwapError> = None;
@@ -64,6 +68,10 @@ impl SwapEngine {
     }
 
     /// Fan out and sort using a specific strategy.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SwapError`] if quote retrieval fails.
     pub async fn get_quotes_sorted(
         &self,
         req: &SwapRequest,
@@ -75,6 +83,10 @@ impl SwapEngine {
     }
 
     /// Auto-select the best quote according to `strategy` and execute it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SwapError`] if quote retrieval or execution fails.
     pub async fn auto_execute(
         &self,
         req: &SwapRequest,
@@ -89,6 +101,11 @@ impl SwapEngine {
     /// Execute a specific quote.
     ///
     /// The quote's `provider` field determines which backend handles execution.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SwapError::ProviderNotFound`] if no matching backend, or
+    /// backend-specific errors on execution failure.
     pub async fn execute(
         &self,
         quote: &SwapQuote,

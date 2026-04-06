@@ -29,6 +29,10 @@ pub use fund::{FundResult, TokenBalance};
 pub use x402::{PayResult, PaymentInfo};
 
 /// Make an HTTP request with automatic x402 payment handling (blocking).
+///
+/// # Errors
+///
+/// Returns [`PayError`] if the request, payment negotiation, or signing fails.
 #[cfg(feature = "x402")]
 pub fn pay(
     wallet: &dyn WalletBridge,
@@ -40,6 +44,10 @@ pub fn pay(
 }
 
 /// Discover payable services.
+///
+/// # Errors
+///
+/// Returns [`PayError`] if the directory API request fails.
 #[cfg(feature = "x402")]
 pub fn discover(
     query: Option<&str>,
@@ -50,6 +58,10 @@ pub fn discover(
 }
 
 /// Fund a wallet via `MoonPay`.
+///
+/// # Errors
+///
+/// Returns [`PayError`] if the chain is unsupported or the API request fails.
 #[cfg(feature = "moonpay")]
 pub fn fund(
     wallet_address: &str,
@@ -60,6 +72,10 @@ pub fn fund(
 }
 
 /// Check token balances via `MoonPay`.
+///
+/// # Errors
+///
+/// Returns [`PayError`] if the chain is unsupported or the API request fails.
 #[cfg(feature = "moonpay")]
 pub fn get_balances(
     wallet_address: &str,

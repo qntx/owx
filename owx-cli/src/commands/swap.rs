@@ -11,6 +11,7 @@ use crate::output::print_json;
 
 /// Swap actions.
 #[derive(Subcommand)]
+#[allow(clippy::module_name_repetitions)]
 pub enum SwapAction {
     /// Get quotes for a cross-chain swap (read-only, no credential needed).
     Quotes {

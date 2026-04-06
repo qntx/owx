@@ -3,7 +3,9 @@
 use serde::{Deserialize, Serialize};
 
 /// On-disk encrypted envelope.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::module_name_repetitions)]
 pub struct CryptoEnvelope {
     /// Cipher algorithm identifier (always `"aes-256-gcm"`).
     pub cipher: String,
@@ -20,6 +22,7 @@ pub struct CryptoEnvelope {
 }
 
 /// Cipher parameters.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CipherParams {
     /// Hex-encoded initialization vector.
@@ -27,6 +30,7 @@ pub struct CipherParams {
 }
 
 /// Scrypt KDF parameters.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScryptKdfParams {
     /// Derived key length in bytes.
@@ -42,6 +46,7 @@ pub struct ScryptKdfParams {
 }
 
 /// HKDF-SHA256 KDF parameters.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HkdfKdfParams {
     /// Derived key length in bytes.
@@ -53,6 +58,7 @@ pub struct HkdfKdfParams {
 }
 
 /// Unified KDF parameters — deserializes to whichever variant matches.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum KdfParamsVariant {

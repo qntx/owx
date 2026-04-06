@@ -11,6 +11,7 @@ use crate::http::CLIENT as HTTP;
 const DIRECTORY_URL: &str = "https://x402.org/api/services";
 
 /// A discovered payable service.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize)]
 pub struct Service {
     /// Human-readable name.
@@ -28,6 +29,7 @@ pub struct Service {
 }
 
 /// Result of a discover call with pagination.
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize)]
 pub struct DiscoverResult {
     /// Discovered services.
@@ -102,10 +104,10 @@ pub fn discover_all(
     limit: Option<u64>,
     offset: Option<u64>,
 ) -> Result<DiscoverResult, PayError> {
-    let limit = limit.unwrap_or(20);
-    let offset = offset.unwrap_or(0);
+    let effective_limit = limit.unwrap_or(20);
+    let effective_offset = offset.unwrap_or(0);
 
-    let mut url = format!("{DIRECTORY_URL}?limit={limit}&offset={offset}");
+    let mut url = format!("{DIRECTORY_URL}?limit={effective_limit}&offset={effective_offset}");
     if let Some(q) = query {
         let _ = write!(url, "&q={}", urlencoding(q));
     }
@@ -122,8 +124,8 @@ pub fn discover_all(
 
     let dir: DirectoryResponse = resp.json()?;
     let pagination = dir.pagination.unwrap_or(Pagination {
-        limit,
-        offset,
+        limit: effective_limit,
+        offset: effective_offset,
         total: dir.items.len() as u64,
     });
 

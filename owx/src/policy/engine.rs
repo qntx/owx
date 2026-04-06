@@ -65,16 +65,16 @@ fn evaluate_rule(rule: &PolicyRule, pid: &str, ctx: &PolicyContext) -> PolicyRes
             if !asset_matches(asset, ctx.transaction.asset.as_deref()) {
                 return PolicyResult::allowed();
             }
-            match &ctx.transaction.value {
-                Some(value) => match exceeds(value, amount) {
+            ctx.transaction.value.as_ref().map_or_else(
+                PolicyResult::allowed,
+                |value| match exceeds(value, amount) {
                     Ok(true) => {
                         PolicyResult::denied(pid, format!("amount {value} exceeds max {amount}"))
                     }
                     Err(reason) => PolicyResult::denied(pid, reason),
                     _ => PolicyResult::allowed(),
                 },
-                None => PolicyResult::allowed(),
-            }
+            )
         }
         PolicyRule::DailyLimit { amount, asset } => {
             if !asset_matches(asset, ctx.spending.asset.as_deref()) {
@@ -105,10 +105,7 @@ fn evaluate_rule(rule: &PolicyRule, pid: &str, ctx: &PolicyContext) -> PolicyRes
 /// If both present, compare case-insensitively.
 #[allow(clippy::missing_const_for_fn)]
 fn asset_matches(rule_asset: &str, ctx_asset: Option<&str>) -> bool {
-    match ctx_asset {
-        None => true,
-        Some(a) => a.eq_ignore_ascii_case(rule_asset),
-    }
+    ctx_asset.is_none_or(|a| a.eq_ignore_ascii_case(rule_asset))
 }
 
 /// Compare two decimal-string amounts (returns true if value > max).

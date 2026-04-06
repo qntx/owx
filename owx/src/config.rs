@@ -7,6 +7,8 @@ use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 
 /// Backup configuration.
+#[non_exhaustive]
+#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackupConfig {
     /// Backup directory path.
@@ -20,6 +22,8 @@ pub struct BackupConfig {
 }
 
 /// Application configuration.
+#[non_exhaustive]
+#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Path to the vault directory.
@@ -107,6 +111,11 @@ impl Config {
     /// Returns `Ok(defaults)` if the file does not exist. Returns `Err` if the
     /// file exists but cannot be read or contains invalid JSON — this ensures a
     /// corrupted config is never silently ignored.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidInput`] on I/O failure, or [`Error::Json`] on
+    /// parse failure.
     pub fn load_or_default_from(path: &Path) -> Result<Self, crate::Error> {
         let mut config = Self::default();
         if !path.exists() {
@@ -143,6 +152,10 @@ impl Default for Config {
 ///
 /// Returns an error if neither `HOME` nor `USERPROFILE` is set, rather than
 /// falling back to `/tmp` which would be world-readable.
+///
+/// # Errors
+///
+/// Returns [`Error::InvalidInput`] if the home directory cannot be determined.
 pub fn default_vault_path() -> Result<PathBuf, crate::Error> {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))

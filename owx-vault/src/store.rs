@@ -23,6 +23,10 @@ pub struct Store {
 
 impl Store {
     /// Open (or create) a store at the given path.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError::Io`] if the directory cannot be created.
     pub fn open(path: impl Into<PathBuf>) -> Result<Self, VaultError> {
         let root = path.into();
         fs::create_dir_all(&root).map_err(|e| VaultError::io(&root, e))?;
@@ -37,6 +41,11 @@ impl Store {
     }
 
     /// Save a value as `<subdir>/<id>.json` with strict file permissions.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError::InvalidInput`] on path traversal, [`VaultError::Io`]
+    /// on write failure, or [`VaultError::Json`] on serialization failure.
     pub fn save<T: Serialize>(&self, subdir: &str, id: &str, value: &T) -> Result<(), VaultError> {
         sanitize_segment(subdir, "subdir")?;
         sanitize_segment(id, "identifier")?;
@@ -49,6 +58,11 @@ impl Store {
     }
 
     /// Load a value from `<subdir>/<id>.json`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError::NotFound`] if the file does not exist,
+    /// [`VaultError::Io`] on read failure, or [`VaultError::Json`] on parse failure.
     pub fn load<T: DeserializeOwned>(&self, subdir: &str, id: &str) -> Result<T, VaultError> {
         sanitize_segment(subdir, "subdir")?;
         sanitize_segment(id, "identifier")?;
@@ -61,6 +75,11 @@ impl Store {
     }
 
     /// Load all entries from a subdirectory (skips malformed files).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError::InvalidInput`] on path traversal or
+    /// [`VaultError::Io`] if the directory cannot be read.
     pub fn list<T: DeserializeOwned>(&self, subdir: &str) -> Result<Vec<T>, VaultError> {
         sanitize_segment(subdir, "subdir")?;
         let dir = self.root.join(subdir);
@@ -74,6 +93,11 @@ impl Store {
     }
 
     /// Delete `<subdir>/<id>.json`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError::NotFound`] if the file does not exist or
+    /// [`VaultError::Io`] on deletion failure.
     pub fn delete(&self, subdir: &str, id: &str) -> Result<(), VaultError> {
         sanitize_segment(subdir, "subdir")?;
         sanitize_segment(id, "identifier")?;
@@ -95,6 +119,11 @@ impl Store {
     /// Save a raw JSON string as `<subdir>/<id>.json`.
     ///
     /// Validates that the input is well-formed JSON before writing.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError::Json`] if the input is not valid JSON,
+    /// [`VaultError::InvalidInput`] on path traversal, or [`VaultError::Io`] on write failure.
     pub fn save_raw(&self, subdir: &str, id: &str, json: &str) -> Result<(), VaultError> {
         sanitize_segment(subdir, "subdir")?;
         sanitize_segment(id, "identifier")?;
@@ -107,6 +136,11 @@ impl Store {
     }
 
     /// Load a raw JSON string from `<subdir>/<id>.json`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError::NotFound`] if the file does not exist or
+    /// [`VaultError::Io`] on read failure.
     pub fn load_raw(&self, subdir: &str, id: &str) -> Result<String, VaultError> {
         sanitize_segment(subdir, "subdir")?;
         sanitize_segment(id, "identifier")?;
@@ -118,6 +152,11 @@ impl Store {
     }
 
     /// List all raw JSON strings from a subdirectory.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VaultError::InvalidInput`] on path traversal or
+    /// [`VaultError::Io`] if the directory cannot be read.
     pub fn list_raw(&self, subdir: &str) -> Result<Vec<String>, VaultError> {
         sanitize_segment(subdir, "subdir")?;
         read_json_dir(&self.root.join(subdir))

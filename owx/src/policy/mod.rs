@@ -5,6 +5,7 @@ mod executable;
 mod types;
 
 pub use engine::evaluate;
+#[allow(clippy::module_name_repetitions)]
 pub use types::{
     Policy, PolicyContext, PolicyResult, PolicyRule, SpendingContext, TransactionContext,
 };
@@ -12,6 +13,11 @@ pub use types::{
 use crate::Error;
 
 /// Load a policy from the vault store, returning a domain error on miss.
+///
+/// # Errors
+///
+/// Returns [`Error::PolicyNotFound`] if the policy does not exist.
+#[allow(clippy::module_name_repetitions)]
 pub fn load_policy(store: &owx_vault::Store, id: &str) -> Result<Policy, Error> {
     store
         .load::<Policy>("policies", id)
@@ -19,6 +25,10 @@ pub fn load_policy(store: &owx_vault::Store, id: &str) -> Result<Policy, Error> 
 }
 
 /// List all policies sorted alphabetically by name.
+///
+/// # Errors
+///
+/// Returns [`Error::Vault`] if the store cannot be read.
 pub fn list_policies(store: &owx_vault::Store) -> Result<Vec<Policy>, Error> {
     let mut policies: Vec<Policy> = store.list("policies")?;
     policies.sort_by(|a, b| a.name.cmp(&b.name));

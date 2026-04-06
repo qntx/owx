@@ -36,6 +36,7 @@ pub struct ApiKeyFile {
 }
 
 /// Public API key information (no token or secrets exposed).
+#[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiKeyInfo {
     /// Unique key identifier.
@@ -54,6 +55,7 @@ pub struct ApiKeyInfo {
 }
 
 /// Result of creating an API key (shown once to the user).
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct ApiKeyCreateResult {
     /// The raw API token (`owx_key_…`). Only returned at creation time.
