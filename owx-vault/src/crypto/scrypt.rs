@@ -16,7 +16,7 @@ const LOG_N: u8 = 10;
 #[cfg(not(any(test, feature = "fast-kdf")))]
 const LOG_N: u8 = 16;
 
-/// Scrypt N = 2^log_n.
+/// Scrypt N = `2^log_n`.
 pub(crate) const N: u32 = 1 << (LOG_N as u32);
 /// Scrypt block size.
 pub(crate) const R: u32 = 8;

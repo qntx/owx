@@ -87,14 +87,13 @@ pub fn run(action: WalletAction, owx: &Owx) -> Result<(), owx::Error> {
             key,
             chain,
             passphrase,
-        } => print_json(&owx.import_private_key(
-            &name,
-            &key,
-            chain.as_deref(),
-            &passphrase,
-            None,
-            None,
-        )?),
+        } => {
+            let opts = owx::ImportKeyOptions {
+                chain: chain.as_deref(),
+                ..Default::default()
+            };
+            print_json(&owx.import_private_key(&name, &key, &passphrase, &opts)?)
+        }
         WalletAction::ImportKeys {
             name,
             secp256k1,

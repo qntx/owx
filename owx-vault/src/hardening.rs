@@ -204,6 +204,7 @@ pub fn mlock_slice(ptr: *const u8, len: usize) -> bool {
 
 /// Lock a memory region (no-op on non-Unix).
 #[cfg(not(unix))]
+#[must_use]
 pub const fn mlock_slice(_ptr: *const u8, _len: usize) -> bool {
     false
 }
@@ -225,6 +226,7 @@ pub fn munlock_slice(ptr: *const u8, len: usize) {
 pub const fn munlock_slice(_ptr: *const u8, _len: usize) {}
 
 /// Read an environment variable and remove it from the process environment.
+#[must_use]
 pub fn clear_env_var(name: &str) -> Option<String> {
     let value = std::env::var(name).ok();
     #[allow(deprecated, unsafe_code, clippy::disallowed_methods)]

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{PayError, PayErrorCode};
 use crate::http::CLIENT as HTTP;
 
+/// x402 service directory endpoint.
 const DIRECTORY_URL: &str = "https://x402.org/api/services";
 
 /// A discovered payable service.
@@ -39,42 +40,59 @@ pub struct DiscoverResult {
     pub offset: u64,
 }
 
+/// Raw directory API response.
 #[derive(Deserialize)]
 struct DirectoryResponse {
+    /// Listed service items.
     #[serde(default)]
     items: Vec<DirectoryItem>,
+    /// Pagination metadata.
     #[serde(default)]
     pagination: Option<Pagination>,
 }
 
+/// A single item from the directory listing.
 #[derive(Deserialize)]
 struct DirectoryItem {
+    /// Endpoint URL.
     resource: String,
+    /// Payment options accepted.
     #[serde(default)]
     accepts: Vec<Accept>,
+    /// Optional service metadata.
     #[serde(default)]
     metadata: Option<Metadata>,
 }
 
+/// A payment option accepted by a service.
 #[derive(Deserialize)]
 struct Accept {
+    /// CAIP-2 network identifier.
     #[serde(default)]
     network: String,
+    /// Price in smallest token unit.
     #[serde(default)]
     amount: String,
+    /// Optional human-readable description.
     #[serde(default)]
     description: Option<String>,
 }
 
+/// Service metadata from the directory.
 #[derive(Deserialize)]
 struct Metadata {
+    /// Human-readable description.
     description: Option<String>,
 }
 
+/// Pagination info from the directory API.
 #[derive(Deserialize)]
 struct Pagination {
+    /// Page size.
     limit: u64,
+    /// Current offset.
     offset: u64,
+    /// Total item count.
     total: u64,
 }
 
@@ -149,6 +167,7 @@ pub fn discover_all(
     })
 }
 
+/// Format a raw token amount as a USD price string.
 fn format_price(raw: &str) -> String {
     let n: u128 = raw.parse().unwrap_or(0);
     if n == 0 {
@@ -159,6 +178,7 @@ fn format_price(raw: &str) -> String {
     format!("${cents}.{frac:02}")
 }
 
+/// Truncate a string to `max` characters, appending `…` if needed.
 fn truncate(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         s.to_owned()
@@ -168,6 +188,7 @@ fn truncate(s: &str, max: usize) -> String {
     }
 }
 
+/// Percent-encode a string for use in URL query parameters.
 fn urlencoding(s: &str) -> String {
     use std::fmt::Write as _;
     let mut out = String::with_capacity(s.len());

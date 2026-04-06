@@ -143,7 +143,7 @@ fn swap_err(e: owx_swap::SwapError) -> owx::Error {
 
 /// Placeholder signer — actual signing is handled inside `EvmProvider`
 /// registered on the underlying `LiFiClient`. The generic `SwapSigner`
-/// trait is satisfied but not called for the LiFi path.
+/// trait is satisfied but not called for the `LiFi` path.
 struct NoopSigner;
 
 impl owx_swap::SwapSigner for NoopSigner {
@@ -192,7 +192,7 @@ fn parse_strategy(s: &str) -> Result<owx_swap::SelectionStrategy, owx::Error> {
     }
 }
 
-/// Resolve the default EVM RPC URL for a LiFi chain ID.
+/// Resolve the default EVM RPC URL for a `LiFi` chain ID.
 fn resolve_evm_rpc(
     owx: &Owx,
     lifi_chain_id: &str,
@@ -217,7 +217,7 @@ fn resolve_evm_rpc(
     )))
 }
 
-/// Build a numeric chain_id → RPC URL map from OWX config.
+/// Build a numeric `chain_id` → RPC URL map from OWX config.
 ///
 /// If `rpc_override` is provided, it only applies to `from_chain_id` (the
 /// source chain), not all chains — otherwise multi-hop cross-chain swaps

@@ -5,7 +5,7 @@
 
 #![allow(clippy::unwrap_used, clippy::missing_docs_in_private_items)]
 
-use owx::{Credential, Owx};
+use owx::{Credential, ImportKeyOptions, Owx};
 
 fn temp_owx() -> (tempfile::TempDir, Owx) {
     let dir = tempfile::tempdir().unwrap();
@@ -111,14 +111,16 @@ fn import_mnemonic_reproduces_same_addresses() {
 #[test]
 fn import_private_key_produces_10_accounts() {
     let (_dir, owx) = temp_owx();
+    let opts = ImportKeyOptions {
+        chain: Some("evm"),
+        ..Default::default()
+    };
     let info = owx
         .import_private_key(
             "pk-wallet",
             "4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318",
-            Some("evm"),
             "",
-            None,
-            None,
+            &opts,
         )
         .unwrap();
     assert_eq!(info.accounts.len(), 10);

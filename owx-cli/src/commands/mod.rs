@@ -79,7 +79,7 @@ pub enum Commands {
         #[arg(long, default_value_t = 20)]
         limit: u64,
     },
-    /// Fund a wallet via MoonPay.
+    /// Fund a wallet via `MoonPay`.
     #[cfg(feature = "moonpay")]
     Fund {
         #[arg(long, default_value = "base")]
@@ -87,7 +87,7 @@ pub enum Commands {
         #[arg(long, default_value = "USDC")]
         token: String,
     },
-    /// Check token balances via MoonPay.
+    /// Check token balances via `MoonPay`.
     #[cfg(feature = "moonpay")]
     Balance {
         #[arg(long, default_value = "base")]

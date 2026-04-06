@@ -1,7 +1,7 @@
 //! Backend-agnostic swap provider and signer traits.
 //!
 //! [`SwapBackend`] is the extension point for adding new swap/bridge
-//! aggregators (LiFi, Uniswap, Jupiter, 1inch, …).
+//! aggregators (`LiFi`, Uniswap, Jupiter, 1inch, …).
 //!
 //! [`SwapSigner`] abstracts the signing capability so that `owx-swap` never
 //! touches raw private keys directly.
@@ -29,7 +29,7 @@ pub trait SwapBackend: Send + Sync {
     /// Execute a previously obtained quote.
     ///
     /// The `quote.opaque` field carries backend-specific state needed for
-    /// execution (e.g. a serialised LiFi `Route`).
+    /// execution (e.g. a serialised `LiFi` `Route`).
     fn execute<'a>(
         &'a self,
         quote: &'a SwapQuote,

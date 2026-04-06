@@ -1,17 +1,22 @@
-//! MoonPay wallet funding and balance queries.
+//! `MoonPay` wallet funding and balance queries.
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::{PayError, PayErrorCode};
 use crate::http::CLIENT as HTTP;
 
+/// `MoonPay` agent API base URL.
 const MOONPAY_API: &str = "https://agents.moonpay.com";
 
+/// Mapping entry for a MoonPay-supported chain.
 struct MoonPayChain {
+    /// Human-readable chain name.
     display_name: &'static str,
+    /// `MoonPay` API chain identifier.
     moonpay_name: &'static str,
 }
 
+/// Known chain mappings for the `MoonPay` API.
 const MOONPAY_CHAINS: &[(&str, MoonPayChain)] = &[
     (
         "base",
@@ -78,6 +83,7 @@ const MOONPAY_CHAINS: &[(&str, MoonPayChain)] = &[
     ),
 ];
 
+/// Resolve a user-facing chain name to a `MoonPay` chain entry.
 fn resolve_moonpay_chain(chain: Option<&str>) -> Result<&'static MoonPayChain, PayError> {
     match chain {
         Some(name) => {
@@ -100,7 +106,7 @@ fn resolve_moonpay_chain(chain: Option<&str>) -> Result<&'static MoonPayChain, P
 /// Result of a fund operation.
 #[derive(Debug, Clone, Serialize)]
 pub struct FundResult {
-    /// MoonPay deposit ID.
+    /// `MoonPay` deposit ID.
     pub deposit_id: String,
     /// URL for the user to complete the deposit.
     pub deposit_url: String,
@@ -138,41 +144,59 @@ pub struct BalanceInfo {
     pub price: f64,
 }
 
+/// `MoonPay` deposit creation request body.
 #[derive(Serialize)]
 struct DepositRequest {
+    /// Human-readable deposit name.
     name: String,
+    /// Wallet address to fund.
     wallet: String,
+    /// `MoonPay` chain name.
     chain: String,
+    /// Token symbol (e.g. "USDC").
     token: String,
 }
 
+/// `MoonPay` deposit creation response.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DepositResponse {
+    /// Unique deposit identifier.
     id: String,
+    /// URL for the user to complete the deposit.
     deposit_url: String,
+    /// Deposit wallet addresses.
     wallets: Vec<DepositWallet>,
+    /// Human-readable instructions.
     instructions: String,
 }
 
+/// A deposit wallet address entry.
 #[derive(Deserialize)]
 struct DepositWallet {
+    /// On-chain address.
     address: String,
+    /// Chain name.
     chain: String,
 }
 
+/// `MoonPay` balance query request body.
 #[derive(Serialize)]
 struct BalanceRequest {
+    /// Wallet address to query.
     wallet: String,
+    /// `MoonPay` chain name.
     chain: String,
 }
 
+/// `MoonPay` balance query response.
 #[derive(Deserialize)]
 struct BalanceResponse {
+    /// Token balance entries.
     items: Vec<TokenBalance>,
 }
 
-/// Create a MoonPay deposit (blocking).
+/// Create a `MoonPay` deposit (blocking).
 pub fn fund_blocking(
     wallet_address: &str,
     chain: Option<&str>,
@@ -215,7 +239,7 @@ pub fn fund_blocking(
     })
 }
 
-/// Check token balances via MoonPay (blocking).
+/// Check token balances via `MoonPay` (blocking).
 pub fn get_balances_blocking(
     wallet_address: &str,
     chain: Option<&str>,

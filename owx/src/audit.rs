@@ -115,6 +115,7 @@ impl AuditLog {
     ///
     /// Returns an empty vec if the file does not exist.
     /// Malformed lines are silently skipped.
+    #[allow(dead_code)]
     pub fn read_all(&self) -> Vec<AuditEntry> {
         let Ok(contents) = fs::read_to_string(&self.path) else {
             return Vec::new();

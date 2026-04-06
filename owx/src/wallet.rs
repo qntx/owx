@@ -9,6 +9,17 @@ use crate::error::Error;
 use crate::secret::{WalletSecret, decrypt_secret};
 use crate::signer;
 
+/// Options for importing a wallet from a single private key.
+#[derive(Debug, Default)]
+pub struct ImportKeyOptions<'a> {
+    /// Target chain (determines which curve the primary key belongs to).
+    pub chain: Option<&'a str>,
+    /// Explicit secp256k1 key hex override.
+    pub secp256k1_hex: Option<&'a str>,
+    /// Explicit ed25519 key hex override.
+    pub ed25519_hex: Option<&'a str>,
+}
+
 /// Type of key material stored in the ciphertext.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -161,22 +172,24 @@ pub fn import_mnemonic(
 
 /// Import a wallet from a single hex-encoded private key.
 ///
-/// The `chain` parameter determines which curve the key belongs to
-/// (default: secp256k1). A random 32-byte key is generated for the other
-/// curve so all chain families get an address.
+/// The `chain` option in [`ImportKeyOptions`] determines which curve the key
+/// belongs to (default: secp256k1). A random 32-byte key is generated for the
+/// other curve so all chain families get an address.
 pub fn import_private_key(
     owx: &Owx,
     name: &str,
     private_key_hex: &str,
-    chain: Option<&str>,
     passphrase: &str,
-    secp256k1_hex: Option<&str>,
-    ed25519_hex: Option<&str>,
+    opts: &ImportKeyOptions<'_>,
 ) -> Result<WalletInfo, Error> {
     ensure_name_available(owx, name)?;
 
-    let (secp_bytes, ed_bytes) =
-        resolve_key_pair(private_key_hex, chain, secp256k1_hex, ed25519_hex)?;
+    let (secp_bytes, ed_bytes) = resolve_key_pair(
+        private_key_hex,
+        opts.chain,
+        opts.secp256k1_hex,
+        opts.ed25519_hex,
+    )?;
     validate_key_len(&secp_bytes, "secp256k1")?;
     validate_key_len(&ed_bytes, "ed25519")?;
 
@@ -304,7 +317,7 @@ pub fn derive_address(
 ///
 /// Optimized: tries direct ID lookup first (single file read), falls back
 /// to listing all wallets only for name-based lookup.
-pub(crate) fn load_wallet(owx: &Owx, name_or_id: &str) -> Result<EncryptedWallet, Error> {
+pub fn load_wallet(owx: &Owx, name_or_id: &str) -> Result<EncryptedWallet, Error> {
     if let Ok(w) = owx.store().load::<EncryptedWallet>("wallets", name_or_id) {
         return Ok(w);
     }

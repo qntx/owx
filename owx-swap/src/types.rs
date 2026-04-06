@@ -1,7 +1,7 @@
 //! Backend-agnostic swap types.
 //!
 //! These types form the public API surface of `owx-swap`. Concrete backends
-//! (LiFi, Uniswap, Jupiter, …) translate to and from these types internally.
+//! (`LiFi`, Uniswap, Jupiter, …) translate to and from these types internally.
 
 use serde::{Deserialize, Serialize};
 

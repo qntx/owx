@@ -1,4 +1,4 @@
-//! EIP-3009 TransferWithAuthorization typed data construction.
+//! EIP-3009 `TransferWithAuthorization` typed data construction.
 
 /// Build EIP-712 typed data JSON for `TransferWithAuthorization`.
 #[allow(clippy::too_many_arguments)]

@@ -101,6 +101,7 @@ pub fn handle_402(
     })
 }
 
+/// Build the EIP-3009 authorization payload and sign it via the wallet bridge.
 fn build_authorization(
     wallet: &dyn WalletBridge,
     req: &PaymentRequirements,
@@ -166,6 +167,7 @@ fn build_authorization(
     }))
 }
 
+/// Assemble the x402 payment payload (v1 or v2 format).
 fn build_payment_payload(
     version: u32,
     x402_resp: &X402Response,
@@ -189,6 +191,7 @@ fn build_payment_payload(
     }
 }
 
+/// Format a raw integer amount with the given decimal precision.
 fn format_amount(raw: &str, decimals: u32) -> String {
     let n: u128 = raw.parse().unwrap_or(0);
     let divisor = 10u128.pow(decimals);
@@ -197,6 +200,7 @@ fn format_amount(raw: &str, decimals: u32) -> String {
     format!("{whole}.{frac:0>width$}", width = decimals as usize)
 }
 
+/// Map a CAIP-2 network ID to a human-readable name.
 fn display_network(network: &str) -> String {
     match network {
         "eip155:8453" => "Base".to_owned(),
@@ -208,6 +212,7 @@ fn display_network(network: &str) -> String {
     }
 }
 
+/// Send an HTTP request with an optional x402 payment header.
 pub(super) fn send_request(
     url: &str,
     method: &str,

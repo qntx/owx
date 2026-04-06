@@ -9,6 +9,21 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
+/// Error returned when parsing a [`ChainFamily`] from a string fails.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseChainFamilyError {
+    /// The input that could not be parsed.
+    input: String,
+}
+
+impl fmt::Display for ParseChainFamilyError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "unknown chain family: '{}'", self.input)
+    }
+}
+
+impl std::error::Error for ParseChainFamilyError {}
+
 /// Master chain table. Every row is:
 ///
 /// ```text
@@ -41,7 +56,7 @@ pub(crate) use for_each_chain;
 pub enum ChainFamily {
     /// EVM-compatible (Ethereum, Base, Arbitrum, …).
     Evm,
-    /// Bitcoin (BIP-84 native SegWit).
+    /// Bitcoin (BIP-84 native `SegWit`).
     Bitcoin,
     /// Solana.
     Solana,
@@ -111,11 +126,11 @@ macro_rules! impl_chain_family_methods {
         }
 
         impl FromStr for ChainFamily {
-            type Err = String;
+            type Err = ParseChainFamilyError;
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 match s.to_lowercase().as_str() {
                     $( $display => Ok(Self::$variant), )+
-                    _ => Err(format!("unknown chain family: {s}")),
+                    _ => Err(ParseChainFamilyError { input: s.to_owned() }),
                 }
             }
         }

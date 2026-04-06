@@ -10,18 +10,18 @@
 //!     Credential::Passphrase("pass")).await?;
 //! ```
 
-pub mod audit;
-pub mod broadcast;
+mod audit;
+pub(crate) mod broadcast;
 pub mod chain;
 pub mod config;
-pub mod credential;
+mod credential;
 mod error;
-pub mod key;
+pub(crate) mod key;
 pub mod policy;
-pub mod secret;
+pub(crate) mod secret;
 pub mod signer;
-pub mod token;
-pub mod wallet;
+mod token;
+pub(crate) mod wallet;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -31,7 +31,7 @@ pub use credential::Credential;
 pub use error::{Error, ErrorCode};
 pub use key::{ApiKeyCreateResult, ApiKeyInfo};
 pub use signer::{SendResult, SignResult};
-pub use wallet::{AccountInfo, WalletInfo};
+pub use wallet::{AccountInfo, ImportKeyOptions, WalletInfo};
 
 /// The OWX orchestrator — stateful entry point for all operations.
 ///
@@ -125,20 +125,10 @@ impl Owx {
         &self,
         name: &str,
         key_hex: &str,
-        chain: Option<&str>,
         passphrase: &str,
-        secp256k1_hex: Option<&str>,
-        ed25519_hex: Option<&str>,
+        opts: &ImportKeyOptions<'_>,
     ) -> Result<WalletInfo, Error> {
-        let info = wallet::import_private_key(
-            self,
-            name,
-            key_hex,
-            chain,
-            passphrase,
-            secp256k1_hex,
-            ed25519_hex,
-        )?;
+        let info = wallet::import_private_key(self, name, key_hex, passphrase, opts)?;
         self.audit
             .log_ok("import_private_key", Some(&info.id), None, None);
         Ok(info)
@@ -224,27 +214,9 @@ impl Owx {
         cred: Credential<'_>,
     ) -> Result<SignResult, Error> {
         let resolved = chain::resolve(chain)?;
-        let family = resolved.family();
-        let key = match key::resolve_signing_key(self, wallet, cred.as_str(), family, 0) {
-            Ok(k) => k,
-            Err(e) => {
-                self.audit.log_err(
-                    "sign_message",
-                    Some(wallet),
-                    Some(resolved.chain_id()),
-                    &e.to_string(),
-                );
-                return Err(e);
-            }
-        };
-        let out = signer::sign_message(family, &key, message)?;
-        let audit_id = credential_audit_id(&cred);
-        self.audit.log_ok(
-            "sign_message",
-            Some(wallet),
-            Some(resolved.chain_id()),
-            audit_id.as_deref(),
-        );
+        let key = self.resolve_key_audited("sign_message", wallet, &resolved, &cred)?;
+        let out = signer::sign_message(resolved.family(), &key, message)?;
+        self.audit_sign_ok("sign_message", wallet, &resolved, &cred);
         Ok(signer::to_sign_result(&out))
     }
 
@@ -257,30 +229,12 @@ impl Owx {
         cred: Credential<'_>,
     ) -> Result<SignResult, Error> {
         let resolved = chain::resolve(chain)?;
-        let family = resolved.family();
         let clean = tx_hex.strip_prefix("0x").unwrap_or(tx_hex);
         let tx_bytes =
             hex::decode(clean).map_err(|e| Error::InvalidInput(format!("invalid hex: {e}")))?;
-        let key = match key::resolve_signing_key(self, wallet, cred.as_str(), family, 0) {
-            Ok(k) => k,
-            Err(e) => {
-                self.audit.log_err(
-                    "sign_transaction",
-                    Some(wallet),
-                    Some(resolved.chain_id()),
-                    &e.to_string(),
-                );
-                return Err(e);
-            }
-        };
-        let out = signer::sign_transaction(family, &key, &tx_bytes)?;
-        let audit_id = credential_audit_id(&cred);
-        self.audit.log_ok(
-            "sign_transaction",
-            Some(wallet),
-            Some(resolved.chain_id()),
-            audit_id.as_deref(),
-        );
+        let key = self.resolve_key_audited("sign_transaction", wallet, &resolved, &cred)?;
+        let out = signer::sign_transaction(resolved.family(), &key, &tx_bytes)?;
+        self.audit_sign_ok("sign_transaction", wallet, &resolved, &cred);
         Ok(signer::to_sign_result(&out))
     }
 
@@ -296,27 +250,9 @@ impl Owx {
         if resolved.family() != chain::ChainFamily::Evm {
             return Err(Error::InvalidInput("EIP-712 is EVM-only".into()));
         }
-        let key = match key::resolve_signing_key(self, wallet, cred.as_str(), resolved.family(), 0)
-        {
-            Ok(k) => k,
-            Err(e) => {
-                self.audit.log_err(
-                    "sign_typed_data",
-                    Some(wallet),
-                    Some(resolved.chain_id()),
-                    &e.to_string(),
-                );
-                return Err(e);
-            }
-        };
+        let key = self.resolve_key_audited("sign_typed_data", wallet, &resolved, &cred)?;
         let out = signer::sign_typed_data(&key, typed_data)?;
-        let audit_id = credential_audit_id(&cred);
-        self.audit.log_ok(
-            "sign_typed_data",
-            Some(wallet),
-            Some(resolved.chain_id()),
-            audit_id.as_deref(),
-        );
+        self.audit_sign_ok("sign_typed_data", wallet, &resolved, &cred);
         Ok(signer::to_sign_result(&out))
     }
 
@@ -399,6 +335,39 @@ impl Owx {
         key::revoke_api_key(self, id)?;
         self.audit.log_ok("revoke_api_key", None, None, None);
         Ok(())
+    }
+
+    /// Resolve a signing key with audit logging on failure.
+    fn resolve_key_audited(
+        &self,
+        op: &str,
+        wallet: &str,
+        resolved: &chain::ResolvedChain,
+        cred: &Credential<'_>,
+    ) -> Result<zeroize::Zeroizing<String>, Error> {
+        key::resolve_signing_key(self, wallet, cred.as_str(), resolved.family(), 0).inspect_err(
+            |e| {
+                self.audit
+                    .log_err(op, Some(wallet), Some(resolved.chain_id()), &e.to_string());
+            },
+        )
+    }
+
+    /// Record a successful signing audit entry.
+    fn audit_sign_ok(
+        &self,
+        op: &str,
+        wallet: &str,
+        resolved: &chain::ResolvedChain,
+        cred: &Credential<'_>,
+    ) {
+        let audit_id = credential_audit_id(cred);
+        self.audit.log_ok(
+            op,
+            Some(wallet),
+            Some(resolved.chain_id()),
+            audit_id.as_deref(),
+        );
     }
 }
 

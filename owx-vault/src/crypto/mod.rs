@@ -4,7 +4,7 @@
 //! - [`envelope`] — on-disk JSON-serializable types
 //! - [`scrypt`] — passphrase-based encryption (wallet owner)
 //! - [`hkdf`] — token-based encryption (API key agent)
-//! - [`aes`] — AES-256-GCM primitives
+//! - `aes` — AES-256-GCM primitives (internal)
 
 mod aes;
 pub mod envelope;

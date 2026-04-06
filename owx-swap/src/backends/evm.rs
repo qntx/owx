@@ -1,7 +1,7 @@
 //! EVM provider bridge: OWX wallet → `lifiswap-evm` execution.
 //!
 //! Creates an [`EvmProvider`] from a raw secp256k1 private key hex string,
-//! enabling end-to-end swap execution through the LiFi engine.
+//! enabling end-to-end swap execution through the `LiFi` engine.
 
 use std::collections::HashMap;
 
@@ -38,7 +38,7 @@ pub fn evm_provider_from_key_with_rpcs(
     Ok(provider.with_rpc_resolver(OwxRpcResolver(rpc_map)))
 }
 
-/// Maps LiFi numeric chain IDs to OWX RPC URLs.
+/// Maps `LiFi` numeric chain IDs to OWX RPC URLs.
 #[derive(Debug, Clone)]
 struct OwxRpcResolver(HashMap<u64, String>);
 

@@ -18,7 +18,7 @@ pub enum SwapError {
     /// Backend-specific execution failure.
     #[error("execution failed: {0}")]
     Execution(String),
-    /// LiFi SDK error (when the `lifi` feature is active).
+    /// `LiFi` SDK error (when the `lifi` feature is active).
     #[cfg(feature = "lifi")]
     #[error("lifi: {0}")]
     LiFi(#[from] lifiswap::error::LiFiError),

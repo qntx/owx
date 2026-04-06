@@ -7,8 +7,6 @@
 //! let services = owx_pay::discover(None, Some(20), None)?;
 //! ```
 
-#![allow(clippy::missing_docs_in_private_items)]
-
 mod bridge;
 mod error;
 mod http;
@@ -51,7 +49,7 @@ pub fn discover(
     discovery::discover_all(query, limit, offset)
 }
 
-/// Fund a wallet via MoonPay.
+/// Fund a wallet via `MoonPay`.
 #[cfg(feature = "moonpay")]
 pub fn fund(
     wallet_address: &str,
@@ -61,7 +59,7 @@ pub fn fund(
     fund::fund_blocking(wallet_address, chain, token)
 }
 
-/// Check token balances via MoonPay.
+/// Check token balances via `MoonPay`.
 #[cfg(feature = "moonpay")]
 pub fn get_balances(
     wallet_address: &str,

@@ -1,4 +1,4 @@
-//! LiFi swap/bridge backend.
+//! `LiFi` swap/bridge backend.
 //!
 //! Translates between the generic `owx-swap` types and the `lifiswap` SDK.
 
@@ -12,15 +12,15 @@ use crate::error::SwapError;
 use crate::provider::{SwapBackend, SwapSigner};
 use crate::types::{SwapQuote, SwapReceipt, SwapRequest, SwapStatus, TokenInfo};
 
-/// LiFi aggregator backend.
+/// `LiFi` aggregator backend.
 #[derive(Debug, Clone)]
 pub struct LiFiBackend {
-    /// Underlying LiFi SDK client.
+    /// Underlying `LiFi` SDK client.
     client: LiFiClient,
 }
 
 impl LiFiBackend {
-    /// Create a new LiFi backend with the given integrator name.
+    /// Create a new `LiFi` backend with the given integrator name.
     pub fn new(integrator: &str) -> Result<Self, SwapError> {
         let config = LiFiConfig::builder().integrator(integrator).build();
         let client = LiFiClient::new(config)?;
@@ -131,7 +131,7 @@ impl SwapBackend for LiFiBackend {
     }
 }
 
-/// Convert a LiFi `Route` into a generic `SwapQuote`.
+/// Convert a `LiFi` `Route` into a generic `SwapQuote`.
 fn route_to_quote(route: &lifiswap::types::Route) -> Result<SwapQuote, SwapError> {
     let tools: Vec<&str> = route
         .steps

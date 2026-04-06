@@ -31,6 +31,7 @@ pub struct SendResult {
 }
 
 /// Convert a [`SignOutput`] to the public [`SignResult`].
+#[must_use]
 pub fn to_sign_result(out: &SignOutput) -> SignResult {
     SignResult {
         signature: hex::encode(&out.signature),

@@ -24,9 +24,13 @@ pub trait WalletBridge: Send + Sync {
 
 /// Concrete [`WalletBridge`] backed by an [`Owx`] instance.
 pub struct OwxBridge<'a> {
+    /// Reference to the OWX orchestrator.
     owx: &'a Owx,
+    /// Wallet name or ID.
     wallet: String,
+    /// API token or passphrase (zeroized on drop).
     credential: Zeroizing<String>,
+    /// HD derivation index.
     index: u32,
 }
 

@@ -1,7 +1,7 @@
 //! Backend-agnostic cross-chain token swap engine for OWX.
 //!
 //! `owx-swap` provides a generic [`SwapBackend`] trait so that multiple
-//! aggregators (LiFi, Uniswap, Jupiter, …) can be plugged in behind a
+//! aggregators (`LiFi`, Uniswap, Jupiter, …) can be plugged in behind a
 //! unified [`SwapEngine`].
 //!
 //! # Agent workflow
