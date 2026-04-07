@@ -56,7 +56,7 @@ pub(crate) fn is_api_token(credential: &str) -> bool {
 /// Returns [`crate::OwxError::InvalidInput`] if the system CSPRNG is unavailable.
 pub(crate) fn generate_token() -> Result<String, crate::OwxError> {
     let mut bytes = [0u8; 32];
-    getrandom::getrandom(&mut bytes)
+    getrandom::fill(&mut bytes)
         .map_err(|e| crate::OwxError::InvalidInput(format!("system CSPRNG unavailable: {e}")))?;
     Ok(format!("{TOKEN_PREFIX}{}", hex::encode(bytes)))
 }

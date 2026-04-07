@@ -85,8 +85,8 @@ pub enum OwxError {
     Json(#[from] serde_json::Error),
 }
 
-impl From<kobe::Error> for OwxError {
-    fn from(e: kobe::Error) -> Self {
+impl From<kobe::DeriveError> for OwxError {
+    fn from(e: kobe::DeriveError) -> Self {
         Self::Derivation(e.to_string())
     }
 }

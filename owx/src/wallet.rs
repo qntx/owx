@@ -412,7 +412,7 @@ fn resolve_key_pair(
         chain.is_some_and(|c| crate::chain::resolve(c).is_ok_and(|r| r.family().is_ed25519()));
 
     let mut random = Zeroizing::new([0u8; 32]);
-    getrandom::getrandom(&mut *random)
+    getrandom::fill(&mut *random)
         .map_err(|e| Error::InvalidInput(format!("CSPRNG failed: {e}")))?;
 
     if is_ed25519 {

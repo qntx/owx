@@ -26,7 +26,7 @@ checksum = "b169f7a6d4742236a0a00c541b845991d0ac43e546831af1249753ab4c3aa3a0"
 dependencies = [
  "cfg-if",
  "cipher",
- "cpufeatures",
+ "cpufeatures 0.2.17",
 ]
 
 [[package]]
@@ -257,7 +257,7 @@ dependencies = [
  "either",
  "serde",
  "serde_with",
- "sha2",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -379,7 +379,7 @@ dependencies = [
  "ruint",
  "rustc-hash",
  "serde",
- "sha3",
+ "sha3 0.10.8",
 ]
 
 [[package]]
@@ -759,7 +759,7 @@ dependencies = [
  "proc-macro-error2",
  "proc-macro2",
  "quote",
- "sha3",
+ "sha3 0.10.8",
  "syn 2.0.117",
  "syn-solidity",
 ]
@@ -1395,11 +1395,11 @@ dependencies = [
  "bytes",
  "form_urlencoded",
  "hex",
- "hmac",
+ "hmac 0.12.1",
  "http 0.2.12",
  "http 1.4.0",
  "percent-encoding",
- "sha2",
+ "sha2 0.10.9",
  "time",
  "tracing",
 ]
@@ -1662,12 +1662,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db40d3dfbeab4e031d78c844642fa0caa0b0db11ce1607ac9d2986dff1405c69"
 dependencies = [
  "bs58",
- "hmac",
+ "hmac 0.12.1",
  "k256",
  "rand_core 0.6.4",
  "ripemd 0.1.3",
  "secp256k1 0.27.0",
- "sha2",
+ "sha2 0.10.9",
  "subtle",
  "zeroize",
 ]
@@ -1866,7 +1866,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf88ba1141d185c399bee5288d850d63b8369520c1eafc32a0430b5b6c287bf4"
 dependencies = [
- "sha2",
+ "sha2 0.10.9",
  "tinyvec",
 ]
 
@@ -2026,6 +2026,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmov"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f88a43d011fc4a6876cb7344703e297c71dda42494fee094d5f7c76bf13f746"
+
+[[package]]
 name = "coins-ledger"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2087,7 +2093,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "531185e432bb31db1ecda541e9e7ab21468d4d844ad7505e0546a49b4945d49b"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "proptest",
  "serde_core",
 ]
@@ -2097,6 +2103,12 @@ name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
+
+[[package]]
+name = "const-oid"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
 name = "const_format"
@@ -2148,6 +2160,15 @@ name = "cpufeatures"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280"
+dependencies = [
+ "libc",
+]
+
+[[package]]
+name = "cpufeatures"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
 dependencies = [
  "libc",
 ]
@@ -2230,19 +2251,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctutils"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d5515a3834141de9eafb9717ad39eea8247b5674e6066c404e8c4b365d2a29e"
+dependencies = [
+ "cmov",
+]
+
+[[package]]
 name = "curve25519-dalek"
 version = "4.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fb8b7c4503de7d6ae7b42ab72a5a59857b4c937ec27a3d4539dba95b5ab2be"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "curve25519-dalek-derive",
  "digest 0.10.7",
  "fiat-crypto",
  "rustc_version 0.4.1",
  "subtle",
- "zeroize",
 ]
 
 [[package]]
@@ -2317,7 +2346,7 @@ version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7c1832837b905bbfb5101e07cc24c8deddf52f93225eee6ead5f4d63d53ddcb"
 dependencies = [
- "const-oid",
+ "const-oid 0.9.6",
  "pem-rfc7468",
  "zeroize",
 ]
@@ -2382,7 +2411,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292"
 dependencies = [
  "block-buffer 0.10.4",
- "const-oid",
+ "const-oid 0.9.6",
  "crypto-common 0.1.7",
  "subtle",
 ]
@@ -2394,7 +2423,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4850db49bf08e663084f7fb5c87d202ef91a3907271aff24a94eb97ff039153c"
 dependencies = [
  "block-buffer 0.12.0",
+ "const-oid 0.10.2",
  "crypto-common 0.2.1",
+ "ctutils",
 ]
 
 [[package]]
@@ -2447,7 +2478,6 @@ version = "2.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
 dependencies = [
- "pkcs8",
  "signature",
 ]
 
@@ -2459,11 +2489,8 @@ checksum = "70e796c081cee67dc755e1a36a0a172b897fab85fc3f6bc48307991f64e4eca9"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
- "rand_core 0.6.4",
- "serde",
- "sha2",
+ "sha2 0.10.9",
  "subtle",
- "zeroize",
 ]
 
 [[package]]
@@ -2967,11 +2994,11 @@ dependencies = [
 
 [[package]]
 name = "hkdf"
-version = "0.12.4"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b5f8eb2ad728638ea2c7d47a21db23b7b58a72ed6a38256b8a1849f15fbbdf7"
+checksum = "4aaa26c720c68b866f2c96ef5c1264b3e6f473fe5d4ce61cd44bbe913e553018"
 dependencies = [
- "hmac",
+ "hmac 0.13.0",
 ]
 
 [[package]]
@@ -2981,6 +3008,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e"
 dependencies = [
  "digest 0.10.7",
+]
+
+[[package]]
+name = "hmac"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f"
+dependencies = [
+ "digest 0.11.2",
 ]
 
 [[package]]
@@ -3497,7 +3533,7 @@ dependencies = [
  "elliptic-curve",
  "once_cell",
  "serdect",
- "sha2",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -3506,7 +3542,17 @@ version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb26cec98cce3a3d96cbb7bced3c4b16e3d13f27ec56dbd62cbc8f39cfb9d653"
 dependencies = [
- "cpufeatures",
+ "cpufeatures 0.2.17",
+]
+
+[[package]]
+name = "keccak"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e24a010dd405bd7ed803e5253182815b41bf2e6a80cc3bfc066658e03a198aa"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.3.0",
 ]
 
 [[package]]
@@ -3521,10 +3567,11 @@ dependencies = [
 
 [[package]]
 name = "kobe"
-version = "0.7.7"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e51260e229e61bbece441df7bde90d95f513396df187ad89aaac98040a7a8318"
+checksum = "897ddf5d435f51328935a4c70b5cb539f55cfd1ee43779bd0e76a8467be054a2"
 dependencies = [
+ "kobe-aptos",
  "kobe-btc",
  "kobe-cosmos",
  "kobe-evm",
@@ -3539,10 +3586,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "kobe-btc"
-version = "0.7.7"
+name = "kobe-aptos"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec48ebc71bc375da83d8f86791e6e2616dd00ece06cafeb16eb67055a2e4d389"
+checksum = "3a905d89c8696a69c6657eb1dada1acdc7dfbd6603b9e5fa419653b18d0456ed"
+dependencies = [
+ "hex",
+ "kobe-primitives",
+ "sha3 0.11.0",
+ "thiserror 2.0.18",
+ "zeroize",
+]
+
+[[package]]
+name = "kobe-btc"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b377b08d3e4f7643ca6caba318eecf7480b6284769932af5f0bacc0c0ea47db"
 dependencies = [
  "bitcoin",
  "hex",
@@ -3553,78 +3613,73 @@ dependencies = [
 
 [[package]]
 name = "kobe-cosmos"
-version = "0.7.7"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66699d8804f1569a5eebd2e47b155be26efd94720d9f7a6c5d080d9fac03829d"
+checksum = "febb9ff8858143dcfbb2f67e7ac460234190d7b536d5b18a05d1e74600694f25"
 dependencies = [
  "bech32",
  "kobe-primitives",
  "ripemd 0.2.0",
- "sha2",
+ "sha2 0.11.0",
  "thiserror 2.0.18",
- "zeroize",
 ]
 
 [[package]]
 name = "kobe-evm"
-version = "0.7.7"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "981f03078e195c712799adad2ccb55a3caf89da3aa43ac4079092007789394c9"
+checksum = "e4a5e629eefecdf16fdd56c75ab03e26dabf08b17ac0dd9c33534f8ba2c7f22c"
 dependencies = [
  "alloy-primitives",
  "kobe-primitives",
  "thiserror 2.0.18",
- "zeroize",
 ]
 
 [[package]]
 name = "kobe-fil"
-version = "0.7.7"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b77aa9426bb319d000e6486cdbe92c30b3113103af15dc713c22e6d259e9b48c"
+checksum = "1a55cfeec4160ce38ff0574ecf8052eae17dea343141adb40e1a23a5ace7880b"
 dependencies = [
  "blake2",
  "kobe-primitives",
  "thiserror 2.0.18",
- "zeroize",
 ]
 
 [[package]]
 name = "kobe-primitives"
-version = "0.7.7"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99c4b810e91198619c5cfae9ec57d6b0f8965eda951c77cf22efae58788c9025"
+checksum = "451c2fd45f641acdd31d8579b28117853ff0e309dc858f542749da8847097f14"
 dependencies = [
  "bip32",
  "bip39",
  "ed25519-dalek",
  "hex",
- "hmac",
+ "hmac 0.13.0",
  "k256",
- "sha2",
+ "sha2 0.11.0",
  "thiserror 2.0.18",
  "zeroize",
 ]
 
 [[package]]
 name = "kobe-spark"
-version = "0.7.7"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00dcefcf1560e187654ee36cf3551ab6c7312f148b98bfaa0e3beca07425505f"
+checksum = "76d11bcf3adbff3f1be5c5cc64ec3e96ea41e4f33f8450785205a67ef46fd88b"
 dependencies = [
  "kobe-primitives",
  "thiserror 2.0.18",
- "zeroize",
 ]
 
 [[package]]
 name = "kobe-sui"
-version = "0.7.7"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0ced85b81f41045cf5ba98b8fc6f63b38c2d836ecb59aaa502a166f6a2df48b"
+checksum = "5e9b555fd2dd720117658b4d9375ba421e2244606854b5f65f52176c8d952597"
 dependencies = [
  "blake2",
- "ed25519-dalek",
  "hex",
  "kobe-primitives",
  "thiserror 2.0.18",
@@ -3633,12 +3688,11 @@ dependencies = [
 
 [[package]]
 name = "kobe-svm"
-version = "0.7.7"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b3bdcfc61dc310f91d6efaeef455484fd7db36e6249f8afc85c5f0812c8710c"
+checksum = "ef0718442539fb7a3f87953f610cc82d0ac8da47200d51420802eeb797d75201"
 dependencies = [
  "bs58",
- "ed25519-dalek",
  "hex",
  "kobe-primitives",
  "thiserror 2.0.18",
@@ -3647,44 +3701,41 @@ dependencies = [
 
 [[package]]
 name = "kobe-ton"
-version = "0.7.7"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cfe73dcdfe1d95fa3b06663593e28d1588085beedaae88117fae5e1063570e6"
+checksum = "103b10e3714e682f715c89d2bff01a6f806e7b1af510ab50255c73993e8c5a2f"
 dependencies = [
  "base64",
- "ed25519-dalek",
  "hex",
  "kobe-primitives",
- "sha2",
+ "sha2 0.11.0",
  "thiserror 2.0.18",
  "zeroize",
 ]
 
 [[package]]
 name = "kobe-tron"
-version = "0.7.7"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8eb494be3989f649923e1db6ea864c2f3af518117d7ba4814f13ea1091e067ca"
+checksum = "63bc626c8f318dc23c831ca60dffcf858b78da068f4a52573ee96afd4b725c60"
 dependencies = [
  "bs58",
  "kobe-primitives",
- "sha3",
+ "sha3 0.11.0",
  "thiserror 2.0.18",
- "zeroize",
 ]
 
 [[package]]
 name = "kobe-xrpl"
-version = "0.7.7"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9156f0c864e65de847822f7883222865c60f49673a31cce4548ac0dfbf71f28"
+checksum = "84d627e1c9f06a4f38f88e670a1fc295372e38713bc13086837e280ecf1a061b"
 dependencies = [
  "bs58",
  "kobe-primitives",
  "ripemd 0.2.0",
- "sha2",
+ "sha2 0.11.0",
  "thiserror 2.0.18",
- "zeroize",
 ]
 
 [[package]]
@@ -3990,7 +4041,7 @@ version = "0.6.0"
 dependencies = [
  "base64",
  "chrono",
- "getrandom 0.2.17",
+ "getrandom 0.4.2",
  "hex",
  "kobe",
  "kobe-btc",
@@ -4007,7 +4058,7 @@ dependencies = [
  "reqwest 0.13.2",
  "serde",
  "serde_json",
- "sha2",
+ "sha2 0.11.0",
  "signer",
  "subtle",
  "tempfile",
@@ -4035,7 +4086,7 @@ name = "owx-pay"
 version = "0.6.0"
 dependencies = [
  "base64",
- "getrandom 0.2.17",
+ "getrandom 0.4.2",
  "hex",
  "owx",
  "reqwest 0.13.2",
@@ -4064,14 +4115,14 @@ name = "owx-vault"
 version = "0.6.0"
 dependencies = [
  "aes-gcm",
- "getrandom 0.2.17",
+ "getrandom 0.4.2",
  "hex",
  "hkdf",
  "libc",
  "scrypt",
  "serde",
  "serde_json",
- "sha2",
+ "sha2 0.11.0",
  "signal-hook",
  "tempfile",
  "thiserror 2.0.18",
@@ -4087,7 +4138,7 @@ dependencies = [
  "ecdsa",
  "elliptic-curve",
  "primeorder",
- "sha2",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -4165,7 +4216,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ed6a7761f76e3b9f92dfb0a60a6a6477c61024b775147ff0973a02653abaf2"
 dependencies = [
  "digest 0.10.7",
- "hmac",
+ "hmac 0.12.1",
 ]
 
 [[package]]
@@ -4268,7 +4319,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d1fe60d06143b2430aa532c94cfe9e29783047f06c0d7fd359a9a51b729fa25"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "opaque-debug",
  "universal-hash",
 ]
@@ -4755,7 +4806,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dd2a808d456c4a54e300a23e9f5a67e122c3024119acbfd73e3bf664491cb2"
 dependencies = [
- "hmac",
+ "hmac 0.12.1",
  "subtle",
 ]
 
@@ -5055,7 +5106,7 @@ dependencies = [
  "password-hash",
  "pbkdf2",
  "salsa20",
- "sha2",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -5289,7 +5340,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3bf829a2d51ab4a5ddf1352d8470c140cadc8301b2ae1789db023f01cedd6ba"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "digest 0.10.7",
 ]
 
@@ -5300,8 +5351,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283"
 dependencies = [
  "cfg-if",
- "cpufeatures",
+ "cpufeatures 0.2.17",
  "digest 0.10.7",
+]
+
+[[package]]
+name = "sha2"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "446ba717509524cb3f22f17ecc096f10f4822d76ab5c0b9822c5f9c284e825f4"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.3.0",
+ "digest 0.11.2",
 ]
 
 [[package]]
@@ -5311,7 +5373,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75872d278a8f37ef87fa0ddbda7802605cb18344497949862c0d4dcb291eba60"
 dependencies = [
  "digest 0.10.7",
- "keccak",
+ "keccak 0.1.6",
+]
+
+[[package]]
+name = "sha3"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be176f1a57ce4e3d31c1a166222d9768de5954f811601fb7ca06fc8203905ce1"
+dependencies = [
+ "digest 0.11.2",
+ "keccak 0.2.0",
 ]
 
 [[package]]
@@ -5362,10 +5434,11 @@ dependencies = [
 
 [[package]]
 name = "signer"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6eafcb28f103a032f362b8b309a1263057c24f6e2d7414c1eb9d2692423d02de"
+checksum = "89422bfef386f70a6b4055e63000528741a4bde61ec1fc658ed31fd03c2352ef"
 dependencies = [
+ "signer-aptos",
  "signer-btc",
  "signer-cosmos",
  "signer-evm",
@@ -5380,18 +5453,31 @@ dependencies = [
 ]
 
 [[package]]
-name = "signer-btc"
-version = "0.5.0"
+name = "signer-aptos"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9818de47706333a3bdb9b0652ffca6d564c63f0893df7eadb83d47335ffc6ee"
+checksum = "1b8d7c4ec9436824bed626b4eae096ad39e6d6f7ab7c73e1422b00f8df4c544b"
+dependencies = [
+ "ed25519-dalek",
+ "hex",
+ "sha3 0.10.8",
+ "signer-primitives",
+ "thiserror 2.0.18",
+ "zeroize",
+]
+
+[[package]]
+name = "signer-btc"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27e6317dca537fbf0ed37ad9edae2b81e23fc1964a348ce2cf884bc83ceced2d"
 dependencies = [
  "bs58",
  "hex",
  "k256",
  "kobe-btc",
- "rand_core 0.6.4",
  "ripemd 0.2.0",
- "sha2",
+ "sha2 0.10.9",
  "signer-primitives",
  "thiserror 2.0.18",
  "zeroize",
@@ -5399,17 +5485,16 @@ dependencies = [
 
 [[package]]
 name = "signer-cosmos"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e238f77c85bb5427395badac4b8771d3f177f58732eab8f4bf775b4f819f0420"
+checksum = "1a64fbc465909643dbbc6e457d16432f4b67e72555c2d0b4f86882a37b16248a"
 dependencies = [
  "bech32",
  "hex",
  "k256",
  "kobe-cosmos",
- "rand_core 0.6.4",
  "ripemd 0.2.0",
- "sha2",
+ "sha2 0.10.9",
  "signer-primitives",
  "thiserror 2.0.18",
  "zeroize",
@@ -5417,16 +5502,15 @@ dependencies = [
 
 [[package]]
 name = "signer-evm"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1126d9b4926ee136c1aa245ecf8b42fc1fe68c1fa1af8cbc6f9c83b820a45e91"
+checksum = "e8a74618381fadcd383779c018882e1ca73d83fe1b74aedec05052913d25f1f7"
 dependencies = [
  "hex",
  "k256",
  "kobe-evm",
- "rand_core 0.6.4",
  "serde_json",
- "sha3",
+ "sha3 0.10.8",
  "signer-primitives",
  "thiserror 2.0.18",
  "zeroize",
@@ -5434,15 +5518,14 @@ dependencies = [
 
 [[package]]
 name = "signer-fil"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04c55ef2f247b53b0a68250f8ff74c8bebb655cdb4bb32f2c07caf7e712c4a36"
+checksum = "bf0fcd6563045f88fa4797a43a25bdc064e27e87b88795d2ff6d71aa5f9111d0"
 dependencies = [
  "blake2",
  "hex",
  "k256",
  "kobe-fil",
- "rand_core 0.6.4",
  "signer-primitives",
  "thiserror 2.0.18",
  "zeroize",
@@ -5450,26 +5533,25 @@ dependencies = [
 
 [[package]]
 name = "signer-primitives"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e3fc17b00c5e8f40c5bcc66d0165b58d5c396fc2e69f053b6ef1f7e349f344f"
+checksum = "e108c52c6e711064ed393707a403bf28830b9055b08c34ae840e0a6d53eb5e65"
 dependencies = [
  "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "signer-spark"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1dac6812cf5e156b227153f89d5d9a5bffe68b515015a84e8a4918f9e2c9c2a"
+checksum = "6ed914bf2a93b7cfe6cd47956e6b472a8bfbd2db8021e88372f44e0ac755c0c1"
 dependencies = [
  "bs58",
  "hex",
  "k256",
  "kobe-spark",
- "rand_core 0.6.4",
  "ripemd 0.2.0",
- "sha2",
+ "sha2 0.10.9",
  "signer-primitives",
  "thiserror 2.0.18",
  "zeroize",
@@ -5477,15 +5559,14 @@ dependencies = [
 
 [[package]]
 name = "signer-sui"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79d071073960de06a3ebce996987ba7ef4ad9d245c897983aa54b9bcec7062ea"
+checksum = "520f6ffbf69429d7e2a96dbd5fdaf39911920bc776b55b35235526a5fb3e362e"
 dependencies = [
  "blake2",
  "ed25519-dalek",
  "hex",
  "kobe-sui",
- "rand_core 0.6.4",
  "signer-primitives",
  "thiserror 2.0.18",
  "zeroize",
@@ -5493,15 +5574,14 @@ dependencies = [
 
 [[package]]
 name = "signer-svm"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29a8b9d653350e3dc7d8e38ebbd16dc46c7e1fe1afac1669930982b8baf5d6b2"
+checksum = "57dd1d48847886fe849bb2373b2b447201e5aea7f6ac4652bd5f15ab1e8fa8e9"
 dependencies = [
  "bs58",
  "ed25519-dalek",
  "hex",
  "kobe-svm",
- "rand_core 0.6.4",
  "signer-primitives",
  "thiserror 2.0.18",
  "zeroize",
@@ -5509,14 +5589,13 @@ dependencies = [
 
 [[package]]
 name = "signer-ton"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e95903c4c776ade67616ed5273e901f7f1ea30972e00fa81600269a78f44712e"
+checksum = "397bea18976b780f3102e9732eff21d5aa98648f1cf1e3db7209296e30c08507"
 dependencies = [
  "ed25519-dalek",
  "hex",
  "kobe-ton",
- "rand_core 0.6.4",
  "signer-primitives",
  "thiserror 2.0.18",
  "zeroize",
@@ -5524,17 +5603,16 @@ dependencies = [
 
 [[package]]
 name = "signer-tron"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ea745e0b265ca49bfa0a4586070ea7f2dd0a20b4d90de426e06fc080801031d"
+checksum = "bd8ebaa62a420424630f297c699060861e1d7d1279aa201ba7b05bbc6d0465b1"
 dependencies = [
  "bs58",
  "hex",
  "k256",
  "kobe-tron",
- "rand_core 0.6.4",
- "sha2",
- "sha3",
+ "sha2 0.10.9",
+ "sha3 0.10.8",
  "signer-primitives",
  "thiserror 2.0.18",
  "zeroize",
@@ -5542,17 +5620,16 @@ dependencies = [
 
 [[package]]
 name = "signer-xrpl"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb895f927a94cfedc6ada8559ff0866b30c33732a7e9d39150cab8e2a1440da4"
+checksum = "c75f701686a210f3a33475517a79a701041139bf00da51843f08fa0b8bf3b723"
 dependencies = [
  "bs58",
  "hex",
  "k256",
  "kobe-xrpl",
- "rand_core 0.6.4",
  "ripemd 0.2.0",
- "sha2",
+ "sha2 0.10.9",
  "signer-primitives",
  "thiserror 2.0.18",
  "zeroize",

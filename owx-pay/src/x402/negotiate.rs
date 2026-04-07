@@ -118,7 +118,7 @@ fn build_authorization(
     let valid_before = now + req.max_timeout_seconds;
 
     let mut nonce_bytes = [0u8; 32];
-    getrandom::getrandom(&mut nonce_bytes)
+    getrandom::fill(&mut nonce_bytes)
         .map_err(|e| PayError::new(PayErrorCode::SigningFailed, format!("rng: {e}")))?;
     let nonce_hex = format!("0x{}", hex::encode(nonce_bytes));
 

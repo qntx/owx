@@ -8,6 +8,5 @@ use crate::error::VaultError;
 ///
 /// Returns [`VaultError::Crypto`] if the system CSPRNG is unavailable.
 pub(crate) fn fill_random(buf: &mut [u8]) -> Result<(), VaultError> {
-    getrandom::getrandom(buf)
-        .map_err(|e| VaultError::Crypto(format!("system CSPRNG unavailable: {e}")))
+    getrandom::fill(buf).map_err(|e| VaultError::Crypto(format!("system CSPRNG unavailable: {e}")))
 }
