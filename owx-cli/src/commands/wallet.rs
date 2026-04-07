@@ -7,8 +7,7 @@ use crate::output::print_json;
 
 /// Wallet actions.
 #[derive(Subcommand)]
-#[allow(clippy::module_name_repetitions)]
-pub enum WalletAction {
+pub(crate) enum WalletAction {
     /// Create a new wallet.
     Create {
         name: String,
@@ -70,8 +69,7 @@ pub enum WalletAction {
     Delete { name: String },
 }
 
-#[allow(clippy::print_stdout)]
-pub fn run(action: WalletAction, owx: &Owx) -> Result<(), owx::Error> {
+pub(crate) fn run(action: WalletAction, owx: &Owx) -> Result<(), owx::OwxError> {
     match action {
         WalletAction::Create {
             name,

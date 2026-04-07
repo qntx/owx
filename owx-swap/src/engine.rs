@@ -154,6 +154,10 @@ fn cmp_decimal_asc(a: &str, b: &str) -> std::cmp::Ordering {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::indexing_slicing,
+    reason = "test panics on out-of-bounds are acceptable"
+)]
 mod tests {
     use super::*;
 

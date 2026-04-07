@@ -9,7 +9,7 @@ use zeroize::Zeroizing;
 
 use crate::Owx;
 use crate::chain::{ChainFamily, default_chain};
-use crate::error::Error;
+use crate::error::OwxError as Error;
 use crate::policy::{self, Policy, PolicyContext, SpendingContext, TransactionContext};
 use crate::secret::{WalletSecret, decrypt_from_envelope, decrypt_secret};
 use crate::signing;
@@ -90,7 +90,7 @@ impl From<&ApiKeyFile> for ApiKeyInfo {
 }
 
 /// Create an API key for agent access to one or more wallets.
-pub fn create_api_key(
+pub(crate) fn create_api_key(
     vault: &Owx,
     name: &str,
     wallet_ids: &[String],
@@ -98,7 +98,7 @@ pub fn create_api_key(
     passphrase: &str,
     expires_at: Option<&str>,
 ) -> Result<ApiKeyCreateResult, Error> {
-    let token = crate::auth::generate_token();
+    let token = crate::auth::generate_token()?;
     let mut wallet_secrets = HashMap::new();
     let mut resolved_ids = Vec::with_capacity(wallet_ids.len());
 
@@ -140,14 +140,14 @@ pub fn create_api_key(
 }
 
 /// List all API keys (public info only).
-pub fn list_api_keys(vault: &Owx) -> Result<Vec<ApiKeyInfo>, Error> {
+pub(crate) fn list_api_keys(vault: &Owx) -> Result<Vec<ApiKeyInfo>, Error> {
     let mut keys: Vec<ApiKeyFile> = vault.store().list("keys")?;
     keys.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     Ok(keys.iter().map(ApiKeyInfo::from).collect())
 }
 
 /// Revoke (delete) an API key by ID.
-pub fn revoke_api_key(vault: &Owx, id: &str) -> Result<(), Error> {
+pub(crate) fn revoke_api_key(vault: &Owx, id: &str) -> Result<(), Error> {
     vault
         .store()
         .delete("keys", id)
@@ -158,7 +158,7 @@ pub fn revoke_api_key(vault: &Owx, id: &str) -> Result<(), Error> {
 ///
 /// Validates token → checks expiry → loads wallet → enforces policies → decrypts.
 /// Returns a [`Zeroizing<String>`] that is automatically scrubbed on drop.
-pub fn resolve_agent_key(
+pub(crate) fn resolve_agent_key(
     vault: &Owx,
     wallet_name_or_id: &str,
     token: &str,
@@ -184,7 +184,7 @@ pub fn resolve_agent_key(
         )));
     }
 
-    let chain = default_chain(family);
+    let chain = default_chain(family).ok_or_else(|| Error::UnknownChain(family.to_string()))?;
     let policies: Vec<Policy> = api_key
         .policy_ids
         .iter()
@@ -232,7 +232,7 @@ pub fn resolve_agent_key(
 /// Resolve signing key: passphrase (owner) or API token (agent).
 ///
 /// Returns a [`Zeroizing<String>`] that is automatically scrubbed on drop.
-pub fn resolve_signing_key(
+pub(crate) fn resolve_signing_key(
     vault: &Owx,
     wallet_name_or_id: &str,
     credential: &str,

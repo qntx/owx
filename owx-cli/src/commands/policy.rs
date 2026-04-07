@@ -6,8 +6,7 @@ use owx::Owx;
 use crate::output::print_json;
 
 #[derive(Subcommand)]
-#[allow(clippy::module_name_repetitions)]
-pub enum PolicyAction {
+pub(crate) enum PolicyAction {
     Create {
         id: String,
         #[arg(long)]
@@ -22,8 +21,7 @@ pub enum PolicyAction {
     },
 }
 
-#[allow(clippy::print_stdout)]
-pub fn run(action: PolicyAction, owx: &Owx) -> Result<(), owx::Error> {
+pub(crate) fn run(action: PolicyAction, owx: &Owx) -> Result<(), owx::OwxError> {
     match action {
         PolicyAction::Create { id, json } => {
             owx.create_policy(&id, &json)?;

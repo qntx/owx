@@ -12,7 +12,6 @@ pub mod hkdf;
 mod rand;
 pub mod scrypt;
 
-#[allow(clippy::module_name_repetitions)]
 pub use envelope::{
     CipherParams, CryptoEnvelope, HkdfKdfParams, KdfParamsVariant, ScryptKdfParams,
 };
@@ -66,7 +65,6 @@ fn hex_decode(s: &str) -> Result<Vec<u8>, VaultError> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

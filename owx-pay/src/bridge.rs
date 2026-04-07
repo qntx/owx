@@ -15,19 +15,19 @@ pub trait WalletBridge: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns [`owx::Error`] if the network is unsupported or wallet lookup fails.
-    fn address(&self, network: &str) -> Result<String, owx::Error>;
+    /// Returns [`owx::OwxError`] if the network is unsupported or wallet lookup fails.
+    fn address(&self, network: &str) -> Result<String, owx::OwxError>;
     /// Sign a payment payload for a scheme/network. Returns hex signature.
     ///
     /// # Errors
     ///
-    /// Returns [`owx::Error`] if signing fails.
+    /// Returns [`owx::OwxError`] if signing fails.
     fn sign_payload(
         &self,
         scheme: &str,
         network: &str,
         payload: &str,
-    ) -> Result<String, owx::Error>;
+    ) -> Result<String, owx::OwxError>;
 }
 
 /// Concrete [`WalletBridge`] backed by an [`Owx`] instance.
@@ -88,7 +88,7 @@ impl WalletBridge for OwxBridge<'_> {
             .unwrap_or_default()
     }
 
-    fn address(&self, network: &str) -> Result<String, owx::Error> {
+    fn address(&self, network: &str) -> Result<String, owx::OwxError> {
         let info = self.owx.get_wallet(&self.wallet)?;
         if let Some(a) = info.accounts.iter().find(|a| a.chain_id == network) {
             return Ok(a.address.clone());
@@ -98,7 +98,7 @@ impl WalletBridge for OwxBridge<'_> {
             .iter()
             .find(|a| a.chain_id.starts_with(ns))
             .map(|a| a.address.clone())
-            .ok_or_else(|| owx::Error::InvalidInput(format!("no account for chain {network}")))
+            .ok_or_else(|| owx::OwxError::InvalidInput(format!("no account for chain {network}")))
     }
 
     fn sign_payload(
@@ -106,13 +106,13 @@ impl WalletBridge for OwxBridge<'_> {
         _scheme: &str,
         network: &str,
         payload: &str,
-    ) -> Result<String, owx::Error> {
+    ) -> Result<String, owx::OwxError> {
         let cred = owx::Credential::parse(&self.credential);
         let result = self
             .owx
             .sign_typed_data(&self.wallet, network, payload, cred)?;
         let sig_bytes = hex::decode(&result.signature)
-            .map_err(|e| owx::Error::Signing(format!("invalid sig hex: {e}")))?;
+            .map_err(|e| owx::OwxError::Signing(format!("invalid sig hex: {e}")))?;
         let full = if sig_bytes.len() == 64 {
             let mut buf = sig_bytes;
             buf.push(27 + result.recovery_id.unwrap_or(0));

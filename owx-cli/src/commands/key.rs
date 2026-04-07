@@ -7,8 +7,7 @@ use crate::output::print_json;
 
 /// API key actions.
 #[derive(Subcommand)]
-#[allow(clippy::module_name_repetitions)]
-pub enum KeyAction {
+pub(crate) enum KeyAction {
     /// Create an API key for agent access.
     Create {
         name: String,
@@ -28,8 +27,7 @@ pub enum KeyAction {
     Revoke { id: String },
 }
 
-#[allow(clippy::print_stdout)]
-pub fn run(action: KeyAction, owx: &Owx) -> Result<(), owx::Error> {
+pub(crate) fn run(action: KeyAction, owx: &Owx) -> Result<(), owx::OwxError> {
     match action {
         KeyAction::Create {
             name,

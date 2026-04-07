@@ -1,16 +1,29 @@
 //! CLI for OWX agent wallet toolkit.
 
-#![allow(clippy::missing_docs_in_private_items, missing_docs)]
+#![allow(
+    clippy::print_stdout,
+    reason = "CLI binary uses stdout for normal output"
+)]
+#![allow(
+    clippy::print_stderr,
+    reason = "CLI binary uses stderr for error output"
+)]
+#![allow(missing_docs, reason = "CLI binary internals need no public docs")]
+#![allow(
+    clippy::missing_docs_in_private_items,
+    reason = "CLI binary internals need no docs"
+)]
 
 mod commands;
 mod output;
 
 use std::path::PathBuf;
+use std::process::ExitCode;
 
 use clap::Parser;
 use owx::Owx;
 
-use crate::output::exit_with_error;
+use crate::output::print_error;
 
 #[derive(Parser)]
 #[command(
@@ -26,15 +39,18 @@ struct Cli {
     command: commands::Commands,
 }
 
-#[allow(clippy::print_stderr)]
-fn main() {
+fn main() -> ExitCode {
     let cli = Cli::parse();
-    let owx_result = cli.vault.as_ref().map_or_else(Owx::open_default, Owx::open);
-    let owx = match owx_result {
+    let owx = match cli.vault.as_ref().map_or_else(Owx::open_default, Owx::open) {
         Ok(v) => v,
-        Err(e) => exit_with_error(&e),
+        Err(e) => {
+            print_error(&e);
+            return ExitCode::FAILURE;
+        }
     };
     if let Err(e) = commands::dispatch(cli.command, &owx) {
-        exit_with_error(&e);
+        print_error(&e);
+        return ExitCode::FAILURE;
     }
+    ExitCode::SUCCESS
 }

@@ -1,11 +1,13 @@
 //! Cryptographically secure random byte generation.
 
+use crate::error::VaultError;
+
 /// Fill a buffer with cryptographically secure random bytes.
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics if the system CSPRNG is unavailable.
-pub fn fill_random(buf: &mut [u8]) {
-    #[allow(clippy::expect_used)]
-    getrandom::getrandom(buf).expect("system CSPRNG unavailable");
+/// Returns [`VaultError::Crypto`] if the system CSPRNG is unavailable.
+pub(crate) fn fill_random(buf: &mut [u8]) -> Result<(), VaultError> {
+    getrandom::getrandom(buf)
+        .map_err(|e| VaultError::Crypto(format!("system CSPRNG unavailable: {e}")))
 }

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::{PayError, PayErrorCode};
-use crate::http::CLIENT as HTTP;
+use crate::http::client;
 
 /// `MoonPay` agent API base URL.
 const MOONPAY_API: &str = "https://agents.moonpay.com";
@@ -86,7 +86,14 @@ const MOONPAY_CHAINS: &[(&str, MoonPayChain)] = &[
 /// Resolve a user-facing chain name to a `MoonPay` chain entry.
 fn resolve_moonpay_chain(chain: Option<&str>) -> Result<&'static MoonPayChain, PayError> {
     chain.map_or_else(
-        || Ok(&MOONPAY_CHAINS[0].1),
+        || {
+            MOONPAY_CHAINS.first().map(|(_, v)| v).ok_or_else(|| {
+                PayError::new(
+                    PayErrorCode::UnsupportedChain,
+                    String::from("no MoonPay chains configured"),
+                )
+            })
+        },
         |name| {
             let lower = name.to_lowercase();
             MOONPAY_CHAINS
@@ -199,7 +206,7 @@ struct BalanceResponse {
 }
 
 /// Create a `MoonPay` deposit (blocking).
-pub fn fund_blocking(
+pub(crate) fn fund_blocking(
     wallet_address: &str,
     chain: Option<&str>,
     token: Option<&str>,
@@ -214,7 +221,7 @@ pub fn fund_blocking(
         token: token_sym.to_owned(),
     };
 
-    let resp = HTTP
+    let resp = client()?
         .post(format!("{MOONPAY_API}/api/tools/deposit_create"))
         .json(&req)
         .send()?;
@@ -242,7 +249,7 @@ pub fn fund_blocking(
 }
 
 /// Check token balances via `MoonPay` (blocking).
-pub fn get_balances_blocking(
+pub(crate) fn get_balances_blocking(
     wallet_address: &str,
     chain: Option<&str>,
 ) -> Result<Vec<TokenBalance>, PayError> {
@@ -253,7 +260,7 @@ pub fn get_balances_blocking(
         chain: mapping.moonpay_name.to_owned(),
     };
 
-    let resp = HTTP
+    let resp = client()?
         .post(format!("{MOONPAY_API}/api/tools/token_balance_list"))
         .json(&req)
         .send()?;

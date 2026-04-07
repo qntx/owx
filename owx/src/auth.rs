@@ -3,7 +3,7 @@
 use sha2::{Digest, Sha256};
 
 /// Token prefix that signals agent mode in the credential parameter.
-pub const TOKEN_PREFIX: &str = "owx_key_";
+pub(crate) const TOKEN_PREFIX: &str = "owx_key_";
 
 /// Authentication credential for wallet operations.
 ///
@@ -45,30 +45,29 @@ impl<'a> Credential<'a> {
 ///
 /// Must start with the prefix **and** contain payload characters after it.
 #[must_use]
-pub fn is_api_token(credential: &str) -> bool {
+pub(crate) fn is_api_token(credential: &str) -> bool {
     credential.len() > TOKEN_PREFIX.len() && credential.starts_with(TOKEN_PREFIX)
 }
 
 /// Generate a random API token: `owx_key_<64 hex chars>` (256 bits of entropy).
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics if the system CSPRNG is unavailable.
-pub fn generate_token() -> String {
+/// Returns [`crate::OwxError::InvalidInput`] if the system CSPRNG is unavailable.
+pub(crate) fn generate_token() -> Result<String, crate::OwxError> {
     let mut bytes = [0u8; 32];
-    #[allow(clippy::expect_used)]
-    getrandom::getrandom(&mut bytes).expect("system CSPRNG unavailable");
-    format!("{TOKEN_PREFIX}{}", hex::encode(bytes))
+    getrandom::getrandom(&mut bytes)
+        .map_err(|e| crate::OwxError::InvalidInput(format!("system CSPRNG unavailable: {e}")))?;
+    Ok(format!("{TOKEN_PREFIX}{}", hex::encode(bytes)))
 }
 
 /// SHA-256 hash of the raw token string, hex-encoded.
 #[must_use]
-pub fn hash_token(token: &str) -> String {
+pub(crate) fn hash_token(token: &str) -> String {
     hex::encode(Sha256::digest(token.as_bytes()))
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -94,7 +93,7 @@ mod tests {
 
     #[test]
     fn generated_token_has_correct_format() {
-        let token = generate_token();
+        let token = generate_token().unwrap();
         assert!(token.starts_with(TOKEN_PREFIX));
         assert_eq!(token.len(), TOKEN_PREFIX.len() + 64);
         assert!(hex::decode(&token[TOKEN_PREFIX.len()..]).is_ok());
@@ -102,7 +101,7 @@ mod tests {
 
     #[test]
     fn two_tokens_are_unique() {
-        assert_ne!(generate_token(), generate_token());
+        assert_ne!(generate_token().unwrap(), generate_token().unwrap());
     }
 
     #[test]

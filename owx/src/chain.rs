@@ -53,7 +53,6 @@ pub(crate) use for_each_chain;
 
 /// Supported chain families grouped by elliptic curve.
 #[non_exhaustive]
-#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ChainFamily {
@@ -140,7 +139,6 @@ for_each_chain!(impl_chain_family_methods);
 
 /// A resolved chain: name + family + CAIP-2 identifier.
 #[non_exhaustive]
-#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Chain {
     /// Human-readable name (e.g. "ethereum", "base").
@@ -261,7 +259,7 @@ pub const KNOWN: &[Chain] = &[
 /// # Errors
 ///
 /// Returns [`Error::InvalidInput`] if the chain string is not recognized.
-pub fn resolve(s: &str) -> Result<ResolvedChain, crate::Error> {
+pub fn resolve(s: &str) -> Result<ResolvedChain, crate::OwxError> {
     let lower = s.to_lowercase();
     let lookup = if lower == "evm" { "ethereum" } else { &lower };
 
@@ -279,14 +277,13 @@ pub fn resolve(s: &str) -> Result<ResolvedChain, crate::Error> {
             chain_id: s.to_owned(),
         });
     }
-    Err(crate::Error::UnknownChain(format!(
+    Err(crate::OwxError::UnknownChain(format!(
         "'{s}'. Use a chain name (ethereum, solana, …) or CAIP-2 ID (eip155:1, …)"
     )))
 }
 
 /// Result of chain resolution — either a static reference or a dynamic CAIP-2 chain.
 #[non_exhaustive]
-#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone)]
 pub enum ResolvedChain {
     /// A known chain from the static registry.
@@ -329,22 +326,13 @@ impl ResolvedChain {
     }
 }
 
-/// Returns the default [`Chain`] for a given [`ChainFamily`].
-///
-/// # Panics
-///
-/// Panics if the given family has no entry in [`KNOWN`].
+/// Returns the default [`Chain`] for a given [`ChainFamily`], if one exists.
 #[must_use]
-#[allow(clippy::expect_used, clippy::module_name_repetitions)]
-pub fn default_chain(family: ChainFamily) -> &'static Chain {
-    KNOWN
-        .iter()
-        .find(|c| c.family == family)
-        .expect("all families have a default chain")
+pub fn default_chain(family: ChainFamily) -> Option<&'static Chain> {
+    KNOWN.iter().find(|c| c.family == family)
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -408,7 +396,7 @@ mod tests {
     #[test]
     fn default_chain_all_families() {
         for &fam in ALL_FAMILIES {
-            let chain = default_chain(fam);
+            let chain = default_chain(fam).unwrap();
             assert_eq!(chain.family, fam);
         }
     }

@@ -1,11 +1,11 @@
 //! CLI subcommand definitions and dispatch — agent-friendly, zero stdin interaction.
 
-pub mod key;
-pub mod policy;
-pub mod sign;
+pub(crate) mod key;
+pub(crate) mod policy;
+pub(crate) mod sign;
 #[cfg(feature = "swap")]
-pub mod swap;
-pub mod wallet;
+pub(crate) mod swap;
+pub(crate) mod wallet;
 
 use clap::Subcommand;
 use owx::Owx;
@@ -14,7 +14,7 @@ use crate::output::print_json;
 
 /// Top-level CLI commands.
 #[derive(Subcommand)]
-pub enum Commands {
+pub(crate) enum Commands {
     /// Wallet management.
     Wallet {
         #[command(subcommand)]
@@ -107,8 +107,7 @@ pub enum Commands {
 }
 
 /// Dispatch a top-level command.
-#[allow(clippy::print_stdout)]
-pub fn dispatch(cmd: Commands, owx: &Owx) -> Result<(), owx::Error> {
+pub(crate) fn dispatch(cmd: Commands, owx: &Owx) -> Result<(), owx::OwxError> {
     match cmd {
         Commands::Wallet { action } => wallet::run(action, owx)?,
         Commands::Key { action } => key::run(action, owx)?,
@@ -135,7 +134,7 @@ pub fn dispatch(cmd: Commands, owx: &Owx) -> Result<(), owx::Error> {
         } => {
             let cred = owx::Credential::parse(&credential);
             let rt = tokio::runtime::Runtime::new()
-                .map_err(|e| owx::Error::InvalidInput(format!("tokio runtime: {e}")))?;
+                .map_err(|e| owx::OwxError::InvalidInput(format!("tokio runtime: {e}")))?;
             let result =
                 rt.block_on(owx.sign_and_send(&wallet, &chain, &tx_hex, cred, rpc.as_deref()))?;
             print_json(&result)?;
@@ -150,27 +149,27 @@ pub fn dispatch(cmd: Commands, owx: &Owx) -> Result<(), owx::Error> {
         } => {
             let bridge = owx_pay::OwxBridge::new(owx, &wallet, &credential, 0);
             let result = owx_pay::pay(&bridge, &url, &method, body.as_deref())
-                .map_err(|e| owx::Error::InvalidInput(e.to_string()))?;
+                .map_err(|e| owx::OwxError::InvalidInput(e.to_string()))?;
             print_json(&result)?;
         }
         #[cfg(feature = "pay")]
         Commands::Discover { query, limit } => {
             let result = owx_pay::discover(query.as_deref(), Some(limit), None)
-                .map_err(|e| owx::Error::InvalidInput(e.to_string()))?;
+                .map_err(|e| owx::OwxError::InvalidInput(e.to_string()))?;
             print_json(&result)?;
         }
         #[cfg(feature = "moonpay")]
         Commands::Fund { chain, token } => {
             let evm_addr = crate::output::first_evm_address(owx)?;
             let result = owx_pay::fund(&evm_addr, Some(&chain), Some(&token))
-                .map_err(|e| owx::Error::InvalidInput(e.to_string()))?;
+                .map_err(|e| owx::OwxError::InvalidInput(e.to_string()))?;
             print_json(&result)?;
         }
         #[cfg(feature = "moonpay")]
         Commands::Balance { chain } => {
             let evm_addr = crate::output::first_evm_address(owx)?;
             let balances = owx_pay::get_balances(&evm_addr, Some(&chain))
-                .map_err(|e| owx::Error::InvalidInput(e.to_string()))?;
+                .map_err(|e| owx::OwxError::InvalidInput(e.to_string()))?;
             print_json(&balances)?;
         }
         #[cfg(feature = "swap")]

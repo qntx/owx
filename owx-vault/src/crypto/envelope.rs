@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 /// On-disk encrypted envelope.
 #[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(clippy::module_name_repetitions)]
 pub struct CryptoEnvelope {
     /// Cipher algorithm identifier (always `"aes-256-gcm"`).
     pub cipher: String,

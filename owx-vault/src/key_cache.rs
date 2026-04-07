@@ -138,7 +138,6 @@ impl Drop for KeyCache {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -161,6 +160,10 @@ mod tests {
         let cache = KeyCache::new(Duration::from_millis(50), 10);
         cache.insert("k1", SecretBytes::from_slice(b"data"));
         assert!(cache.get("k1").is_some());
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "sync test needs real delay for TTL expiry"
+        )]
         std::thread::sleep(Duration::from_millis(80));
         assert!(cache.get("k1").is_none());
     }

@@ -10,7 +10,7 @@ use crate::bridge::WalletBridge;
 use crate::error::PayError;
 
 /// Make an HTTP request with automatic x402 payment handling.
-pub fn pay(
+pub(crate) fn pay(
     wallet: &dyn WalletBridge,
     url: &str,
     method: &str,

@@ -25,7 +25,7 @@ pub enum SwapError {
     LiFi(#[from] lifiswap::error::LiFiError),
     /// OWX core error.
     #[error("owx: {0}")]
-    Owx(#[from] owx::Error),
+    Owx(#[from] owx::OwxError),
     /// Serialization error.
     #[error("json: {0}")]
     Json(#[from] serde_json::Error),

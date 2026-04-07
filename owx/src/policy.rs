@@ -7,11 +7,10 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::Error;
+use crate::error::OwxError as Error;
 
 /// A declarative policy rule evaluated in-process.
 #[non_exhaustive]
-#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PolicyRule {
@@ -106,7 +105,6 @@ pub struct SpendingContext {
 
 /// Context passed to policy evaluation.
 #[non_exhaustive]
-#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicyContext {
     /// CAIP-2 chain ID.
@@ -125,7 +123,6 @@ pub struct PolicyContext {
 
 /// Result of policy evaluation.
 #[non_exhaustive]
-#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicyResult {
     /// Whether the request is allowed.
@@ -165,7 +162,6 @@ impl PolicyResult {
 /// # Errors
 ///
 /// Returns [`Error::PolicyNotFound`] if the policy does not exist.
-#[allow(clippy::module_name_repetitions)]
 pub fn load_policy(store: &owx_vault::Store, id: &str) -> Result<Policy, Error> {
     store
         .load::<Policy>("policies", id)
@@ -274,7 +270,6 @@ fn evaluate_rule(rule: &PolicyRule, pid: &str, ctx: &PolicyContext) -> PolicyRes
 }
 
 /// Check if a rule's asset matches the context asset.
-#[allow(clippy::missing_const_for_fn)]
 fn asset_matches(rule_asset: &str, ctx_asset: Option<&str>) -> bool {
     ctx_asset.is_none_or(|a| a.eq_ignore_ascii_case(rule_asset))
 }
@@ -328,7 +323,7 @@ fn evaluate_executable(
     };
 
     if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(&stdin_bytes);
+        let _write = stdin.write_all(&stdin_bytes);
     }
 
     let timeout = Duration::from_secs(timeout_seconds.unwrap_or(5));
@@ -374,7 +369,7 @@ fn wait_timeout(
 ) -> Result<std::process::Output, String> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let _ = tx.send(child.wait_with_output());
+        let _send = tx.send(child.wait_with_output());
     });
     match rx.recv_timeout(timeout) {
         Ok(result) => result.map_err(|e| format!("wait failed: {e}")),
@@ -386,7 +381,6 @@ fn wait_timeout(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

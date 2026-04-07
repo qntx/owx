@@ -29,7 +29,7 @@ pub struct PaymentInfo {
 /// Raw x402 protocol response (from 402 headers or body).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct X402Response {
+pub(super) struct X402Response {
     /// Protocol version (1 or 2).
     #[serde(default)]
     pub x402_version: Option<u32>,
@@ -43,7 +43,7 @@ pub struct X402Response {
 /// A single payment option from a 402 response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PaymentRequirements {
+pub(super) struct PaymentRequirements {
     /// Payment scheme (e.g. "exact").
     pub scheme: String,
     /// CAIP-2 network identifier.

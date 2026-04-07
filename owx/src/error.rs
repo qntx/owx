@@ -4,9 +4,8 @@ use serde::{Serialize, Serializer, ser::SerializeStruct};
 
 /// Unified error type for all `owx` operations.
 #[non_exhaustive]
-#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub enum OwxError {
     /// Vault (storage / crypto) error.
     #[error(transparent)]
     Vault(#[from] owx_vault::VaultError),
@@ -86,13 +85,13 @@ pub enum Error {
     Json(#[from] serde_json::Error),
 }
 
-impl From<kobe::Error> for Error {
+impl From<kobe::Error> for OwxError {
     fn from(e: kobe::Error) -> Self {
         Self::Derivation(e.to_string())
     }
 }
 
-impl Error {
+impl OwxError {
     /// Machine-readable `SCREAMING_SNAKE_CASE` error code for API consumers.
     #[must_use]
     pub const fn code(&self) -> &'static str {
@@ -119,9 +118,9 @@ impl Error {
 }
 
 /// Serializes as `{"code": "SCREAMING_SNAKE_CASE", "message": "..."}`.
-impl Serialize for Error {
+impl Serialize for OwxError {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut s = serializer.serialize_struct("Error", 2)?;
+        let mut s = serializer.serialize_struct("OwxError", 2)?;
         s.serialize_field("code", self.code())?;
         s.serialize_field("message", &self.to_string())?;
         s.end()
@@ -129,40 +128,46 @@ impl Serialize for Error {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(
+    clippy::indexing_slicing,
+    reason = "test panics on out-of-bounds are acceptable"
+)]
 mod tests {
     use super::*;
 
     #[test]
     fn code_returns_screaming_snake_case() {
-        let cases: Vec<(Error, &str)> = vec![
-            (Error::WalletNotFound("w1".into()), "WALLET_NOT_FOUND"),
-            (Error::WalletNameExists("w1".into()), "WALLET_NAME_EXISTS"),
+        let cases: Vec<(OwxError, &str)> = vec![
+            (OwxError::WalletNotFound("w1".into()), "WALLET_NOT_FOUND"),
             (
-                Error::AmbiguousWallet {
+                OwxError::WalletNameExists("w1".into()),
+                "WALLET_NAME_EXISTS",
+            ),
+            (
+                OwxError::AmbiguousWallet {
                     name: "w".into(),
                     count: 2,
                 },
                 "AMBIGUOUS_WALLET",
             ),
-            (Error::ApiKeyNotFound("k1".into()), "API_KEY_NOT_FOUND"),
-            (Error::PolicyNotFound("p1".into()), "POLICY_NOT_FOUND"),
+            (OwxError::ApiKeyNotFound("k1".into()), "API_KEY_NOT_FOUND"),
+            (OwxError::PolicyNotFound("p1".into()), "POLICY_NOT_FOUND"),
             (
-                Error::PolicyDenied {
+                OwxError::PolicyDenied {
                     policy_id: "p".into(),
                     reason: "r".into(),
                 },
                 "POLICY_DENIED",
             ),
-            (Error::ApiKeyExpired("k1".into()), "API_KEY_EXPIRED"),
-            (Error::InvalidInput("bad".into()), "INVALID_INPUT"),
-            (Error::UnknownChain("x".into()), "UNKNOWN_CHAIN"),
-            (Error::NoRpcUrl("eip155:1".into()), "NO_RPC_URL"),
-            (Error::AccessDenied("no".into()), "ACCESS_DENIED"),
-            (Error::HomeNotFound, "HOME_NOT_FOUND"),
-            (Error::Derivation("err".into()), "DERIVATION"),
-            (Error::Signing("err".into()), "SIGNING"),
-            (Error::BroadcastFailed("err".into()), "BROADCAST_FAILED"),
+            (OwxError::ApiKeyExpired("k1".into()), "API_KEY_EXPIRED"),
+            (OwxError::InvalidInput("bad".into()), "INVALID_INPUT"),
+            (OwxError::UnknownChain("x".into()), "UNKNOWN_CHAIN"),
+            (OwxError::NoRpcUrl("eip155:1".into()), "NO_RPC_URL"),
+            (OwxError::AccessDenied("no".into()), "ACCESS_DENIED"),
+            (OwxError::HomeNotFound, "HOME_NOT_FOUND"),
+            (OwxError::Derivation("err".into()), "DERIVATION"),
+            (OwxError::Signing("err".into()), "SIGNING"),
+            (OwxError::BroadcastFailed("err".into()), "BROADCAST_FAILED"),
         ];
         for (err, expected) in &cases {
             assert_eq!(err.code(), *expected, "failed for {err:?}");
@@ -171,7 +176,7 @@ mod tests {
 
     #[test]
     fn serialize_produces_code_and_message() {
-        let err = Error::WalletNotFound("my-wallet".into());
+        let err = OwxError::WalletNotFound("my-wallet".into());
         let json = serde_json::to_value(&err).unwrap();
         assert_eq!(json["code"], "WALLET_NOT_FOUND");
         assert_eq!(json["message"], "wallet not found: my-wallet");
@@ -179,7 +184,7 @@ mod tests {
 
     #[test]
     fn serialize_roundtrip_all_variants() {
-        let err = Error::PolicyDenied {
+        let err = OwxError::PolicyDenied {
             policy_id: "daily-limit".into(),
             reason: "exceeded $100".into(),
         };

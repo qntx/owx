@@ -5,7 +5,7 @@ use std::fmt::Write as _;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{PayError, PayErrorCode};
-use crate::http::CLIENT as HTTP;
+use crate::http::client;
 
 /// x402 service directory endpoint.
 const DIRECTORY_URL: &str = "https://x402.org/api/services";
@@ -99,7 +99,7 @@ struct Pagination {
 }
 
 /// Discover payable services with optional search and pagination.
-pub fn discover_all(
+pub(crate) fn discover_all(
     query: Option<&str>,
     limit: Option<u64>,
     offset: Option<u64>,
@@ -109,10 +109,10 @@ pub fn discover_all(
 
     let mut url = format!("{DIRECTORY_URL}?limit={effective_limit}&offset={effective_offset}");
     if let Some(q) = query {
-        let _ = write!(url, "&q={}", urlencoding(q));
+        let _fmt = write!(url, "&q={}", urlencoding(q));
     }
 
-    let resp = HTTP.get(&url).send()?;
+    let resp = client()?.get(&url).send()?;
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().unwrap_or_default();
@@ -198,7 +198,7 @@ fn urlencoding(s: &str) -> String {
         if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
             out.push(byte as char);
         } else {
-            let _ = write!(out, "%{byte:02X}");
+            let _fmt = write!(out, "%{byte:02X}");
         }
     }
     out

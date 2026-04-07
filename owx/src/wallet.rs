@@ -6,12 +6,14 @@ use zeroize::Zeroizing;
 
 use crate::Owx;
 use crate::chain::{ALL_FAMILIES, default_chain};
-use crate::error::Error;
+use crate::error::OwxError as Error;
 use crate::secret::{WalletSecret, decrypt_secret};
 use crate::signing;
 
+/// A dual-curve key pair: `(secp256k1_bytes, ed25519_bytes)`.
+type KeyPair = (Zeroizing<Vec<u8>>, Zeroizing<Vec<u8>>);
+
 /// Options for importing a wallet from a single private key.
-#[allow(clippy::exhaustive_structs)]
 #[derive(Debug, Default)]
 pub struct ImportKeyOptions<'a> {
     /// Target chain (determines which curve the primary key belongs to).
@@ -141,13 +143,13 @@ impl From<&EncryptedWallet> for WalletInfo {
 }
 
 /// Generate a new BIP-39 mnemonic phrase.
-pub fn generate_mnemonic(words: usize) -> Result<String, Error> {
+pub(crate) fn generate_mnemonic(words: usize) -> Result<String, Error> {
     let wallet = kobe::Wallet::generate(words, None)?;
     Ok(wallet.mnemonic().to_owned())
 }
 
 /// Create a new wallet: generate mnemonic, derive all-chain accounts, encrypt, store.
-pub fn create_wallet(
+pub(crate) fn create_wallet(
     owx: &Owx,
     name: &str,
     passphrase: &str,
@@ -162,7 +164,7 @@ pub fn create_wallet(
 }
 
 /// Import a wallet from an existing mnemonic phrase.
-pub fn import_mnemonic(
+pub(crate) fn import_mnemonic(
     owx: &Owx,
     name: &str,
     mnemonic_phrase: &str,
@@ -180,7 +182,7 @@ pub fn import_mnemonic(
 /// The `chain` option in [`ImportKeyOptions`] determines which curve the key
 /// belongs to (default: secp256k1). A random 32-byte key is generated for the
 /// other curve so all chain families get an address.
-pub fn import_private_key(
+pub(crate) fn import_private_key(
     owx: &Owx,
     name: &str,
     private_key_hex: &str,
@@ -202,7 +204,7 @@ pub fn import_private_key(
 }
 
 /// Import a wallet from explicit dual-curve private keys.
-pub fn import_private_keys(
+pub(crate) fn import_private_keys(
     owx: &Owx,
     name: &str,
     secp256k1_hex: &str,
@@ -220,26 +222,26 @@ pub fn import_private_keys(
 }
 
 /// List all wallets (newest first).
-pub fn list_wallets(owx: &Owx) -> Result<Vec<WalletInfo>, Error> {
+pub(crate) fn list_wallets(owx: &Owx) -> Result<Vec<WalletInfo>, Error> {
     let mut wallets: Vec<EncryptedWallet> = owx.store().list("wallets")?;
     wallets.sort_by(|a, b| b.created_at.cmp(&a.created_at));
     Ok(wallets.iter().map(WalletInfo::from).collect())
 }
 
 /// Get a wallet by name or ID.
-pub fn get_wallet(owx: &Owx, name_or_id: &str) -> Result<WalletInfo, Error> {
+pub(crate) fn get_wallet(owx: &Owx, name_or_id: &str) -> Result<WalletInfo, Error> {
     Ok(WalletInfo::from(&load_wallet(owx, name_or_id)?))
 }
 
 /// Delete a wallet.
-pub fn delete_wallet(owx: &Owx, name_or_id: &str) -> Result<(), Error> {
+pub(crate) fn delete_wallet(owx: &Owx, name_or_id: &str) -> Result<(), Error> {
     let w = load_wallet(owx, name_or_id)?;
     owx.store().delete("wallets", &w.id)?;
     Ok(())
 }
 
 /// Rename a wallet.
-pub fn rename_wallet(owx: &Owx, name_or_id: &str, new_name: &str) -> Result<(), Error> {
+pub(crate) fn rename_wallet(owx: &Owx, name_or_id: &str, new_name: &str) -> Result<(), Error> {
     let mut wallet = load_wallet(owx, name_or_id)?;
     if wallet.name == new_name {
         return Ok(());
@@ -251,7 +253,7 @@ pub fn rename_wallet(owx: &Owx, name_or_id: &str, new_name: &str) -> Result<(), 
 }
 
 /// Export a wallet's secret (mnemonic phrase or JSON key pair).
-pub fn export_wallet(
+pub(crate) fn export_wallet(
     owx: &Owx,
     name_or_id: &str,
     passphrase: &str,
@@ -262,7 +264,7 @@ pub fn export_wallet(
 }
 
 /// Derive an address for a specific chain from a wallet.
-pub fn derive_address(
+pub(crate) fn derive_address(
     owx: &Owx,
     wallet_name_or_id: &str,
     chain: &str,
@@ -299,7 +301,7 @@ pub fn derive_address(
 ///
 /// Optimized: tries direct ID lookup first (single file read), falls back
 /// to listing all wallets only for name-based lookup.
-pub fn load_wallet(owx: &Owx, name_or_id: &str) -> Result<EncryptedWallet, Error> {
+pub(crate) fn load_wallet(owx: &Owx, name_or_id: &str) -> Result<EncryptedWallet, Error> {
     if let Ok(w) = owx.store().load::<EncryptedWallet>("wallets", name_or_id) {
         return Ok(w);
     }
@@ -358,12 +360,12 @@ fn ensure_name_available(owx: &Owx, name: &str) -> Result<(), Error> {
 /// # Errors
 ///
 /// Returns [`Error::Derivation`] if mnemonic parsing or derivation fails.
-pub fn derive_all_accounts(mnemonic: &str, index: u32) -> Result<Vec<WalletAccount>, Error> {
+pub(crate) fn derive_all_accounts(mnemonic: &str, index: u32) -> Result<Vec<WalletAccount>, Error> {
     let wallet = kobe::Wallet::from_mnemonic(mnemonic, None)
         .map_err(|e| Error::Derivation(e.to_string()))?;
     let mut accounts = Vec::with_capacity(ALL_FAMILIES.len());
     for &fam in ALL_FAMILIES {
-        let chain = default_chain(fam);
+        let chain = default_chain(fam).ok_or_else(|| Error::UnknownChain(fam.to_string()))?;
         let d = signing::derive_account(fam, &wallet, index)?;
         accounts.push(WalletAccount {
             account_id: format!("{}:{}", chain.chain_id, d.address),
@@ -382,7 +384,7 @@ fn derive_accounts_from_secret(secret: &WalletSecret) -> Result<Vec<WalletAccoun
         let Some(key_hex) = secret.private_key_hex(fam) else {
             continue;
         };
-        let chain = default_chain(fam);
+        let chain = default_chain(fam).ok_or_else(|| Error::UnknownChain(fam.to_string()))?;
         let addr = signing::address_from_hex(fam, key_hex)?;
         accounts.push(WalletAccount {
             account_id: format!("{}:{addr}", chain.chain_id),
@@ -400,7 +402,7 @@ fn resolve_key_pair(
     chain: Option<&str>,
     secp_override: Option<&str>,
     ed_override: Option<&str>,
-) -> Result<(Zeroizing<Vec<u8>>, Zeroizing<Vec<u8>>), Error> {
+) -> Result<KeyPair, Error> {
     if let (Some(s), Some(e)) = (secp_override, ed_override) {
         return Ok((decode_hex_key(s)?, decode_hex_key(e)?));
     }

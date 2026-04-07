@@ -15,7 +15,6 @@ use crate::error::SwapError;
 /// # Errors
 ///
 /// Returns [`SwapError::InvalidInput`] if the key or URL is malformed.
-#[allow(clippy::module_name_repetitions)]
 pub fn evm_provider_from_key(
     private_key_hex: &str,
     rpc_url: &str,
@@ -38,7 +37,10 @@ pub fn evm_provider_from_key(
 /// # Errors
 ///
 /// Returns [`SwapError::InvalidInput`] if the key or URL is malformed.
-#[allow(clippy::module_name_repetitions, clippy::implicit_hasher)]
+#[allow(
+    clippy::implicit_hasher,
+    reason = "HashMap param is caller-constructed, hasher choice is theirs"
+)]
 pub fn evm_provider_from_key_with_rpcs(
     private_key_hex: &str,
     default_rpc_url: &str,

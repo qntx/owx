@@ -11,8 +11,7 @@ use crate::output::print_json;
 
 /// Swap actions.
 #[derive(Subcommand)]
-#[allow(clippy::module_name_repetitions)]
-pub enum SwapAction {
+pub(crate) enum SwapAction {
     /// Get quotes for a cross-chain swap (read-only, no credential needed).
     Quotes {
         #[arg(long)]
@@ -58,9 +57,9 @@ pub enum SwapAction {
     },
 }
 
-pub fn run(action: SwapAction, owx: &Owx) -> Result<(), owx::Error> {
+pub(crate) fn run(action: SwapAction, owx: &Owx) -> Result<(), owx::OwxError> {
     let rt = tokio::runtime::Runtime::new()
-        .map_err(|e| owx::Error::InvalidInput(format!("tokio runtime: {e}")))?;
+        .map_err(|e| owx::OwxError::InvalidInput(format!("tokio runtime: {e}")))?;
 
     match action {
         SwapAction::Quotes {
@@ -72,7 +71,7 @@ pub fn run(action: SwapAction, owx: &Owx) -> Result<(), owx::Error> {
             to_token,
             strategy,
         } => {
-            let engine = build_engine().map_err(swap_err)?;
+            let engine = build_engine().map_err(|e| owx::OwxError::InvalidInput(e.to_string()))?;
             let req = owx_swap::SwapRequest {
                 from_chain,
                 from_token,
@@ -86,7 +85,7 @@ pub fn run(action: SwapAction, owx: &Owx) -> Result<(), owx::Error> {
             let strat = parse_strategy(&strategy)?;
             let quotes = rt
                 .block_on(engine.get_quotes_sorted(&req, strat))
-                .map_err(swap_err)?;
+                .map_err(|e| owx::OwxError::InvalidInput(e.to_string()))?;
             print_json(&quotes)?;
         }
         SwapAction::Execute {
@@ -109,11 +108,12 @@ pub fn run(action: SwapAction, owx: &Owx) -> Result<(), owx::Error> {
                     let addr = owx::address_from_hex(ChainFamily::Evm, key_hex)?;
                     let p =
                         owx_swap::evm_provider_from_key_with_rpcs(key_hex, &default_rpc, rpc_map)
-                            .map_err(|e| owx::Error::InvalidInput(e.to_string()))?;
+                            .map_err(|e| owx::OwxError::InvalidInput(e.to_string()))?;
                     Ok((p, addr))
                 })?;
 
-            let engine = build_engine_with_provider(provider).map_err(swap_err)?;
+            let engine = build_engine_with_provider(provider)
+                .map_err(|e| owx::OwxError::InvalidInput(e.to_string()))?;
 
             let req = owx_swap::SwapRequest {
                 from_chain,
@@ -129,17 +129,11 @@ pub fn run(action: SwapAction, owx: &Owx) -> Result<(), owx::Error> {
             let strat = parse_strategy(&strategy)?;
             let receipt = rt
                 .block_on(engine.auto_execute(&req, strat, &NoopSigner))
-                .map_err(swap_err)?;
+                .map_err(|e| owx::OwxError::InvalidInput(e.to_string()))?;
             print_json(&receipt)?;
         }
     }
     Ok(())
-}
-
-/// Map a [`owx_swap::SwapError`] to [`owx::Error`].
-#[allow(clippy::needless_pass_by_value)]
-fn swap_err(e: owx_swap::SwapError) -> owx::Error {
-    owx::Error::InvalidInput(e.to_string())
 }
 
 /// Placeholder signer — actual signing is handled inside `EvmProvider`
@@ -182,12 +176,12 @@ fn build_engine_with_provider(
     Ok(engine)
 }
 
-fn parse_strategy(s: &str) -> Result<owx_swap::SelectionStrategy, owx::Error> {
+fn parse_strategy(s: &str) -> Result<owx_swap::SelectionStrategy, owx::OwxError> {
     match s {
         "best-output" | "best_output" => Ok(owx_swap::SelectionStrategy::BestOutput),
         "cheapest" => Ok(owx_swap::SelectionStrategy::Cheapest),
         "fastest" => Ok(owx_swap::SelectionStrategy::Fastest),
-        _ => Err(owx::Error::InvalidInput(format!(
+        _ => Err(owx::OwxError::InvalidInput(format!(
             "unknown strategy '{s}'; expected best-output|cheapest|fastest"
         ))),
     }
@@ -198,7 +192,7 @@ fn resolve_evm_rpc(
     owx: &Owx,
     lifi_chain_id: &str,
     rpc_override: Option<&str>,
-) -> Result<String, owx::Error> {
+) -> Result<String, owx::OwxError> {
     if let Some(url) = rpc_override {
         return Ok(url.to_owned());
     }
@@ -213,7 +207,7 @@ fn resolve_evm_rpc(
     if let Some(url) = defaults.get(&caip2) {
         return Ok(url.clone());
     }
-    Err(owx::Error::InvalidInput(format!(
+    Err(owx::OwxError::InvalidInput(format!(
         "no RPC URL for chain {lifi_chain_id}; use --rpc to specify"
     )))
 }

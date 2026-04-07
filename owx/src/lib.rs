@@ -28,7 +28,8 @@ use std::time::Duration;
 
 pub use audit::{AuditEntry, AuditOp};
 pub use auth::Credential;
-pub use error::Error;
+pub use error::OwxError;
+use error::OwxError as Error;
 pub use key::{ApiKeyCreateResult, ApiKeyInfo};
 pub use signing::{SendResult, SignResult, address_from_hex};
 pub use wallet::{AccountInfo, ImportKeyOptions, WalletInfo};
@@ -61,7 +62,7 @@ impl Owx {
         let store = owx_vault::Store::open(&path)?;
         let config = config::Config::load_or_default_from(&path.join("config.json"))?;
         let audit = audit::AuditLog::new(&path);
-        let http = build_http_client();
+        let http = build_http_client()?;
         Ok(Self {
             store,
             config: Arc::new(config),
@@ -519,12 +520,15 @@ fn credential_audit_id(cred: &Credential<'_>) -> Option<String> {
 }
 
 /// Build the shared async HTTP client.
-fn build_http_client() -> reqwest::Client {
-    #[allow(clippy::expect_used)]
+///
+/// # Errors
+///
+/// Returns [`Error::InvalidInput`] if the HTTP client builder fails.
+fn build_http_client() -> Result<reqwest::Client, Error> {
     reqwest::Client::builder()
         .pool_max_idle_per_host(20)
         .timeout(Duration::from_secs(30))
         .connect_timeout(Duration::from_secs(10))
         .build()
-        .expect("failed to build HTTP client")
+        .map_err(|e| Error::InvalidInput(format!("failed to build HTTP client: {e}")))
 }

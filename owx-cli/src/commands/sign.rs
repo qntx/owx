@@ -7,8 +7,7 @@ use crate::output::print_json;
 
 /// Signing actions.
 #[derive(Subcommand)]
-#[allow(clippy::module_name_repetitions)]
-pub enum SignAction {
+pub(crate) enum SignAction {
     /// Sign a message.
     #[command(name = "msg")]
     Message {
@@ -33,8 +32,7 @@ pub enum SignAction {
     },
 }
 
-#[allow(clippy::print_stdout)]
-pub fn run(action: SignAction, owx: &Owx) -> Result<(), owx::Error> {
+pub(crate) fn run(action: SignAction, owx: &Owx) -> Result<(), owx::OwxError> {
     match action {
         SignAction::Message {
             wallet,
@@ -46,7 +44,7 @@ pub fn run(action: SignAction, owx: &Owx) -> Result<(), owx::Error> {
             let cred = owx::Credential::parse(&credential);
             let msg_bytes = match encoding.as_str() {
                 "hex" => hex::decode(&message)
-                    .map_err(|e| owx::Error::InvalidInput(format!("invalid hex: {e}")))?,
+                    .map_err(|e| owx::OwxError::InvalidInput(format!("invalid hex: {e}")))?,
                 _ => message.into_bytes(),
             };
             print_json(&owx.sign_message(&wallet, &chain, &msg_bytes, cred)?)

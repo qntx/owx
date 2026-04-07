@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 
 /// Backup configuration.
 #[non_exhaustive]
-#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackupConfig {
     /// Backup directory path.
@@ -23,7 +22,6 @@ pub struct BackupConfig {
 
 /// Application configuration.
 #[non_exhaustive]
-#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Path to the vault directory.
@@ -116,13 +114,13 @@ impl Config {
     ///
     /// Returns [`Error::InvalidInput`] on I/O failure, or [`Error::Json`] on
     /// parse failure.
-    pub fn load_or_default_from(path: &Path) -> Result<Self, crate::Error> {
+    pub fn load_or_default_from(path: &Path) -> Result<Self, crate::OwxError> {
         let mut config = Self::default();
         if !path.exists() {
             return Ok(config);
         }
         let contents = std::fs::read_to_string(path).map_err(|e| {
-            crate::Error::InvalidInput(format!("read config {}: {e}", path.display()))
+            crate::OwxError::InvalidInput(format!("read config {}: {e}", path.display()))
         })?;
         let user_config: Self = serde_json::from_str(&contents)?;
         for (k, v) in user_config.rpc {
@@ -156,15 +154,14 @@ impl Default for Config {
 /// # Errors
 ///
 /// Returns [`Error::HomeNotFound`] if the home directory cannot be determined.
-pub fn default_vault_path() -> Result<PathBuf, crate::Error> {
+pub fn default_vault_path() -> Result<PathBuf, crate::OwxError> {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
-        .map_err(|_| crate::Error::HomeNotFound)?;
+        .map_err(|_| crate::OwxError::HomeNotFound)?;
     Ok(PathBuf::from(home).join(".owx"))
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

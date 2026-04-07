@@ -22,9 +22,9 @@ const DKLEN: u32 = 32;
 /// Returns [`VaultError::Crypto`] if HKDF expansion or AES encryption fails.
 pub fn encrypt(plaintext: &[u8], token: &str) -> Result<CryptoEnvelope, VaultError> {
     let mut salt = [0u8; 32];
-    fill_random(&mut salt);
+    fill_random(&mut salt)?;
     let mut iv = [0u8; 12];
-    fill_random(&mut iv);
+    fill_random(&mut iv)?;
 
     let mut dk = [0u8; 32];
     let hk = Hkdf::<Sha256>::new(Some(&salt), token.as_bytes());

@@ -33,9 +33,9 @@ pub(crate) const DKLEN: u32 = 32;
 /// or [`VaultError::Crypto`] if key derivation or AES encryption fails.
 pub fn encrypt(plaintext: &[u8], passphrase: &str) -> Result<CryptoEnvelope, VaultError> {
     let mut salt = [0u8; 32];
-    fill_random(&mut salt);
+    fill_random(&mut salt)?;
     let mut iv = [0u8; 12];
-    fill_random(&mut iv);
+    fill_random(&mut iv)?;
 
     let params = ScryptParams::new(LOG_N, R, P, DKLEN as usize)
         .map_err(|e| VaultError::InvalidParams(e.to_string()))?;
@@ -83,8 +83,8 @@ pub fn decrypt(envelope: &CryptoEnvelope, passphrase: &str) -> Result<SecretByte
     let ct = super::hex_decode(&envelope.ciphertext)?;
     let tag = super::hex_decode(&envelope.auth_tag)?;
 
-    #[allow(clippy::cast_possible_truncation)]
-    let log_n = kp.n.trailing_zeros() as u8;
+    let log_n = u8::try_from(kp.n.trailing_zeros())
+        .map_err(|_| VaultError::InvalidParams("scrypt log_n exceeds u8 range".into()))?;
     let params = ScryptParams::new(log_n, kp.r, kp.p, kp.dklen as usize)
         .map_err(|e| VaultError::InvalidParams(e.to_string()))?;
 

@@ -183,7 +183,6 @@ fn parse_chain_id(s: &str) -> Result<u64, SwapError> {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
 

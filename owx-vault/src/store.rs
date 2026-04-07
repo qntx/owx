@@ -213,7 +213,6 @@ fn read_json_dir(dir: &Path) -> Result<Vec<String>, VaultError> {
 }
 
 /// Set directory permissions to owner-only (`0o700` on Unix, no-op elsewhere).
-#[allow(clippy::missing_const_for_fn)]
 fn set_dir_permissions(path: &Path) {
     #[cfg(unix)]
     {
@@ -224,7 +223,6 @@ fn set_dir_permissions(path: &Path) {
 }
 
 /// Set file permissions to owner read/write only (`0o600` on Unix, no-op elsewhere).
-#[allow(clippy::missing_const_for_fn)]
 fn set_file_permissions(path: &Path) {
     #[cfg(unix)]
     {
@@ -235,7 +233,6 @@ fn set_file_permissions(path: &Path) {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use serde::{Deserialize, Serialize};
 

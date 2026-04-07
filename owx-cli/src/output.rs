@@ -3,24 +3,22 @@
 use owx::Owx;
 
 /// Print a value as pretty-printed JSON to stdout.
-#[allow(clippy::print_stdout)]
-pub fn print_json<T: serde::Serialize>(value: &T) -> Result<(), owx::Error> {
+pub(crate) fn print_json<T: serde::Serialize>(value: &T) -> Result<(), owx::OwxError> {
     println!("{}", serde_json::to_string_pretty(value)?);
     Ok(())
 }
 
 /// JSON error envelope for structured error output.
 #[derive(serde::Serialize)]
-pub struct ErrorEnvelope<'a> {
+pub(crate) struct ErrorEnvelope<'a> {
     /// Always `false`.
     pub success: bool,
     /// The error.
-    pub error: &'a owx::Error,
+    pub error: &'a owx::OwxError,
 }
 
-/// Print a structured JSON error and exit.
-#[allow(clippy::print_stderr)]
-pub fn exit_with_error(error: &owx::Error) -> ! {
+/// Print a structured JSON error to stderr.
+pub(crate) fn print_error(error: &owx::OwxError) {
     let payload = ErrorEnvelope {
         success: false,
         error,
@@ -31,18 +29,17 @@ pub fn exit_with_error(error: &owx::Error) -> ! {
             r#"{{"success":false,"error":{{"code":"JSON","message":"serialization failed"}}}}"#
         ),
     }
-    std::process::exit(1)
 }
 
 /// Find the first EVM address from the first wallet.
-pub fn first_evm_address(owx: &Owx) -> Result<String, owx::Error> {
+pub(crate) fn first_evm_address(owx: &Owx) -> Result<String, owx::OwxError> {
     let wallets = owx.list_wallets()?;
     let w = wallets
         .first()
-        .ok_or_else(|| owx::Error::InvalidInput("no wallets found".into()))?;
+        .ok_or_else(|| owx::OwxError::InvalidInput("no wallets found".into()))?;
     w.accounts
         .iter()
         .find(|a| a.chain_id.starts_with("eip155:"))
         .map(|a| a.address.clone())
-        .ok_or_else(|| owx::Error::InvalidInput("no EVM account found".into()))
+        .ok_or_else(|| owx::OwxError::InvalidInput("no EVM account found".into()))
 }

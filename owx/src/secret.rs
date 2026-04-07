@@ -8,13 +8,13 @@ use owx_vault::{CryptoEnvelope, crypto};
 use zeroize::Zeroizing;
 
 use crate::chain::ChainFamily;
-use crate::error::Error;
+use crate::error::OwxError as Error;
 use crate::wallet::{EncryptedWallet, KeyType};
 
 /// Decrypted wallet secret — either a mnemonic phrase or dual-curve key pair.
 ///
 /// All secret material is zeroized on [`Drop`].
-pub enum WalletSecret {
+pub(crate) enum WalletSecret {
     /// BIP-39 mnemonic phrase.
     Mnemonic(Zeroizing<String>),
     /// Per-curve hex-encoded private keys.
@@ -28,12 +28,12 @@ pub enum WalletSecret {
 
 impl WalletSecret {
     /// Create a mnemonic secret.
-    pub fn mnemonic(phrase: impl Into<String>) -> Self {
+    pub(crate) fn mnemonic(phrase: impl Into<String>) -> Self {
         Self::Mnemonic(Zeroizing::new(phrase.into()))
     }
 
     /// Create from explicit dual-curve keys.
-    pub fn key_pair(secp256k1: impl Into<String>, ed25519: impl Into<String>) -> Self {
+    pub(crate) fn key_pair(secp256k1: impl Into<String>, ed25519: impl Into<String>) -> Self {
         Self::KeyPair {
             secp256k1: Zeroizing::new(secp256k1.into()),
             ed25519: Zeroizing::new(ed25519.into()),
@@ -41,7 +41,7 @@ impl WalletSecret {
     }
 
     /// Returns the [`KeyType`] for on-disk storage.
-    pub const fn key_type(&self) -> KeyType {
+    pub(crate) const fn key_type(&self) -> KeyType {
         match self {
             Self::Mnemonic(_) => KeyType::Mnemonic,
             Self::KeyPair { .. } => KeyType::PrivateKey,
@@ -49,7 +49,7 @@ impl WalletSecret {
     }
 
     /// Returns the mnemonic phrase (if this is a mnemonic secret).
-    pub fn phrase(&self) -> Option<&str> {
+    pub(crate) fn phrase(&self) -> Option<&str> {
         match self {
             Self::Mnemonic(p) => Some(p.as_str()),
             Self::KeyPair { .. } => None,
@@ -57,7 +57,7 @@ impl WalletSecret {
     }
 
     /// Returns the hex private key for the given chain's curve.
-    pub fn private_key_hex(&self, ct: ChainFamily) -> Option<&str> {
+    pub(crate) fn private_key_hex(&self, ct: ChainFamily) -> Option<&str> {
         match self {
             Self::Mnemonic(_) => None,
             Self::KeyPair { secp256k1, ed25519 } => {
@@ -73,7 +73,7 @@ impl WalletSecret {
     /// Export as a human-readable string (phrase or JSON key pair).
     ///
     /// Returns [`Zeroizing<String>`] so the secret is scrubbed on drop.
-    pub fn export_string(&self) -> Result<Zeroizing<String>, Error> {
+    pub(crate) fn export_string(&self) -> Result<Zeroizing<String>, Error> {
         match self {
             Self::Mnemonic(p) => Ok(Zeroizing::new(p.to_string())),
             Self::KeyPair { secp256k1, ed25519 } => {
@@ -89,7 +89,7 @@ impl WalletSecret {
     ///
     /// Returns [`Zeroizing<Vec<u8>>`] so the plaintext is automatically
     /// scrubbed on drop, even if the caller forgets explicit cleanup.
-    pub fn to_bytes(&self) -> Result<Zeroizing<Vec<u8>>, Error> {
+    pub(crate) fn to_bytes(&self) -> Result<Zeroizing<Vec<u8>>, Error> {
         match self {
             Self::Mnemonic(p) => Ok(Zeroizing::new(p.as_bytes().to_vec())),
             Self::KeyPair { secp256k1, ed25519 } => {
@@ -112,12 +112,15 @@ impl std::fmt::Debug for WalletSecret {
 }
 
 /// Decrypt a wallet's secret using the given credential.
-pub fn decrypt_secret(wallet: &EncryptedWallet, credential: &str) -> Result<WalletSecret, Error> {
+pub(crate) fn decrypt_secret(
+    wallet: &EncryptedWallet,
+    credential: &str,
+) -> Result<WalletSecret, Error> {
     decrypt_from_envelope(&wallet.crypto, credential, wallet.key_type)
 }
 
 /// Decrypt from a pre-parsed envelope with known key type.
-pub fn decrypt_from_envelope(
+pub(crate) fn decrypt_from_envelope(
     envelope: &CryptoEnvelope,
     credential: &str,
     key_type: KeyType,
@@ -154,7 +157,10 @@ fn parse_secret(bytes: &[u8], key_type: KeyType) -> Result<WalletSecret, Error> 
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(
+    clippy::indexing_slicing,
+    reason = "test panics on out-of-bounds are acceptable"
+)]
 mod tests {
     use super::*;
 

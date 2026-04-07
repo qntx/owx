@@ -22,15 +22,11 @@ fn hooks() -> &'static Mutex<Vec<Box<dyn Fn() + Send>>> {
 ///
 /// Typical usage: register a closure that clears a key cache.
 ///
-/// # Panics
-///
-/// Panics if the internal cleanup hooks mutex is poisoned.
+/// If the internal mutex is poisoned, the hook is silently dropped.
 pub fn register_cleanup(f: impl Fn() + Send + 'static) {
-    #[allow(clippy::expect_used)]
-    hooks()
-        .lock()
-        .expect("cleanup hooks lock")
-        .push(Box::new(f));
+    if let Ok(mut guard) = hooks().lock() {
+        guard.push(Box::new(f));
+    }
 }
 
 /// Run all registered cleanup hooks.
@@ -47,7 +43,6 @@ fn run_cleanup_hooks() {
 /// Report of which hardening measures succeeded.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
-#[allow(clippy::module_name_repetitions)]
 pub struct HardeningReport {
     /// Whether core dumps were successfully disabled.
     pub core_dumps_disabled: bool,
@@ -60,7 +55,6 @@ pub struct HardeningReport {
 /// On Unix: disables core dumps and ptrace attachment.
 /// On other platforms: no-op (returns false for both).
 #[must_use]
-#[allow(clippy::missing_const_for_fn)] // calls FFI on unix
 pub fn harden_process() -> HardeningReport {
     #[cfg(unix)]
     {
@@ -236,7 +230,14 @@ pub const fn munlock_slice(_ptr: *const u8, _len: usize) {}
 #[must_use]
 pub fn clear_env_var(name: &str) -> Option<String> {
     let value = std::env::var(name).ok();
-    #[allow(deprecated, unsafe_code, clippy::disallowed_methods)]
+    #[allow(
+        unsafe_code,
+        reason = "std::env::remove_var requires unsafe in edition 2024"
+    )]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "single-threaded startup only; no safe alternative"
+    )]
     // SAFETY: We accept the documented UB risk of remove_var in multi-threaded
     // programs. This function is only called during single-threaded startup.
     unsafe {

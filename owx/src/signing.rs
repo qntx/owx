@@ -10,7 +10,7 @@ use signer::{Sign, SignOutput};
 use zeroize::Zeroizing;
 
 use crate::chain::{ChainFamily, for_each_chain};
-use crate::error::Error;
+use crate::error::OwxError as Error;
 
 /// Result of a signing operation.
 #[non_exhaustive]
@@ -33,7 +33,7 @@ pub struct SendResult {
 
 /// Convert a [`SignOutput`] to the public [`SignResult`].
 #[must_use]
-pub fn to_sign_result(out: &SignOutput) -> SignResult {
+pub(crate) fn to_sign_result(out: &SignOutput) -> SignResult {
     SignResult {
         signature: hex::encode(&out.signature),
         recovery_id: out.recovery_id,
@@ -58,7 +58,7 @@ fn s_err(e: impl std::fmt::Display) -> Error {
 /// # Errors
 ///
 /// Returns [`Error::Derivation`] if HD derivation fails.
-pub fn derive_account(
+pub(crate) fn derive_account(
     family: ChainFamily,
     wallet: &kobe::Wallet,
     index: u32,
@@ -103,7 +103,7 @@ pub fn derive_account(
 /// # Errors
 ///
 /// Returns [`Error::Derivation`] if HD derivation fails.
-pub fn derive_private_key_hex(
+pub(crate) fn derive_private_key_hex(
     wallet: &kobe::Wallet,
     family: ChainFamily,
     index: u32,
@@ -120,7 +120,7 @@ pub fn derive_private_key_hex(
 /// # Errors
 ///
 /// Returns [`Error::Signing`] if key parsing or signing fails.
-pub fn sign_message(
+pub(crate) fn sign_message(
     family: ChainFamily,
     key_hex: &str,
     message: &[u8],
@@ -143,7 +143,7 @@ pub fn sign_message(
 /// # Errors
 ///
 /// Returns [`Error::Signing`] if key parsing or signing fails.
-pub fn sign_transaction(
+pub(crate) fn sign_transaction(
     family: ChainFamily,
     key_hex: &str,
     tx_bytes: &[u8],
@@ -166,7 +166,7 @@ pub fn sign_transaction(
 /// # Errors
 ///
 /// Returns [`Error::Signing`] if key parsing or signing fails.
-pub fn sign_typed_data(key_hex: &str, typed_data_json: &str) -> Result<SignOutput, Error> {
+pub(crate) fn sign_typed_data(key_hex: &str, typed_data_json: &str) -> Result<SignOutput, Error> {
     let s = signer::evm::Signer::from_hex(key_hex).map_err(s_err)?;
     s.sign_typed_data(typed_data_json).map_err(s_err)
 }
@@ -176,7 +176,7 @@ pub fn sign_typed_data(key_hex: &str, typed_data_json: &str) -> Result<SignOutpu
 /// # Errors
 ///
 /// Returns [`Error::Signing`] if encoding fails (EVM only).
-pub fn encode_signed_tx(
+pub(crate) fn encode_signed_tx(
     family: ChainFamily,
     tx_bytes: &[u8],
     sig: &SignOutput,

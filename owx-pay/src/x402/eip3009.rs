@@ -1,8 +1,11 @@
 //! EIP-3009 `TransferWithAuthorization` typed data construction.
 
 /// Build EIP-712 typed data JSON for `TransferWithAuthorization`.
-#[allow(clippy::too_many_arguments)]
-pub fn build_typed_data(
+#[allow(
+    clippy::too_many_arguments,
+    reason = "EIP-712 typed data requires all these fields"
+)]
+pub(super) fn build_typed_data(
     token_name: &str,
     token_version: &str,
     chain_id: &str,
@@ -47,7 +50,10 @@ pub fn build_typed_data(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(
+    clippy::indexing_slicing,
+    reason = "test panics on out-of-bounds are acceptable"
+)]
 mod tests {
     use super::*;
 

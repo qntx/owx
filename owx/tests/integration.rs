@@ -3,7 +3,22 @@
 //! Each test creates a fresh temp vault directory, exercises real crypto
 //! (scrypt with fast-kdf in test profile), and verifies observable behavior.
 
-#![allow(clippy::unwrap_used, clippy::missing_docs_in_private_items)]
+#![allow(
+    unused_crate_dependencies,
+    reason = "integration tests see all lib dependencies as unused"
+)]
+#![allow(
+    clippy::tests_outside_test_module,
+    reason = "this is a top-level integration test file, not an internal module"
+)]
+#![allow(
+    clippy::indexing_slicing,
+    reason = "test panics on out-of-bounds are acceptable"
+)]
+#![allow(
+    clippy::unwrap_used,
+    reason = "integration tests may unwrap for brevity"
+)]
 
 use owx::{Credential, ImportKeyOptions, Owx};
 

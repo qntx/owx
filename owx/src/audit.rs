@@ -69,7 +69,7 @@ pub struct AuditEntry {
 
 /// Append-only audit logger backed by a JSONL file.
 #[derive(Debug, Clone)]
-pub struct AuditLog {
+pub(crate) struct AuditLog {
     /// Path to the audit log file.
     path: PathBuf,
 }
@@ -77,13 +77,13 @@ pub struct AuditLog {
 impl AuditLog {
     /// Open (or create) an audit log at `<vault_root>/logs/audit.jsonl`.
     #[must_use]
-    pub fn new(vault_root: &Path) -> Self {
+    pub(crate) fn new(vault_root: &Path) -> Self {
         let log_dir = vault_root.join("logs");
-        let _ = fs::create_dir_all(&log_dir);
+        let _dir = fs::create_dir_all(&log_dir);
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&log_dir, fs::Permissions::from_mode(0o700));
+            let _perm = fs::set_permissions(&log_dir, fs::Permissions::from_mode(0o700));
         }
         Self {
             path: log_dir.join("audit.jsonl"),
@@ -94,11 +94,11 @@ impl AuditLog {
     ///
     /// Failures are silently ignored — audit logging must not block
     /// the primary operation.
-    pub fn log(&self, entry: &AuditEntry) {
+    pub(crate) fn log(&self, entry: &AuditEntry) {
         let Ok(json) = serde_json::to_string(entry) else {
             return;
         };
-        let _ = OpenOptions::new()
+        let _write = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&self.path)
@@ -109,7 +109,7 @@ impl AuditLog {
     ///
     /// Pass `api_key_id` when the operation is performed via an agent API
     /// token so the audit trail can identify which key was used.
-    pub fn log_ok(
+    pub(crate) fn log_ok(
         &self,
         operation: AuditOp,
         wallet_id: Option<&str>,
@@ -128,7 +128,7 @@ impl AuditLog {
     }
 
     /// Convenience: log a failed operation.
-    pub fn log_err(
+    pub(crate) fn log_err(
         &self,
         operation: AuditOp,
         wallet_id: Option<&str>,
@@ -150,7 +150,7 @@ impl AuditLog {
     ///
     /// Returns an empty vec if the file does not exist.
     /// Malformed lines are silently skipped.
-    pub fn read_all(&self) -> Vec<AuditEntry> {
+    pub(crate) fn read_all(&self) -> Vec<AuditEntry> {
         let Ok(contents) = fs::read_to_string(&self.path) else {
             return Vec::new();
         };
@@ -162,7 +162,10 @@ impl AuditLog {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(
+    clippy::indexing_slicing,
+    reason = "test panics on out-of-bounds are acceptable"
+)]
 mod tests {
     use super::*;
 

@@ -4,7 +4,7 @@ use base64::Engine as _;
 
 use crate::chain::ChainFamily;
 use crate::config::Config;
-use crate::error::Error;
+use crate::error::OwxError as Error;
 
 /// Shorthand constructor for [`Error::BroadcastFailed`].
 fn broadcast_err(msg: impl Into<String>) -> Error {
@@ -85,7 +85,7 @@ fn rpc_path(base: &str, path: &str) -> String {
 }
 
 /// Broadcast a signed transaction to the appropriate chain RPC.
-pub async fn broadcast(
+pub(crate) async fn broadcast(
     client: &reqwest::Client,
     family: ChainFamily,
     rpc_url: &str,
@@ -158,11 +158,15 @@ async fn broadcast_cosmos(
     let body = serde_json::json!({"tx_bytes": b64(payload), "mode": "BROADCAST_MODE_SYNC"});
     let text = post_json(client, &url, &body).await?;
     let parsed: serde_json::Value = serde_json::from_str(&text)?;
-    let tx_resp = &parsed["tx_response"];
-    if let Some(code) = tx_resp["code"].as_u64()
+    let null = serde_json::Value::Null;
+    let tx_resp = parsed.get("tx_response").unwrap_or(&null);
+    if let Some(code) = tx_resp.get("code").and_then(serde_json::Value::as_u64)
         && code != 0
     {
-        let log = tx_resp["raw_log"].as_str().unwrap_or("unknown error");
+        let log = tx_resp
+            .get("raw_log")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown error");
         return Err(broadcast_err(format!(
             "cosmos tx failed (code {code}): {log}"
         )));
@@ -180,9 +184,12 @@ async fn broadcast_tron(
     let body = serde_json::json!({"transaction": hex::encode(payload)});
     let text = post_json(client, &url, &body).await?;
     let parsed: serde_json::Value = serde_json::from_str(&text)?;
-    if parsed["result"].as_bool() == Some(false) {
-        let code = parsed["code"].as_str().unwrap_or("UNKNOWN");
-        let msg = parsed["message"].as_str().unwrap_or("");
+    if parsed.get("result").and_then(serde_json::Value::as_bool) == Some(false) {
+        let code = parsed
+            .get("code")
+            .and_then(|v| v.as_str())
+            .unwrap_or("UNKNOWN");
+        let msg = parsed.get("message").and_then(|v| v.as_str()).unwrap_or("");
         return Err(broadcast_err(format!(
             "tron broadcast failed ({code}): {msg}"
         )));
@@ -228,7 +235,7 @@ async fn broadcast_xrpl(
 }
 
 /// Resolve the RPC URL: explicit > user config > built-in default.
-pub fn resolve_rpc(
+pub(crate) fn resolve_rpc(
     chain_id: &str,
     explicit: Option<&str>,
     config: &Config,

@@ -6,7 +6,6 @@
 use serde::{Deserialize, Serialize};
 
 /// A cross-chain or same-chain swap request.
-#[allow(clippy::exhaustive_structs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SwapRequest {
     /// Source chain (CAIP-2 or numeric ID, e.g. `"eip155:42161"` or `"42161"`).

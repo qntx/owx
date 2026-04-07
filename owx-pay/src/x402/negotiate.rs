@@ -6,10 +6,10 @@ use super::eip3009;
 use super::types::{PayResult, PaymentInfo, PaymentRequirements, X402Response};
 use crate::bridge::WalletBridge;
 use crate::error::{PayError, PayErrorCode};
-use crate::http::CLIENT;
+use crate::http::client;
 
 /// Parse payment requirements from a 402 response (headers or body).
-pub fn parse_requirements(
+pub(super) fn parse_requirements(
     headers: &reqwest::header::HeaderMap,
     body: &str,
 ) -> Result<X402Response, PayError> {
@@ -38,7 +38,7 @@ pub fn parse_requirements(
 }
 
 /// Handle a 402 response: negotiate payment, sign, and retry the original request.
-pub fn handle_402(
+pub(super) fn handle_402(
     wallet: &dyn WalletBridge,
     url: &str,
     method: &str,
@@ -220,13 +220,14 @@ pub(super) fn send_request(
     payment_header: Option<&str>,
 ) -> Result<reqwest::blocking::Response, PayError> {
     let upper = method.to_uppercase();
+    let http = client()?;
     let mut req = match upper.as_str() {
-        "GET" => CLIENT.get(url),
-        "POST" => CLIENT.post(url),
-        "PUT" => CLIENT.put(url),
-        "DELETE" => CLIENT.delete(url),
-        "PATCH" => CLIENT.patch(url),
-        "HEAD" => CLIENT.head(url),
+        "GET" => http.get(url),
+        "POST" => http.post(url),
+        "PUT" => http.put(url),
+        "DELETE" => http.delete(url),
+        "PATCH" => http.patch(url),
+        "HEAD" => http.head(url),
         _ => {
             return Err(PayError::new(
                 PayErrorCode::HttpStatus,
