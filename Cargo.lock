@@ -3990,7 +3990,7 @@ version = "0.6.0"
 dependencies = [
  "base64",
  "chrono",
- "getrandom 0.2.17",
+ "getrandom 0.4.2",
  "hex",
  "kobe",
  "kobe-btc",
@@ -4037,7 +4037,7 @@ version = "0.6.0"
 dependencies = [
  "base64",
  "chrono",
- "getrandom 0.2.17",
+ "getrandom 0.4.2",
  "hex",
  "owx",
  "reqwest 0.13.2",
@@ -4066,7 +4066,7 @@ name = "owx-vault"
 version = "0.6.0"
 dependencies = [
  "aes-gcm",
- "getrandom 0.2.17",
+ "getrandom 0.4.2",
  "hex",
  "hkdf",
  "libc",
