@@ -162,3 +162,73 @@ pub fn default_vault_path() -> Result<PathBuf, crate::Error> {
         .map_err(|_| crate::Error::HomeNotFound)?;
     Ok(PathBuf::from(home).join(".owx"))
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_rpc_contains_ethereum() {
+        let rpc = Config::default_rpc();
+        assert!(rpc.contains_key("eip155:1"));
+    }
+
+    #[test]
+    fn default_config_has_all_default_rpcs() {
+        let config = Config::default();
+        assert_eq!(config.rpc.len(), Config::default_rpc().len());
+    }
+
+    #[test]
+    fn rpc_url_returns_matching_entry() {
+        let config = Config::default();
+        assert!(config.rpc_url("eip155:1").is_some());
+        assert!(config.rpc_url("nonexistent:chain").is_none());
+    }
+
+    #[test]
+    fn load_or_default_from_missing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("missing.json");
+        let config = Config::load_or_default_from(&path).unwrap();
+        assert_eq!(config.rpc.len(), Config::default_rpc().len());
+    }
+
+    #[test]
+    fn load_or_default_from_valid_file_merges_rpc() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        std::fs::write(&path, r#"{"rpc":{"custom:chain":"https://custom.rpc"}}"#).unwrap();
+        let config = Config::load_or_default_from(&path).unwrap();
+        assert_eq!(config.rpc_url("custom:chain"), Some("https://custom.rpc"));
+        // Default RPCs are still present.
+        assert!(config.rpc_url("eip155:1").is_some());
+    }
+
+    #[test]
+    fn load_or_default_from_invalid_json_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bad.json");
+        std::fs::write(&path, "not json").unwrap();
+        assert!(Config::load_or_default_from(&path).is_err());
+    }
+
+    #[test]
+    fn load_or_default_from_overrides_vault_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        std::fs::write(&path, r#"{"vault_path":"/custom/vault"}"#).unwrap();
+        let config = Config::load_or_default_from(&path).unwrap();
+        assert_eq!(config.vault_path, PathBuf::from("/custom/vault"));
+    }
+
+    #[test]
+    fn load_or_default_from_empty_vault_path_keeps_default() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        std::fs::write(&path, r#"{"vault_path":""}"#).unwrap();
+        let config = Config::load_or_default_from(&path).unwrap();
+        assert!(config.vault_path.as_os_str().is_empty());
+    }
+}

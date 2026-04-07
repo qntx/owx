@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use owx_vault::CryptoEnvelope;
 use serde::{Deserialize, Serialize};
 use subtle::ConstantTimeEq;
 use zeroize::Zeroizing;
@@ -11,7 +12,7 @@ use crate::chain::{ChainFamily, default_chain};
 use crate::error::Error;
 use crate::policy::{self, Policy, PolicyContext, SpendingContext, TransactionContext};
 use crate::secret::{WalletSecret, decrypt_from_envelope, decrypt_secret};
-use crate::signer;
+use crate::signing;
 
 /// On-disk API key file stored at `<vault>/keys/<id>.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,7 +33,7 @@ pub struct ApiKeyFile {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<String>,
     /// Per-wallet encrypted secret copies, keyed by wallet ID.
-    pub wallet_secrets: HashMap<String, serde_json::Value>,
+    pub wallet_secrets: HashMap<String, CryptoEnvelope>,
 }
 
 /// Public API key information (no token or secrets exposed).
@@ -97,7 +98,7 @@ pub fn create_api_key(
     passphrase: &str,
     expires_at: Option<&str>,
 ) -> Result<ApiKeyCreateResult, Error> {
-    let token = crate::token::generate_token();
+    let token = crate::auth::generate_token();
     let mut wallet_secrets = HashMap::new();
     let mut resolved_ids = Vec::with_capacity(wallet_ids.len());
 
@@ -106,8 +107,7 @@ pub fn create_api_key(
         let secret = decrypt_secret(&wallet, passphrase)?;
         let secret_bytes = secret.to_bytes()?;
         let hkdf_envelope = owx_vault::crypto::encrypt_hkdf(&secret_bytes, &token)?;
-        let envelope_json = serde_json::to_value(&hkdf_envelope)?;
-        wallet_secrets.insert(wallet.id.clone(), envelope_json);
+        wallet_secrets.insert(wallet.id.clone(), hkdf_envelope);
         resolved_ids.push(wallet.id.clone());
     }
 
@@ -123,7 +123,7 @@ pub fn create_api_key(
     let key_file = ApiKeyFile {
         id: uuid::Uuid::new_v4().to_string(),
         name: name.to_owned(),
-        token_hash: crate::token::hash_token(&token),
+        token_hash: crate::auth::hash_token(&token),
         created_at: chrono::Utc::now().to_rfc3339(),
         wallet_ids: resolved_ids,
         policy_ids: policy_ids.to_vec(),
@@ -165,7 +165,7 @@ pub fn resolve_agent_key(
     family: ChainFamily,
     index: u32,
 ) -> Result<Zeroizing<String>, Error> {
-    let token_hash = crate::token::hash_token(token);
+    let token_hash = crate::auth::hash_token(token);
     let api_key = find_key_by_hash(vault, &token_hash)?;
 
     if let Some(ref exp) = api_key.expires_at {
@@ -208,7 +208,7 @@ pub fn resolve_agent_key(
                 date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
                 asset: None,
             },
-            timestamp: chrono::Utc::now().to_rfc3339(),
+            timestamp: chrono::Utc::now(),
         };
         let result = policy::evaluate(&policies, &ctx);
         if !result.allow {
@@ -219,14 +219,13 @@ pub fn resolve_agent_key(
         }
     }
 
-    let envelope_value = api_key.wallet_secrets.get(&wallet.id).ok_or_else(|| {
+    let envelope = api_key.wallet_secrets.get(&wallet.id).ok_or_else(|| {
         Error::AccessDenied(format!(
             "API key has no encrypted secret for wallet '{}'",
             wallet.id
         ))
     })?;
-    let envelope: owx_vault::CryptoEnvelope = serde_json::from_value(envelope_value.clone())?;
-    let secret = decrypt_from_envelope(&envelope, token, wallet.key_type)?;
+    let secret = decrypt_from_envelope(envelope, token, wallet.key_type)?;
     extract_key_hex(&secret, family, index)
 }
 
@@ -240,7 +239,7 @@ pub fn resolve_signing_key(
     family: ChainFamily,
     index: u32,
 ) -> Result<Zeroizing<String>, Error> {
-    if crate::token::is_api_token(credential) {
+    if crate::auth::is_api_token(credential) {
         return resolve_agent_key(vault, wallet_name_or_id, credential, family, index);
     }
     let wallet = crate::wallet::load_wallet(vault, wallet_name_or_id)?;
@@ -255,9 +254,8 @@ fn extract_key_hex(
     index: u32,
 ) -> Result<Zeroizing<String>, Error> {
     if let Some(phrase) = secret.phrase() {
-        let kw = kobe::Wallet::from_mnemonic(phrase, None)
-            .map_err(|e| Error::Derivation(e.to_string()))?;
-        signer::derive_private_key_hex(&kw, family, index)
+        let kw = kobe::Wallet::from_mnemonic(phrase, None)?;
+        signing::derive_private_key_hex(&kw, family, index)
     } else {
         secret
             .private_key_hex(family)

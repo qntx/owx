@@ -86,6 +86,12 @@ pub enum Error {
     Json(#[from] serde_json::Error),
 }
 
+impl From<kobe::Error> for Error {
+    fn from(e: kobe::Error) -> Self {
+        Self::Derivation(e.to_string())
+    }
+}
+
 impl Error {
     /// Machine-readable `SCREAMING_SNAKE_CASE` error code for API consumers.
     #[must_use]

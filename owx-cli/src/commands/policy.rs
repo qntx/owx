@@ -24,25 +24,15 @@ pub enum PolicyAction {
 
 #[allow(clippy::print_stdout)]
 pub fn run(action: PolicyAction, owx: &Owx) -> Result<(), owx::Error> {
-    let store = owx.store();
     match action {
         PolicyAction::Create { id, json } => {
-            serde_json::from_str::<owx::policy::Policy>(&json)
-                .map_err(|e| owx::Error::InvalidInput(format!("invalid policy JSON: {e}")))?;
-            store.save_raw("policies", &id, &json)?;
+            owx.create_policy(&id, &json)?;
             print_json(&serde_json::json!({ "status": "created", "id": id }))
         }
-        PolicyAction::List => {
-            let policies = owx::policy::list_policies(store)?;
-            print_json(&policies)
-        }
-        PolicyAction::Info { id } => {
-            let raw = store.load_raw("policies", &id)?;
-            let value: serde_json::Value = serde_json::from_str(&raw)?;
-            print_json(&value)
-        }
+        PolicyAction::List => print_json(&owx.list_policies()?),
+        PolicyAction::Info { id } => print_json(&owx.get_policy(&id)?),
         PolicyAction::Delete { id } => {
-            store.delete("policies", &id)?;
+            owx.delete_policy(&id)?;
             print_json(&serde_json::json!({ "status": "deleted", "id": id }))
         }
     }

@@ -1,7 +1,7 @@
 //! Agent-native, self-custodial, policy-gated, multi-chain wallet toolkit.
 //!
-//! All public operations are `async` methods on [`Owx`], the stateful
-//! orchestrator that owns the vault store, config, audit log, and HTTP client.
+//! All public operations are methods on [`Owx`], the stateful orchestrator
+//! that owns the vault store, config, audit log, and HTTP client.
 //!
 //! ```ignore
 //! let owx = Owx::open("~/.owx")?;
@@ -11,43 +11,42 @@
 //! ```
 
 mod audit;
+mod auth;
 pub(crate) mod broadcast;
 pub mod chain;
 pub mod config;
-mod credential;
 mod error;
 pub(crate) mod key;
 pub mod policy;
 pub(crate) mod secret;
-pub(crate) mod signer;
-mod token;
+pub(crate) mod signing;
 pub(crate) mod wallet;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-pub use audit::AuditEntry;
-pub use credential::Credential;
+pub use audit::{AuditEntry, AuditOp};
+pub use auth::Credential;
 pub use error::Error;
 pub use key::{ApiKeyCreateResult, ApiKeyInfo};
-pub use signer::{SendResult, SignResult, address_from_hex};
+pub use signing::{SendResult, SignResult, address_from_hex};
 pub use wallet::{AccountInfo, ImportKeyOptions, WalletInfo};
 
 /// The OWX orchestrator — stateful entry point for all operations.
 ///
 /// Owns the vault store, cached config, audit log, and shared HTTP client.
-/// All methods are `async`-ready. Clone is cheap (`Arc`-backed config).
+/// Clone is cheap (`Arc`-backed config).
 #[derive(Debug)]
 pub struct Owx {
     /// Underlying file-system store.
-    store: owx_vault::Store,
+    pub(crate) store: owx_vault::Store,
     /// Cached configuration.
-    config: Arc<config::Config>,
+    pub(crate) config: Arc<config::Config>,
     /// Append-only audit log.
-    audit: audit::AuditLog,
+    pub(crate) audit: audit::AuditLog,
     /// Shared async HTTP client for broadcast/pay/swap.
-    http: reqwest::Client,
+    pub(crate) http: reqwest::Client,
 }
 
 impl Owx {
@@ -121,7 +120,7 @@ impl Owx {
     ) -> Result<WalletInfo, Error> {
         let info = wallet::create_wallet(self, name, passphrase, words)?;
         self.audit
-            .log_ok("create_wallet", Some(&info.id), None, None);
+            .log_ok(AuditOp::CreateWallet, Some(&info.id), None, None);
         Ok(info)
     }
 
@@ -139,7 +138,7 @@ impl Owx {
     ) -> Result<WalletInfo, Error> {
         let info = wallet::import_mnemonic(self, name, phrase, passphrase, index)?;
         self.audit
-            .log_ok("import_mnemonic", Some(&info.id), None, None);
+            .log_ok(AuditOp::ImportMnemonic, Some(&info.id), None, None);
         Ok(info)
     }
 
@@ -157,7 +156,7 @@ impl Owx {
     ) -> Result<WalletInfo, Error> {
         let info = wallet::import_private_key(self, name, key_hex, passphrase, opts)?;
         self.audit
-            .log_ok("import_private_key", Some(&info.id), None, None);
+            .log_ok(AuditOp::ImportPrivateKey, Some(&info.id), None, None);
         Ok(info)
     }
 
@@ -175,7 +174,7 @@ impl Owx {
     ) -> Result<WalletInfo, Error> {
         let info = wallet::import_private_keys(self, name, secp, ed, passphrase)?;
         self.audit
-            .log_ok("import_private_keys", Some(&info.id), None, None);
+            .log_ok(AuditOp::ImportPrivateKeys, Some(&info.id), None, None);
         Ok(info)
     }
 
@@ -205,7 +204,7 @@ impl Owx {
     pub fn delete_wallet(&self, name_or_id: &str) -> Result<(), Error> {
         wallet::delete_wallet(self, name_or_id)?;
         self.audit
-            .log_ok("delete_wallet", Some(name_or_id), None, None);
+            .log_ok(AuditOp::DeleteWallet, Some(name_or_id), None, None);
         Ok(())
     }
 
@@ -217,7 +216,7 @@ impl Owx {
     pub fn rename_wallet(&self, name_or_id: &str, new_name: &str) -> Result<(), Error> {
         wallet::rename_wallet(self, name_or_id, new_name)?;
         self.audit
-            .log_ok("rename_wallet", Some(name_or_id), None, None);
+            .log_ok(AuditOp::RenameWallet, Some(name_or_id), None, None);
         Ok(())
     }
 
@@ -234,12 +233,16 @@ impl Owx {
         match wallet::export_wallet(self, name_or_id, passphrase) {
             Ok(secret) => {
                 self.audit
-                    .log_ok("export_wallet", Some(name_or_id), None, None);
+                    .log_ok(AuditOp::ExportWallet, Some(name_or_id), None, None);
                 Ok(secret)
             }
             Err(e) => {
-                self.audit
-                    .log_err("export_wallet", Some(name_or_id), None, &e.to_string());
+                self.audit.log_err(
+                    AuditOp::ExportWallet,
+                    Some(name_or_id),
+                    None,
+                    &e.to_string(),
+                );
                 Err(e)
             }
         }
@@ -273,10 +276,10 @@ impl Owx {
         cred: Credential<'_>,
     ) -> Result<SignResult, Error> {
         let resolved = chain::resolve(chain)?;
-        let key = self.resolve_key_audited("sign_message", wallet, &resolved, &cred)?;
-        let out = signer::sign_message(resolved.family(), &key, message)?;
-        self.audit_sign_ok("sign_message", wallet, &resolved, &cred);
-        Ok(signer::to_sign_result(&out))
+        let key = self.resolve_key_audited(AuditOp::SignMessage, wallet, &resolved, &cred)?;
+        let out = signing::sign_message(resolved.family(), &key, message)?;
+        self.audit_sign_ok(AuditOp::SignMessage, wallet, &resolved, &cred);
+        Ok(signing::to_sign_result(&out))
     }
 
     /// Sign a transaction (hex-encoded).
@@ -295,10 +298,10 @@ impl Owx {
         let clean = tx_hex.strip_prefix("0x").unwrap_or(tx_hex);
         let tx_bytes =
             hex::decode(clean).map_err(|e| Error::InvalidInput(format!("invalid hex: {e}")))?;
-        let key = self.resolve_key_audited("sign_transaction", wallet, &resolved, &cred)?;
-        let out = signer::sign_transaction(resolved.family(), &key, &tx_bytes)?;
-        self.audit_sign_ok("sign_transaction", wallet, &resolved, &cred);
-        Ok(signer::to_sign_result(&out))
+        let key = self.resolve_key_audited(AuditOp::SignTransaction, wallet, &resolved, &cred)?;
+        let out = signing::sign_transaction(resolved.family(), &key, &tx_bytes)?;
+        self.audit_sign_ok(AuditOp::SignTransaction, wallet, &resolved, &cred);
+        Ok(signing::to_sign_result(&out))
     }
 
     /// Sign EIP-712 typed data (EVM only).
@@ -318,10 +321,10 @@ impl Owx {
         if resolved.family() != chain::ChainFamily::Evm {
             return Err(Error::InvalidInput("EIP-712 is EVM-only".into()));
         }
-        let key = self.resolve_key_audited("sign_typed_data", wallet, &resolved, &cred)?;
-        let out = signer::sign_typed_data(&key, typed_data)?;
-        self.audit_sign_ok("sign_typed_data", wallet, &resolved, &cred);
-        Ok(signer::to_sign_result(&out))
+        let key = self.resolve_key_audited(AuditOp::SignTypedData, wallet, &resolved, &cred)?;
+        let out = signing::sign_typed_data(&key, typed_data)?;
+        self.audit_sign_ok(AuditOp::SignTypedData, wallet, &resolved, &cred);
+        Ok(signing::to_sign_result(&out))
     }
 
     /// Sign and broadcast a transaction.
@@ -344,13 +347,13 @@ impl Owx {
         let tx_bytes =
             hex::decode(clean).map_err(|e| Error::InvalidInput(format!("invalid hex: {e}")))?;
         let key = key::resolve_signing_key(self, wallet, cred.as_str(), family, 0)?;
-        let sig = signer::sign_transaction(family, &key, &tx_bytes)?;
-        let payload = signer::encode_signed_tx(family, &tx_bytes, &sig)?;
+        let sig = signing::sign_transaction(family, &key, &tx_bytes)?;
+        let payload = signing::encode_signed_tx(family, &tx_bytes, &sig)?;
         let rpc = broadcast::resolve_rpc(chain_id, rpc_url, &self.config)?;
         let tx_hash = broadcast::broadcast(&self.http, family, &rpc, &payload).await?;
         let audit_id = credential_audit_id(&cred);
         self.audit.log_ok(
-            "sign_and_send",
+            AuditOp::SignAndSend,
             Some(wallet),
             Some(chain_id),
             audit_id.as_deref(),
@@ -361,11 +364,8 @@ impl Owx {
     /// Execute a closure with temporary access to a wallet's signing key.
     ///
     /// The raw hex key is passed by reference to the closure and **zeroized
-    /// immediately** after the closure returns.  The key never escapes as an
+    /// immediately** after the closure returns. The key never escapes as an
     /// owned `String`, so callers cannot accidentally retain it.
-    ///
-    /// Use this to build chain-specific signers (e.g. `EvmProvider`) inside
-    /// the closure and return the constructed object.
     ///
     /// # Errors
     ///
@@ -383,7 +383,6 @@ impl Owx {
     {
         let key = key::resolve_signing_key(self, wallet, cred.as_str(), family, index)?;
         f(&key)
-        // `key: Zeroizing<String>` is scrubbed here on drop
     }
 
     /// Create an API key.
@@ -401,7 +400,7 @@ impl Owx {
     ) -> Result<ApiKeyCreateResult, Error> {
         let result =
             key::create_api_key(self, name, wallet_ids, policy_ids, passphrase, expires_at)?;
-        self.audit.log_ok("create_api_key", None, None, None);
+        self.audit.log_ok(AuditOp::CreateApiKey, None, None, None);
         Ok(result)
     }
 
@@ -421,7 +420,7 @@ impl Owx {
     /// Returns [`Error::ApiKeyNotFound`] if the key does not exist.
     pub fn revoke_api_key(&self, id: &str) -> Result<(), Error> {
         key::revoke_api_key(self, id)?;
-        self.audit.log_ok("revoke_api_key", None, None, None);
+        self.audit.log_ok(AuditOp::RevokeApiKey, None, None, None);
         Ok(())
     }
 
@@ -434,10 +433,53 @@ impl Owx {
         self.audit.read_all()
     }
 
+    /// Create (or overwrite) a policy from a JSON string.
+    ///
+    /// The JSON is validated before persisting.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidInput`] if the JSON is not a valid [`policy::Policy`],
+    /// or [`Error::Vault`] if storage fails.
+    pub fn create_policy(&self, id: &str, json: &str) -> Result<(), Error> {
+        serde_json::from_str::<policy::Policy>(json)
+            .map_err(|e| Error::InvalidInput(format!("invalid policy JSON: {e}")))?;
+        self.store.save_raw("policies", id, json)?;
+        Ok(())
+    }
+
+    /// List all policies sorted alphabetically by name.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Vault`] if the store cannot be read.
+    pub fn list_policies(&self) -> Result<Vec<policy::Policy>, Error> {
+        policy::list_policies(&self.store)
+    }
+
+    /// Load a single policy by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::PolicyNotFound`] if the policy does not exist.
+    pub fn get_policy(&self, id: &str) -> Result<policy::Policy, Error> {
+        policy::load_policy(&self.store, id)
+    }
+
+    /// Delete a policy by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Vault`] if the policy does not exist or deletion fails.
+    pub fn delete_policy(&self, id: &str) -> Result<(), Error> {
+        self.store.delete("policies", id)?;
+        Ok(())
+    }
+
     /// Resolve a signing key with audit logging on failure.
     fn resolve_key_audited(
         &self,
-        op: &str,
+        op: AuditOp,
         wallet: &str,
         resolved: &chain::ResolvedChain,
         cred: &Credential<'_>,
@@ -453,7 +495,7 @@ impl Owx {
     /// Record a successful signing audit entry.
     fn audit_sign_ok(
         &self,
-        op: &str,
+        op: AuditOp,
         wallet: &str,
         resolved: &chain::ResolvedChain,
         cred: &Credential<'_>,
@@ -469,12 +511,9 @@ impl Owx {
 }
 
 /// Extract an audit-safe identifier from a credential.
-///
-/// For API tokens, returns the SHA-256 token hash (same value stored in
-/// `ApiKeyFile.token_hash`). For passphrases, returns `None`.
 fn credential_audit_id(cred: &Credential<'_>) -> Option<String> {
     match cred {
-        Credential::ApiToken(t) => Some(token::hash_token(t)),
+        Credential::ApiToken(t) => Some(auth::hash_token(t)),
         Credential::Passphrase(_) => None,
     }
 }

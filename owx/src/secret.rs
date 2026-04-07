@@ -113,8 +113,7 @@ impl std::fmt::Debug for WalletSecret {
 
 /// Decrypt a wallet's secret using the given credential.
 pub fn decrypt_secret(wallet: &EncryptedWallet, credential: &str) -> Result<WalletSecret, Error> {
-    let envelope: CryptoEnvelope = serde_json::from_value(wallet.crypto.clone())?;
-    decrypt_from_envelope(&envelope, credential, wallet.key_type)
+    decrypt_from_envelope(&wallet.crypto, credential, wallet.key_type)
 }
 
 /// Decrypt from a pre-parsed envelope with known key type.
@@ -151,5 +150,119 @@ fn parse_secret(bytes: &[u8], key_type: KeyType) -> Result<WalletSecret, Error> 
                 .map_err(|_| Error::InvalidInput("invalid key pair payload".into()))?;
             Ok(WalletSecret::key_pair(kp.secp256k1, kp.ed25519))
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mnemonic_key_type() {
+        let s = WalletSecret::mnemonic("abandon abandon about");
+        assert_eq!(s.key_type(), KeyType::Mnemonic);
+    }
+
+    #[test]
+    fn keypair_key_type() {
+        let s = WalletSecret::key_pair("aa".repeat(32), "bb".repeat(32));
+        assert_eq!(s.key_type(), KeyType::PrivateKey);
+    }
+
+    #[test]
+    fn mnemonic_phrase_returns_some() {
+        let s = WalletSecret::mnemonic("test phrase");
+        assert_eq!(s.phrase(), Some("test phrase"));
+    }
+
+    #[test]
+    fn keypair_phrase_returns_none() {
+        let s = WalletSecret::key_pair("aa", "bb");
+        assert!(s.phrase().is_none());
+    }
+
+    #[test]
+    fn mnemonic_private_key_hex_returns_none() {
+        let s = WalletSecret::mnemonic("test");
+        assert!(s.private_key_hex(ChainFamily::Evm).is_none());
+    }
+
+    #[test]
+    fn keypair_returns_secp_for_evm() {
+        let s = WalletSecret::key_pair("secp_hex", "ed_hex");
+        assert_eq!(s.private_key_hex(ChainFamily::Evm), Some("secp_hex"));
+    }
+
+    #[test]
+    fn keypair_returns_ed_for_solana() {
+        let s = WalletSecret::key_pair("secp_hex", "ed_hex");
+        assert_eq!(s.private_key_hex(ChainFamily::Solana), Some("ed_hex"));
+    }
+
+    #[test]
+    fn export_string_mnemonic() {
+        let s = WalletSecret::mnemonic("zoo zoo zoo");
+        let out = s.export_string().unwrap();
+        assert_eq!(&*out, "zoo zoo zoo");
+    }
+
+    #[test]
+    fn export_string_keypair_is_json() {
+        let s = WalletSecret::key_pair("aabb", "ccdd");
+        let out = s.export_string().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(parsed["secp256k1"], "aabb");
+        assert_eq!(parsed["ed25519"], "ccdd");
+    }
+
+    #[test]
+    fn to_bytes_mnemonic_roundtrip() {
+        let s = WalletSecret::mnemonic("hello world");
+        let bytes = s.to_bytes().unwrap();
+        assert_eq!(&*bytes, b"hello world");
+    }
+
+    #[test]
+    fn to_bytes_keypair_roundtrip() {
+        let s = WalletSecret::key_pair("aa", "bb");
+        let bytes = s.to_bytes().unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(parsed["secp256k1"], "aa");
+    }
+
+    #[test]
+    fn debug_redacts_secrets() {
+        let m = WalletSecret::mnemonic("secret phrase");
+        let kp = WalletSecret::key_pair("key1", "key2");
+        assert!(format!("{m:?}").contains("REDACTED"));
+        assert!(format!("{kp:?}").contains("REDACTED"));
+        assert!(!format!("{m:?}").contains("secret phrase"));
+    }
+
+    #[test]
+    fn parse_secret_mnemonic_valid_utf8() {
+        let bytes = b"abandon abandon about";
+        let s = parse_secret(bytes, KeyType::Mnemonic).unwrap();
+        assert_eq!(s.phrase(), Some("abandon abandon about"));
+    }
+
+    #[test]
+    fn parse_secret_mnemonic_invalid_utf8() {
+        let bytes = &[0xFF, 0xFE];
+        assert!(parse_secret(bytes, KeyType::Mnemonic).is_err());
+    }
+
+    #[test]
+    fn parse_secret_keypair_valid_json() {
+        let json = br#"{"secp256k1":"aa","ed25519":"bb"}"#;
+        let s = parse_secret(json, KeyType::PrivateKey).unwrap();
+        assert_eq!(s.private_key_hex(ChainFamily::Evm), Some("aa"));
+        assert_eq!(s.private_key_hex(ChainFamily::Solana), Some("bb"));
+    }
+
+    #[test]
+    fn parse_secret_keypair_invalid_json() {
+        assert!(parse_secret(b"not json", KeyType::PrivateKey).is_err());
     }
 }

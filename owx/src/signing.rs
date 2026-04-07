@@ -9,9 +9,8 @@ use kobe::DerivedAccount;
 use signer::{Sign, SignOutput};
 use zeroize::Zeroizing;
 
-use crate::chain::{ALL_FAMILIES, ChainFamily, default_chain, for_each_chain};
+use crate::chain::{ChainFamily, for_each_chain};
 use crate::error::Error;
-use crate::wallet::WalletAccount;
 
 /// Result of a signing operation.
 #[non_exhaustive]
@@ -45,6 +44,7 @@ pub fn to_sign_result(out: &SignOutput) -> SignResult {
 fn d_err(e: impl std::fmt::Display) -> Error {
     Error::Derivation(e.to_string())
 }
+
 /// Wrap a signing error.
 fn s_err(e: impl std::fmt::Display) -> Error {
     Error::Signing(e.to_string())
@@ -113,27 +113,6 @@ pub fn derive_private_key_hex(
             .private_key
             .to_string(),
     ))
-}
-
-/// Derive accounts for all 10 chain families from a mnemonic at `index`.
-///
-/// # Errors
-///
-/// Returns [`Error::Derivation`] if mnemonic parsing or derivation fails.
-pub fn derive_all_accounts(mnemonic: &str, index: u32) -> Result<Vec<WalletAccount>, Error> {
-    let wallet = kobe::Wallet::from_mnemonic(mnemonic, None).map_err(d_err)?;
-    let mut accounts = Vec::with_capacity(ALL_FAMILIES.len());
-    for &fam in ALL_FAMILIES {
-        let chain = default_chain(fam);
-        let d = derive_account(fam, &wallet, index)?;
-        accounts.push(WalletAccount {
-            account_id: format!("{}:{}", chain.chain_id, d.address),
-            address: d.address,
-            chain_id: chain.chain_id.to_owned(),
-            derivation_path: Some(d.path),
-        });
-    }
-    Ok(accounts)
 }
 
 /// Sign a message with a hex private key.

@@ -1,18 +1,148 @@
-//! Wallet CRUD operations and key management helpers.
+//! Wallet types, CRUD operations, and import logic.
 
+use owx_vault::CryptoEnvelope;
+use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
-use super::types::{EncryptedWallet, ImportKeyOptions, WalletAccount, WalletInfo};
 use crate::Owx;
 use crate::chain::{ALL_FAMILIES, default_chain};
 use crate::error::Error;
 use crate::secret::{WalletSecret, decrypt_secret};
-use crate::signer;
+use crate::signing;
+
+/// Options for importing a wallet from a single private key.
+#[allow(clippy::exhaustive_structs)]
+#[derive(Debug, Default)]
+pub struct ImportKeyOptions<'a> {
+    /// Target chain (determines which curve the primary key belongs to).
+    pub chain: Option<&'a str>,
+    /// Explicit secp256k1 key hex override.
+    pub secp256k1_hex: Option<&'a str>,
+    /// Explicit ed25519 key hex override.
+    pub ed25519_hex: Option<&'a str>,
+}
+
+/// Type of key material stored in the ciphertext.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KeyType {
+    /// BIP-39 mnemonic phrase.
+    Mnemonic,
+    /// Multi-curve key pair (`{"secp256k1":"hex","ed25519":"hex"}`).
+    PrivateKey,
+}
+
+/// An account entry within an encrypted wallet file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletAccount {
+    /// CAIP-10 account identifier (e.g. `eip155:1:0xabc…`).
+    pub account_id: String,
+    /// Address in the chain's native format.
+    pub address: String,
+    /// CAIP-2 chain identifier (e.g. `eip155:1`).
+    pub chain_id: String,
+    /// BIP-44 derivation path (`None` for imported keys).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub derivation_path: Option<String>,
+}
+
+/// The full on-disk wallet file (extended keystore v2).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EncryptedWallet {
+    /// Format version (always 2 for new wallets).
+    #[serde(alias = "lws_version")]
+    pub ows_version: u32,
+    /// Unique wallet identifier (UUID v4).
+    pub id: String,
+    /// Human-readable wallet name.
+    pub name: String,
+    /// ISO-8601 creation timestamp.
+    pub created_at: String,
+    /// Derived accounts across chains.
+    pub accounts: Vec<WalletAccount>,
+    /// Encrypted key material.
+    pub crypto: CryptoEnvelope,
+    /// Type of key material stored in the ciphertext.
+    pub key_type: KeyType,
+    /// Optional metadata.
+    #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
+    pub metadata: serde_json::Value,
+}
+
+impl EncryptedWallet {
+    /// Create a new wallet with the current timestamp and version 2.
+    #[must_use]
+    pub fn new(
+        id: String,
+        name: String,
+        accounts: Vec<WalletAccount>,
+        crypto: CryptoEnvelope,
+        key_type: KeyType,
+    ) -> Self {
+        Self {
+            ows_version: 2,
+            id,
+            name,
+            created_at: chrono::Utc::now().to_rfc3339(),
+            accounts,
+            crypto,
+            key_type,
+            metadata: serde_json::Value::Null,
+        }
+    }
+}
+
+/// Public wallet information (no secret material exposed).
+#[non_exhaustive]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletInfo {
+    /// Unique wallet identifier.
+    pub id: String,
+    /// Human-readable name.
+    pub name: String,
+    /// Derived accounts across chains.
+    pub accounts: Vec<AccountInfo>,
+    /// ISO-8601 creation timestamp.
+    pub created_at: String,
+}
+
+/// A single account within a wallet (one per chain family).
+#[non_exhaustive]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AccountInfo {
+    /// CAIP-2 chain identifier.
+    pub chain_id: String,
+    /// Address in the chain's native format.
+    pub address: String,
+    /// BIP-44 derivation path (`None` for imported keys).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub derivation_path: Option<String>,
+}
+
+impl From<&WalletAccount> for AccountInfo {
+    fn from(a: &WalletAccount) -> Self {
+        Self {
+            chain_id: a.chain_id.clone(),
+            address: a.address.clone(),
+            derivation_path: a.derivation_path.clone(),
+        }
+    }
+}
+
+impl From<&EncryptedWallet> for WalletInfo {
+    fn from(w: &EncryptedWallet) -> Self {
+        Self {
+            id: w.id.clone(),
+            name: w.name.clone(),
+            accounts: w.accounts.iter().map(AccountInfo::from).collect(),
+            created_at: w.created_at.clone(),
+        }
+    }
+}
 
 /// Generate a new BIP-39 mnemonic phrase.
 pub fn generate_mnemonic(words: usize) -> Result<String, Error> {
-    let wallet =
-        kobe::Wallet::generate(words, None).map_err(|e| Error::Derivation(e.to_string()))?;
+    let wallet = kobe::Wallet::generate(words, None)?;
     Ok(wallet.mnemonic().to_owned())
 }
 
@@ -24,21 +154,11 @@ pub fn create_wallet(
     words: usize,
 ) -> Result<WalletInfo, Error> {
     ensure_name_available(owx, name)?;
-    let kobe_wallet =
-        kobe::Wallet::generate(words, None).map_err(|e| Error::Derivation(e.to_string()))?;
-    let phrase = kobe_wallet.mnemonic();
-    let accounts = signer::derive_all_accounts(phrase, 0)?;
+    let kw = kobe::Wallet::generate(words, None)?;
+    let phrase = kw.mnemonic();
+    let accounts = derive_all_accounts(phrase, 0)?;
     let secret = WalletSecret::mnemonic(phrase);
-    let crypto_json = encrypt_secret(&secret, passphrase)?;
-    let wallet = EncryptedWallet::new(
-        uuid::Uuid::new_v4().to_string(),
-        name.to_owned(),
-        accounts,
-        crypto_json,
-        secret.key_type(),
-    );
-    owx.store().save("wallets", &wallet.id, &wallet)?;
-    Ok(WalletInfo::from(&wallet))
+    persist_wallet(owx, name, accounts, &secret, passphrase)
 }
 
 /// Import a wallet from an existing mnemonic phrase.
@@ -50,18 +170,9 @@ pub fn import_mnemonic(
     index: u32,
 ) -> Result<WalletInfo, Error> {
     ensure_name_available(owx, name)?;
-    let accounts = signer::derive_all_accounts(mnemonic_phrase, index)?;
+    let accounts = derive_all_accounts(mnemonic_phrase, index)?;
     let secret = WalletSecret::mnemonic(mnemonic_phrase);
-    let crypto_json = encrypt_secret(&secret, passphrase)?;
-    let wallet = EncryptedWallet::new(
-        uuid::Uuid::new_v4().to_string(),
-        name.to_owned(),
-        accounts,
-        crypto_json,
-        secret.key_type(),
-    );
-    owx.store().save("wallets", &wallet.id, &wallet)?;
-    Ok(WalletInfo::from(&wallet))
+    persist_wallet(owx, name, accounts, &secret, passphrase)
 }
 
 /// Import a wallet from a single hex-encoded private key.
@@ -77,7 +188,6 @@ pub fn import_private_key(
     opts: &ImportKeyOptions<'_>,
 ) -> Result<WalletInfo, Error> {
     ensure_name_available(owx, name)?;
-
     let (secp_bytes, ed_bytes) = resolve_key_pair(
         private_key_hex,
         opts.chain,
@@ -86,19 +196,9 @@ pub fn import_private_key(
     )?;
     validate_key_len(&secp_bytes, "secp256k1")?;
     validate_key_len(&ed_bytes, "ed25519")?;
-
     let secret = WalletSecret::key_pair(hex::encode(&secp_bytes), hex::encode(&ed_bytes));
     let accounts = derive_accounts_from_secret(&secret)?;
-    let crypto_json = encrypt_secret(&secret, passphrase)?;
-    let wallet = EncryptedWallet::new(
-        uuid::Uuid::new_v4().to_string(),
-        name.to_owned(),
-        accounts,
-        crypto_json,
-        secret.key_type(),
-    );
-    owx.store().save("wallets", &wallet.id, &wallet)?;
-    Ok(WalletInfo::from(&wallet))
+    persist_wallet(owx, name, accounts, &secret, passphrase)
 }
 
 /// Import a wallet from explicit dual-curve private keys.
@@ -110,24 +210,13 @@ pub fn import_private_keys(
     passphrase: &str,
 ) -> Result<WalletInfo, Error> {
     ensure_name_available(owx, name)?;
-
     let secp_bytes = decode_hex_key(secp256k1_hex)?;
     let ed_bytes = decode_hex_key(ed25519_hex)?;
     validate_key_len(&secp_bytes, "secp256k1")?;
     validate_key_len(&ed_bytes, "ed25519")?;
-
     let secret = WalletSecret::key_pair(hex::encode(&secp_bytes), hex::encode(&ed_bytes));
     let accounts = derive_accounts_from_secret(&secret)?;
-    let crypto_json = encrypt_secret(&secret, passphrase)?;
-    let wallet = EncryptedWallet::new(
-        uuid::Uuid::new_v4().to_string(),
-        name.to_owned(),
-        accounts,
-        crypto_json,
-        secret.key_type(),
-    );
-    owx.store().save("wallets", &wallet.id, &wallet)?;
-    Ok(WalletInfo::from(&wallet))
+    persist_wallet(owx, name, accounts, &secret, passphrase)
 }
 
 /// List all wallets (newest first).
@@ -188,11 +277,10 @@ pub fn derive_address(
     let idx = index.unwrap_or(0);
 
     if let Some(phrase) = secret.phrase() {
-        let kw = kobe::Wallet::from_mnemonic(phrase, None)
-            .map_err(|e| Error::Derivation(e.to_string()))?;
-        let key_hex = signer::derive_private_key_hex(&kw, family, idx)?;
-        signer::address_from_hex(family, &key_hex).or_else(|_| {
-            let accounts = signer::derive_all_accounts(phrase, idx)?;
+        let kw = kobe::Wallet::from_mnemonic(phrase, None)?;
+        let key_hex = signing::derive_private_key_hex(&kw, family, idx)?;
+        signing::address_from_hex(family, &key_hex).or_else(|_| {
+            let accounts = derive_all_accounts(phrase, idx)?;
             accounts
                 .iter()
                 .find(|a| a.chain_id == chain_id)
@@ -203,7 +291,7 @@ pub fn derive_address(
         let h = secret.private_key_hex(family).ok_or_else(|| {
             Error::InvalidInput(format!("no private key for chain family {family}"))
         })?;
-        signer::address_from_hex(family, h)
+        signing::address_from_hex(family, h)
     }
 }
 
@@ -230,11 +318,61 @@ pub fn load_wallet(owx: &Owx, name_or_id: &str) -> Result<EncryptedWallet, Error
     }
 }
 
-/// Encrypt a wallet secret and return the envelope as a JSON value.
-fn encrypt_secret(secret: &WalletSecret, passphrase: &str) -> Result<serde_json::Value, Error> {
+/// Encrypt and persist a wallet to the vault store.
+fn persist_wallet(
+    owx: &Owx,
+    name: &str,
+    accounts: Vec<WalletAccount>,
+    secret: &WalletSecret,
+    passphrase: &str,
+) -> Result<WalletInfo, Error> {
+    let envelope = encrypt_secret(secret, passphrase)?;
+    let wallet = EncryptedWallet::new(
+        uuid::Uuid::new_v4().to_string(),
+        name.to_owned(),
+        accounts,
+        envelope,
+        secret.key_type(),
+    );
+    owx.store().save("wallets", &wallet.id, &wallet)?;
+    Ok(WalletInfo::from(&wallet))
+}
+
+/// Encrypt a wallet secret and return the crypto envelope.
+fn encrypt_secret(secret: &WalletSecret, passphrase: &str) -> Result<CryptoEnvelope, Error> {
     let bytes = secret.to_bytes()?;
-    let envelope = owx_vault::crypto::encrypt(&bytes, passphrase)?;
-    serde_json::to_value(&envelope).map_err(Error::from)
+    Ok(owx_vault::crypto::encrypt(&bytes, passphrase)?)
+}
+
+/// Ensure no wallet with this name already exists.
+fn ensure_name_available(owx: &Owx, name: &str) -> Result<(), Error> {
+    let wallets: Vec<EncryptedWallet> = owx.store().list("wallets")?;
+    if wallets.iter().any(|w| w.name == name) {
+        return Err(Error::WalletNameExists(name.to_owned()));
+    }
+    Ok(())
+}
+
+/// Derive accounts for all chain families from a mnemonic at `index`.
+///
+/// # Errors
+///
+/// Returns [`Error::Derivation`] if mnemonic parsing or derivation fails.
+pub fn derive_all_accounts(mnemonic: &str, index: u32) -> Result<Vec<WalletAccount>, Error> {
+    let wallet = kobe::Wallet::from_mnemonic(mnemonic, None)
+        .map_err(|e| Error::Derivation(e.to_string()))?;
+    let mut accounts = Vec::with_capacity(ALL_FAMILIES.len());
+    for &fam in ALL_FAMILIES {
+        let chain = default_chain(fam);
+        let d = signing::derive_account(fam, &wallet, index)?;
+        accounts.push(WalletAccount {
+            account_id: format!("{}:{}", chain.chain_id, d.address),
+            address: d.address,
+            chain_id: chain.chain_id.to_owned(),
+            derivation_path: Some(d.path),
+        });
+    }
+    Ok(accounts)
 }
 
 /// Derive accounts for all chain families from a [`WalletSecret`] key pair.
@@ -245,7 +383,7 @@ fn derive_accounts_from_secret(secret: &WalletSecret) -> Result<Vec<WalletAccoun
             continue;
         };
         let chain = default_chain(fam);
-        let addr = signer::address_from_hex(fam, key_hex)?;
+        let addr = signing::address_from_hex(fam, key_hex)?;
         accounts.push(WalletAccount {
             account_id: format!("{}:{addr}", chain.chain_id),
             address: addr,
@@ -305,15 +443,6 @@ fn validate_key_len(bytes: &[u8], label: &str) -> Result<(), Error> {
             "{label} key must be 32 bytes, got {}",
             bytes.len()
         )));
-    }
-    Ok(())
-}
-
-/// Ensure no wallet with this name already exists.
-fn ensure_name_available(owx: &Owx, name: &str) -> Result<(), Error> {
-    let wallets: Vec<EncryptedWallet> = owx.store().list("wallets")?;
-    if wallets.iter().any(|w| w.name == name) {
-        return Err(Error::WalletNameExists(name.to_owned()));
     }
     Ok(())
 }

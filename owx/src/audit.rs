@@ -7,16 +7,50 @@ use std::fs::{self, OpenOptions};
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
+/// Auditable wallet operations.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuditOp {
+    /// A new wallet was created.
+    CreateWallet,
+    /// A mnemonic phrase was imported.
+    ImportMnemonic,
+    /// A single private key was imported.
+    ImportPrivateKey,
+    /// Dual-curve private keys were imported.
+    ImportPrivateKeys,
+    /// A wallet was deleted.
+    DeleteWallet,
+    /// A wallet was renamed.
+    RenameWallet,
+    /// A wallet secret was exported.
+    ExportWallet,
+    /// A message was signed.
+    SignMessage,
+    /// A transaction was signed.
+    SignTransaction,
+    /// EIP-712 typed data was signed.
+    SignTypedData,
+    /// A transaction was signed and broadcast.
+    SignAndSend,
+    /// An API key was created.
+    CreateApiKey,
+    /// An API key was revoked.
+    RevokeApiKey,
+}
 
 /// A single audit log entry.
 #[non_exhaustive]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditEntry {
-    /// ISO-8601 timestamp of the event.
-    pub timestamp: String,
+    /// Timestamp of the event.
+    pub timestamp: DateTime<Utc>,
     /// The operation that was performed.
-    pub operation: String,
+    pub operation: AuditOp,
     /// Wallet ID involved (if applicable).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wallet_id: Option<String>,
@@ -77,14 +111,14 @@ impl AuditLog {
     /// token so the audit trail can identify which key was used.
     pub fn log_ok(
         &self,
-        operation: &str,
+        operation: AuditOp,
         wallet_id: Option<&str>,
         chain_id: Option<&str>,
         api_key_id: Option<&str>,
     ) {
         self.log(&AuditEntry {
-            timestamp: chrono::Utc::now().to_rfc3339(),
-            operation: operation.to_owned(),
+            timestamp: Utc::now(),
+            operation,
             wallet_id: wallet_id.map(ToOwned::to_owned),
             api_key_id: api_key_id.map(ToOwned::to_owned),
             chain_id: chain_id.map(ToOwned::to_owned),
@@ -96,14 +130,14 @@ impl AuditLog {
     /// Convenience: log a failed operation.
     pub fn log_err(
         &self,
-        operation: &str,
+        operation: AuditOp,
         wallet_id: Option<&str>,
         chain_id: Option<&str>,
         error_msg: &str,
     ) {
         self.log(&AuditEntry {
-            timestamp: chrono::Utc::now().to_rfc3339(),
-            operation: operation.to_owned(),
+            timestamp: Utc::now(),
+            operation,
             wallet_id: wallet_id.map(ToOwned::to_owned),
             api_key_id: None,
             chain_id: chain_id.map(ToOwned::to_owned),
@@ -124,5 +158,81 @@ impl AuditLog {
             .lines()
             .filter_map(|line| serde_json::from_str(line).ok())
             .collect()
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    fn tmp_log() -> (tempfile::TempDir, AuditLog) {
+        let dir = tempfile::tempdir().unwrap();
+        let log = AuditLog::new(dir.path());
+        (dir, log)
+    }
+
+    #[test]
+    fn read_all_empty_when_no_file() {
+        let (_dir, log) = tmp_log();
+        assert!(log.read_all().is_empty());
+    }
+
+    #[test]
+    fn log_ok_roundtrip() {
+        let (_dir, log) = tmp_log();
+        log.log_ok(AuditOp::CreateWallet, Some("w1"), None, None);
+        let entries = log.read_all();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].operation, AuditOp::CreateWallet);
+        assert!(entries[0].success);
+        assert_eq!(entries[0].wallet_id.as_deref(), Some("w1"));
+        assert!(entries[0].error.is_none());
+    }
+
+    #[test]
+    fn log_err_roundtrip() {
+        let (_dir, log) = tmp_log();
+        log.log_err(
+            AuditOp::SignMessage,
+            Some("w2"),
+            Some("eip155:1"),
+            "bad key",
+        );
+        let entries = log.read_all();
+        assert_eq!(entries.len(), 1);
+        assert!(!entries[0].success);
+        assert_eq!(entries[0].error.as_deref(), Some("bad key"));
+        assert_eq!(entries[0].chain_id.as_deref(), Some("eip155:1"));
+    }
+
+    #[test]
+    fn multiple_entries_append() {
+        let (_dir, log) = tmp_log();
+        log.log_ok(AuditOp::CreateWallet, Some("w1"), None, None);
+        log.log_ok(AuditOp::DeleteWallet, Some("w1"), None, None);
+        log.log_err(AuditOp::ExportWallet, Some("w1"), None, "denied");
+        assert_eq!(log.read_all().len(), 3);
+    }
+
+    #[test]
+    fn malformed_lines_skipped() {
+        let (_dir, log) = tmp_log();
+        log.log_ok(AuditOp::CreateWallet, Some("w1"), None, None);
+        // Manually append a bad line.
+        let mut f = OpenOptions::new().append(true).open(&log.path).unwrap();
+        writeln!(f, "{{not valid json").unwrap();
+        log.log_ok(AuditOp::RenameWallet, Some("w1"), None, None);
+        let entries = log.read_all();
+        assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn timestamp_is_utc() {
+        let (_dir, log) = tmp_log();
+        log.log_ok(AuditOp::CreateApiKey, None, None, Some("key-hash"));
+        let entries = log.read_all();
+        assert_eq!(entries[0].timestamp.timezone(), Utc);
+        assert_eq!(entries[0].api_key_id.as_deref(), Some("key-hash"));
     }
 }
