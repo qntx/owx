@@ -5434,9 +5434,9 @@ dependencies = [
 
 [[package]]
 name = "signer"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89422bfef386f70a6b4055e63000528741a4bde61ec1fc658ed31fd03c2352ef"
+checksum = "1cc37d9e4e9ed31d69e7a86b00e200f08673d7765acc36c298d01bec57d08597"
 dependencies = [
  "signer-aptos",
  "signer-btc",

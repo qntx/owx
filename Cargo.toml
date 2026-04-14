@@ -33,7 +33,7 @@ kobe-tron = { version = "0.8", default-features = false, features = ["std"] }
 kobe-xrpl = { version = "0.8", default-features = false, features = ["std"] }
 
 # Signing (umbrella)
-signer = { version = "0.6.0", features = ["kobe"] }
+signer = { version = "0.6.1", features = ["kobe"] }
 
 # Crypto
 aes-gcm = "0.10.3"
