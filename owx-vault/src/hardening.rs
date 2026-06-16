@@ -105,20 +105,34 @@ fn install_unix_signal_handlers() {
     use signal_hook::consts::{SIGHUP, SIGINT, SIGQUIT, SIGTERM};
     use signal_hook::iterator::Signals;
 
-    #[allow(clippy::expect_used)]
+    #[allow(
+        clippy::expect_used,
+        reason = "signal registration failure at startup is unrecoverable"
+    )]
     let mut signals = Signals::new([SIGTERM, SIGINT, SIGHUP, SIGQUIT])
         .expect("failed to register signal handlers");
 
-    #[allow(clippy::expect_used)]
+    #[allow(
+        clippy::expect_used,
+        reason = "signal handler thread spawn failure at startup is unrecoverable"
+    )]
     std::thread::Builder::new()
         .name("owx-signal-handler".into())
         .spawn(move || {
             if let Some(sig) = signals.forever().next() {
-                #[allow(clippy::print_stderr)]
+                #[allow(
+                    clippy::print_stderr,
+                    reason = "diagnostic notice emitted on a fatal signal before exit"
+                )]
                 {
                     eprintln!("owx: received signal {sig}, zeroizing key material and exiting");
                 }
                 run_cleanup_hooks();
+                #[allow(
+                    clippy::exit,
+                    clippy::disallowed_methods,
+                    reason = "re-raise the conventional 128+signal exit code after cleanup"
+                )]
                 std::process::exit(128 + sig);
             }
         })
@@ -128,7 +142,9 @@ fn install_unix_signal_handlers() {
 /// Disable core dumps for the current process.
 #[cfg(target_os = "linux")]
 fn disable_core_dumps() -> bool {
-    #[allow(unsafe_code)]
+    #[allow(unsafe_code, reason = "libc FFI to disable core dumps")]
+    // SAFETY: `prctl` and `setrlimit` receive valid constants and a pointer to
+    // a stack-resident `rlimit` that outlives the call.
     unsafe {
         let prctl_ok = libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0) == 0;
         let rlim = libc::rlimit {
@@ -142,7 +158,9 @@ fn disable_core_dumps() -> bool {
 
 #[cfg(target_os = "macos")]
 fn disable_core_dumps() -> bool {
-    #[allow(unsafe_code)]
+    #[allow(unsafe_code, reason = "libc FFI to disable core dumps")]
+    // SAFETY: `setrlimit` receives a valid resource constant and a pointer to a
+    // stack-resident `rlimit` that outlives the call.
     unsafe {
         let rlim = libc::rlimit {
             rlim_cur: 0,
@@ -154,7 +172,9 @@ fn disable_core_dumps() -> bool {
 
 #[cfg(all(unix, not(target_os = "linux"), not(target_os = "macos")))]
 fn disable_core_dumps() -> bool {
-    #[allow(unsafe_code)]
+    #[allow(unsafe_code, reason = "libc FFI to disable core dumps")]
+    // SAFETY: `setrlimit` receives a valid resource constant and a pointer to a
+    // stack-resident `rlimit` that outlives the call.
     unsafe {
         let rlim = libc::rlimit {
             rlim_cur: 0,
@@ -175,7 +195,9 @@ fn disable_ptrace() -> bool {
     #[cfg(not(debug_assertions))]
     {
         const PT_DENY_ATTACH: libc::c_int = 31;
-        #[allow(unsafe_code)]
+        #[allow(unsafe_code, reason = "libc FFI to deny debugger attachment")]
+        // SAFETY: `ptrace` receives a valid request constant and null pointer
+        // arguments, which is the documented form for `PT_DENY_ATTACH`.
         unsafe {
             libc::ptrace(PT_DENY_ATTACH, 0, std::ptr::null_mut(), 0) == 0
         }
@@ -198,7 +220,9 @@ pub fn mlock_slice(ptr: *const u8, len: usize) -> bool {
     if len == 0 {
         return true;
     }
-    #[allow(unsafe_code)]
+    #[allow(unsafe_code, reason = "libc FFI to lock memory pages")]
+    // SAFETY: caller guarantees `ptr` points to `len` readable bytes; `mlock`
+    // only pins those pages and never dereferences the memory.
     let ret = unsafe { libc::mlock(ptr.cast::<libc::c_void>(), len) };
     ret == 0
 }
@@ -216,7 +240,9 @@ pub fn munlock_slice(ptr: *const u8, len: usize) {
     if len == 0 {
         return;
     }
-    #[allow(unsafe_code)]
+    #[allow(unsafe_code, reason = "libc FFI to unlock memory pages")]
+    // SAFETY: caller guarantees `ptr` points to `len` bytes previously locked;
+    // `munlock` only unpins those pages and never dereferences the memory.
     unsafe {
         libc::munlock(ptr.cast::<libc::c_void>(), len);
     }

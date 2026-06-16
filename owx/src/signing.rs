@@ -6,7 +6,7 @@
 //! signature (returns `Result` with its own error type).
 
 use kobe::DerivedAccount;
-use signer::{Sign, SignOutput};
+use signer::{SignMessage, SignOutput};
 use zeroize::Zeroizing;
 
 use crate::chain::{ChainFamily, for_each_chain};
@@ -35,8 +35,8 @@ pub struct SendResult {
 #[must_use]
 pub(crate) fn to_sign_result(out: &SignOutput) -> SignResult {
     SignResult {
-        signature: hex::encode(&out.signature),
-        recovery_id: out.recovery_id,
+        signature: out.to_hex(),
+        recovery_id: out.v(),
     }
 }
 
@@ -69,11 +69,13 @@ pub(crate) fn derive_account(
         }
         ChainFamily::Bitcoin => {
             let d = kobe_btc::Deriver::new(wallet, kobe_btc::Network::Mainnet).map_err(d_err)?;
-            kobe::Derive::derive(&d, index).map_err(d_err)
+            kobe::Derive::derive(&d, index)
+                .map(|a| (*a).clone())
+                .map_err(d_err)
         }
-        ChainFamily::Solana => {
-            kobe::Derive::derive(&kobe_svm::Deriver::new(wallet), index).map_err(d_err)
-        }
+        ChainFamily::Solana => kobe::Derive::derive(&kobe_svm::Deriver::new(wallet), index)
+            .map(|a| (*a).clone())
+            .map_err(d_err),
         ChainFamily::Cosmos => {
             kobe::Derive::derive(&kobe_cosmos::Deriver::new(wallet), index).map_err(d_err)
         }
@@ -108,11 +110,7 @@ pub(crate) fn derive_private_key_hex(
     family: ChainFamily,
     index: u32,
 ) -> Result<Zeroizing<String>, Error> {
-    Ok(Zeroizing::new(
-        derive_account(family, wallet, index)?
-            .private_key
-            .to_string(),
-    ))
+    Ok(derive_account(family, wallet, index)?.private_key_hex())
 }
 
 /// Sign a message with a hex private key.
@@ -125,17 +123,35 @@ pub(crate) fn sign_message(
     key_hex: &str,
     message: &[u8],
 ) -> Result<SignOutput, Error> {
-    macro_rules! dispatch {
-        ( $( [ $var:ident, $disp:expr, $ns:expr, $coin:expr, $ed:expr, $signer:path ] ),+ $(,)? ) => {
-            match family {
-                $( ChainFamily::$var => {
-                    let s = <$signer>::from_hex(key_hex).map_err(s_err)?;
-                    Sign::sign_message(&s, message).map_err(s_err)
-                } )+
-            }
-        };
+    match family {
+        ChainFamily::Evm => signer::evm::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .sign_message(message)
+            .map_err(s_err),
+        ChainFamily::Bitcoin => signer::btc::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .sign_message(message)
+            .map_err(s_err),
+        ChainFamily::Solana => signer::svm::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .sign_message(message)
+            .map_err(s_err),
+        ChainFamily::Tron => signer::tron::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .sign_message(message)
+            .map_err(s_err),
+        ChainFamily::Spark => signer::spark::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .sign_message(message)
+            .map_err(s_err),
+        ChainFamily::Sui => signer::sui::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .sign_message(message)
+            .map_err(s_err),
+        ChainFamily::Cosmos | ChainFamily::Ton | ChainFamily::Filecoin | ChainFamily::Xrpl => Err(
+            Error::InvalidInput(format!("message signing is not supported for {family}")),
+        ),
     }
-    for_each_chain!(dispatch)
 }
 
 /// Sign a transaction with a hex private key.
@@ -153,7 +169,7 @@ pub(crate) fn sign_transaction(
             match family {
                 $( ChainFamily::$var => {
                     let s = <$signer>::from_hex(key_hex).map_err(s_err)?;
-                    Sign::sign_transaction(&s, tx_bytes).map_err(s_err)
+                    s.sign_transaction(tx_bytes).map_err(s_err)
                 } )+
             }
         };
@@ -178,13 +194,15 @@ pub(crate) fn sign_typed_data(key_hex: &str, typed_data_json: &str) -> Result<Si
 /// Returns [`Error::Signing`] if encoding fails (EVM only).
 pub(crate) fn encode_signed_tx(
     family: ChainFamily,
+    key_hex: &str,
     tx_bytes: &[u8],
     sig: &SignOutput,
 ) -> Result<Vec<u8>, Error> {
     match family {
-        ChainFamily::Evm => {
-            signer::evm::Signer::encode_signed_transaction(tx_bytes, &sig.signature).map_err(s_err)
-        }
+        ChainFamily::Evm => signer::evm::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .encode_signed_transaction(tx_bytes, sig)
+            .map_err(s_err),
         ChainFamily::Bitcoin
         | ChainFamily::Solana
         | ChainFamily::Cosmos
@@ -193,7 +211,7 @@ pub(crate) fn encode_signed_tx(
         | ChainFamily::Spark
         | ChainFamily::Filecoin
         | ChainFamily::Sui
-        | ChainFamily::Xrpl => Ok(sig.signature.clone()),
+        | ChainFamily::Xrpl => Ok(sig.to_bytes()),
     }
 }
 
@@ -203,14 +221,37 @@ pub(crate) fn encode_signed_tx(
 ///
 /// Returns [`Error::Signing`] if the hex key is invalid.
 pub fn address_from_hex(family: ChainFamily, key_hex: &str) -> Result<String, Error> {
-    macro_rules! dispatch {
-        ( $( [ $var:ident, $disp:expr, $ns:expr, $coin:expr, $ed:expr, $signer:path ] ),+ $(,)? ) => {
-            match family {
-                $( ChainFamily::$var => {
-                    Ok(<$signer>::from_hex(key_hex).map_err(s_err)?.address())
-                } )+
-            }
-        };
-    }
-    for_each_chain!(dispatch)
+    let address = match family {
+        ChainFamily::Evm => signer::evm::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .address(),
+        ChainFamily::Bitcoin => signer::btc::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .address(),
+        ChainFamily::Solana => signer::svm::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .address(),
+        ChainFamily::Cosmos => signer::cosmos::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .address(),
+        ChainFamily::Tron => signer::tron::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .address(),
+        ChainFamily::Ton => signer::ton::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .identity(),
+        ChainFamily::Spark => signer::spark::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .address(),
+        ChainFamily::Filecoin => signer::fil::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .address(),
+        ChainFamily::Sui => signer::sui::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .address(),
+        ChainFamily::Xrpl => signer::xrpl::Signer::from_hex(key_hex)
+            .map_err(s_err)?
+            .address(),
+    };
+    Ok(address)
 }

@@ -349,7 +349,7 @@ impl Owx {
             hex::decode(clean).map_err(|e| Error::InvalidInput(format!("invalid hex: {e}")))?;
         let key = key::resolve_signing_key(self, wallet, cred.as_str(), family, 0)?;
         let sig = signing::sign_transaction(family, &key, &tx_bytes)?;
-        let payload = signing::encode_signed_tx(family, &tx_bytes, &sig)?;
+        let payload = signing::encode_signed_tx(family, &key, &tx_bytes, &sig)?;
         let rpc = broadcast::resolve_rpc(chain_id, rpc_url, &self.config)?;
         let tx_hash = broadcast::broadcast(&self.http, family, &rpc, &payload).await?;
         let audit_id = credential_audit_id(&cred);

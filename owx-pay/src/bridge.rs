@@ -111,15 +111,6 @@ impl WalletBridge for OwxBridge<'_> {
         let result = self
             .owx
             .sign_typed_data(&self.wallet, network, payload, cred)?;
-        let sig_bytes = hex::decode(&result.signature)
-            .map_err(|e| owx::OwxError::Signing(format!("invalid sig hex: {e}")))?;
-        let full = if sig_bytes.len() == 64 {
-            let mut buf = sig_bytes;
-            buf.push(27 + result.recovery_id.unwrap_or(0));
-            buf
-        } else {
-            sig_bytes
-        };
-        Ok(format!("0x{}", hex::encode(&full)))
+        Ok(format!("0x{}", result.signature))
     }
 }

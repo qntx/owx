@@ -273,22 +273,15 @@ pub(crate) fn derive_address(
 ) -> Result<String, Error> {
     let resolved = crate::chain::resolve(chain)?;
     let family = resolved.family();
-    let chain_id = resolved.chain_id();
     let wallet = load_wallet(owx, wallet_name_or_id)?;
     let secret = decrypt_secret(&wallet, passphrase)?;
     let idx = index.unwrap_or(0);
 
     if let Some(phrase) = secret.phrase() {
         let kw = kobe::Wallet::from_mnemonic(phrase, None)?;
-        let key_hex = signing::derive_private_key_hex(&kw, family, idx)?;
-        signing::address_from_hex(family, &key_hex).or_else(|_| {
-            let accounts = derive_all_accounts(phrase, idx)?;
-            accounts
-                .iter()
-                .find(|a| a.chain_id == chain_id)
-                .map(|a| a.address.clone())
-                .ok_or_else(|| Error::InvalidInput(format!("no account for chain {chain_id}")))
-        })
+        Ok(signing::derive_account(family, &kw, idx)?
+            .address()
+            .to_owned())
     } else {
         let h = secret.private_key_hex(family).ok_or_else(|| {
             Error::InvalidInput(format!("no private key for chain family {family}"))
@@ -367,11 +360,12 @@ pub(crate) fn derive_all_accounts(mnemonic: &str, index: u32) -> Result<Vec<Wall
     for &fam in ALL_FAMILIES {
         let chain = default_chain(fam).ok_or_else(|| Error::UnknownChain(fam.to_string()))?;
         let d = signing::derive_account(fam, &wallet, index)?;
+        let address = d.address().to_owned();
         accounts.push(WalletAccount {
-            account_id: format!("{}:{}", chain.chain_id, d.address),
-            address: d.address,
+            account_id: format!("{}:{address}", chain.chain_id),
+            address,
             chain_id: chain.chain_id.to_owned(),
-            derivation_path: Some(d.path),
+            derivation_path: Some(d.path().to_owned()),
         });
     }
     Ok(accounts)

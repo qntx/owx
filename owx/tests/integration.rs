@@ -74,15 +74,14 @@ fn duplicate_wallet_name_rejected() {
 }
 
 #[test]
-fn sign_message_all_10_chains() {
+fn sign_message_supported_and_unsupported_chains() {
     let (_dir, owx) = temp_owx();
     owx.create_wallet("signer", "", 12).unwrap();
 
-    // XRPL excluded: signer crate does not support canonical message signing for XRPL
-    let chains = [
-        "evm", "bitcoin", "solana", "cosmos", "tron", "ton", "spark", "filecoin", "sui",
-    ];
-    for chain in chains {
+    // signer 2.0 implements `SignMessage` only for chains with a canonical
+    // personal-message standard.
+    let supported = ["evm", "bitcoin", "solana", "tron", "spark", "sui"];
+    for chain in supported {
         let result = owx.sign_message("signer", chain, b"hello", Credential::Passphrase(""));
         assert!(
             result.is_ok(),
@@ -91,6 +90,16 @@ fn sign_message_all_10_chains() {
         );
         let sig = result.unwrap();
         assert!(!sig.signature.is_empty(), "empty signature for {chain}");
+    }
+
+    // Cosmos, TON, Filecoin and XRPL have no canonical message-signing scheme.
+    let unsupported = ["cosmos", "ton", "filecoin", "xrpl"];
+    for chain in unsupported {
+        let result = owx.sign_message("signer", chain, b"hello", Credential::Passphrase(""));
+        assert!(
+            result.is_err(),
+            "expected message signing to be unsupported for {chain}"
+        );
     }
 }
 

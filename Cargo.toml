@@ -20,20 +20,32 @@ owx-pay = { version = "0.6", path = "owx-pay" }
 owx-swap = { version = "0.6", path = "owx-swap" }
 
 # HD derivation (10 chains)
-kobe = { version = "0.8", default-features = false, features = ["std", "rand"] }
-kobe-btc = { version = "0.8", default-features = false, features = ["std"] }
-kobe-cosmos = { version = "0.8", default-features = false, features = ["std"] }
-kobe-evm = { version = "0.8", default-features = false, features = ["std"] }
-kobe-fil = { version = "0.8", default-features = false, features = ["std"] }
-kobe-spark = { version = "0.8", default-features = false, features = ["std"] }
-kobe-sui = { version = "0.8", default-features = false, features = ["std"] }
-kobe-svm = { version = "0.8", default-features = false, features = ["std"] }
-kobe-ton = { version = "0.8", default-features = false, features = ["std"] }
-kobe-tron = { version = "0.8", default-features = false, features = ["std"] }
-kobe-xrpl = { version = "0.8", default-features = false, features = ["std"] }
+kobe = { version = "2", default-features = false, features = ["std", "rand"] }
+kobe-btc = { version = "2", default-features = false, features = ["std"] }
+kobe-cosmos = { version = "2", default-features = false, features = ["std"] }
+kobe-evm = { version = "2", default-features = false, features = ["std"] }
+kobe-fil = { version = "2", default-features = false, features = ["std"] }
+kobe-spark = { version = "2", default-features = false, features = ["std"] }
+kobe-sui = { version = "2", default-features = false, features = ["std"] }
+kobe-svm = { version = "2", default-features = false, features = ["std"] }
+kobe-ton = { version = "2", default-features = false, features = ["std"] }
+kobe-tron = { version = "2", default-features = false, features = ["std"] }
+kobe-xrpl = { version = "2", default-features = false, features = ["std"] }
 
 # Signing (umbrella)
-signer = { version = "0.6.0", features = ["kobe"] }
+signer = { version = "2", default-features = false, features = [
+    "std",
+    "evm",
+    "btc",
+    "svm",
+    "cosmos",
+    "tron",
+    "ton",
+    "spark",
+    "fil",
+    "sui",
+    "xrpl",
+] }
 
 # Crypto
 aes-gcm = "0.10.3"

@@ -217,6 +217,10 @@ fn set_dir_permissions(path: &Path) {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
+        #[allow(
+            clippy::let_underscore_must_use,
+            reason = "directory permission tightening is best-effort; failure is non-fatal"
+        )]
         let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o700));
     }
     let _ = path;
@@ -227,6 +231,10 @@ fn set_file_permissions(path: &Path) {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
+        #[allow(
+            clippy::let_underscore_must_use,
+            reason = "file permission tightening is best-effort; failure is non-fatal"
+        )]
         let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o600));
     }
     let _ = path;
