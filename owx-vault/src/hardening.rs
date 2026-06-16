@@ -143,17 +143,17 @@ fn install_unix_signal_handlers() {
 #[cfg(target_os = "linux")]
 fn disable_core_dumps() -> bool {
     #[allow(unsafe_code, reason = "libc FFI to disable core dumps")]
-    // SAFETY: `prctl` and `setrlimit` receive valid constants and a pointer to
-    // a stack-resident `rlimit` that outlives the call.
-    unsafe {
-        let prctl_ok = libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0) == 0;
-        let rlim = libc::rlimit {
-            rlim_cur: 0,
-            rlim_max: 0,
-        };
-        let rlimit_ok = libc::setrlimit(libc::RLIMIT_CORE, std::ptr::addr_of!(rlim)) == 0;
-        prctl_ok && rlimit_ok
-    }
+    // SAFETY: `prctl` receives well-known constants.
+    let prctl_ok = unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0) == 0 };
+    let rlim = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    #[allow(unsafe_code, reason = "libc FFI to disable core dumps")]
+    // SAFETY: `setrlimit` receives a valid constant and a pointer to a
+    // stack-resident `rlimit` that outlives the call.
+    let rlimit_ok = unsafe { libc::setrlimit(libc::RLIMIT_CORE, std::ptr::addr_of!(rlim)) == 0 };
+    prctl_ok && rlimit_ok
 }
 
 #[cfg(target_os = "macos")]
