@@ -8,6 +8,6 @@ jobs:
   publish:
     uses: qntx/workflows/.github/workflows/publish-crates.yml@main
     with:
-      packages: "owx-vault owx-swap owx-pay owx owx-cli"
+      packages: "owx-vault owx owx-swap owx-pay owx-cli"
     secrets:
       CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
