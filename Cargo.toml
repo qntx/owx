@@ -48,7 +48,7 @@ signer = { version = "2", default-features = false, features = [
 ] }
 
 # Crypto
-aes-gcm = "0.10.3"
+aes-gcm = "0.11.1"
 hkdf = "0.13.0"
 scrypt = "0.11.0"
 sha2 = "0.11.0"
