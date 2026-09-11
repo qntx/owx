@@ -1,6 +1,6 @@
-<!-- markdownlint-disable MD033 MD041 MD036 -->
+<!-- markdownlint-disable MD033 MD041 -->
 
-# OWX
+# owx
 
 Agent-native, self-custodial, policy-gated, multi-chain wallet toolkit.
 
