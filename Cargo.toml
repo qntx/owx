@@ -27,7 +27,7 @@ kobe-evm = { version = "2", default-features = false, features = ["std"] }
 kobe-fil = { version = "2", default-features = false, features = ["std"] }
 kobe-spark = { version = "2", default-features = false, features = ["std"] }
 kobe-sui = { version = "2", default-features = false, features = ["std"] }
-kobe-svm = { version = "2", default-features = false, features = ["std"] }
+kobe-svm = { version = "3", default-features = false, features = ["std"] }
 kobe-ton = { version = "2", default-features = false, features = ["std"] }
 kobe-tron = { version = "2", default-features = false, features = ["std"] }
 kobe-xrpl = { version = "2", default-features = false, features = ["std"] }
