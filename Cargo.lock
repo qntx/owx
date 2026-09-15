@@ -3567,13 +3567,13 @@ dependencies = [
  "kobe-evm",
  "kobe-fil",
  "kobe-nostr",
- "kobe-primitives",
+ "kobe-primitives 2.0.1",
  "kobe-spark",
  "kobe-sui",
  "kobe-svm",
  "kobe-ton",
  "kobe-tron",
- "kobe-xrpl",
+ "kobe-xrpl 2.0.1",
 ]
 
 [[package]]
@@ -3583,7 +3583,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d307dfe3d2b05b2a3049be76c36d044457374733c50a15211b37c4ac6a5c35a3"
 dependencies = [
  "hex",
- "kobe-primitives",
+ "kobe-primitives 2.0.1",
  "sha3 0.12.0",
  "zeroize",
 ]
@@ -3595,7 +3595,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91c1d3b08e2e2c427fbb5595797915bf4f0220e458a608b44b46daefc6264cbc"
 dependencies = [
  "bitcoin",
- "kobe-primitives",
+ "kobe-primitives 2.0.1",
  "zeroize",
 ]
 
@@ -3606,7 +3606,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f33f4b47ccf25be5036e35474930b2af4e56ca992f362131bda2c8a7f605a739"
 dependencies = [
  "bech32",
- "kobe-primitives",
+ "kobe-primitives 2.0.1",
  "ripemd 0.2.0",
  "sha2 0.11.0",
 ]
@@ -3618,7 +3618,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "057230f42b5200b488071d0d636474c59fc4a18b06ba64ee3f92126b8f4d2c50"
 dependencies = [
  "alloy-primitives",
- "kobe-primitives",
+ "kobe-primitives 2.0.1",
 ]
 
 [[package]]
@@ -3628,7 +3628,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9bf40090879e5a45508f3a79cc29979ef64d39d24cd53f9f86ed6b02d78de720"
 dependencies = [
  "blake2",
- "kobe-primitives",
+ "kobe-primitives 2.0.1",
 ]
 
 [[package]]
@@ -3638,7 +3638,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44bcc54d609ff9de52dd4a79f4ff21fe3be34bcde56a68a98d6723747e26ef36"
 dependencies = [
  "bech32",
- "kobe-primitives",
+ "kobe-primitives 2.0.1",
  "zeroize",
 ]
 
@@ -3660,13 +3660,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "kobe-primitives"
+version = "3.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59a9580ac9473a760adc27dcd6d94cad17a56b0413b57de255d6182d077f8b3d"
+dependencies = [
+ "bip32",
+ "bip39",
+ "bs58",
+ "hex",
+ "k256",
+ "ripemd 0.2.0",
+ "sha2 0.11.0",
+ "thiserror 2.0.20",
+ "zeroize",
+]
+
+[[package]]
 name = "kobe-spark"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57aac0d9e507c7db77cab73a60b40bfe7c9b1997fbc46e28abdb6722147386b8"
 dependencies = [
  "bech32",
- "kobe-primitives",
+ "kobe-primitives 2.0.1",
 ]
 
 [[package]]
@@ -3677,7 +3694,7 @@ checksum = "aa64d277590c081a93303dcb9a36cd4e61366e4fbed84d23430aee3818117f4a"
 dependencies = [
  "blake2",
  "hex",
- "kobe-primitives",
+ "kobe-primitives 2.0.1",
  "zeroize",
 ]
 
@@ -3688,7 +3705,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e08b378e6b907019edb76aedae8e0a80b8484b510e5ecf9178fee3bcb2a381c2"
 dependencies = [
  "bs58",
- "kobe-primitives",
+ "kobe-primitives 2.0.1",
  "zeroize",
 ]
 
@@ -3699,7 +3716,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbc02420f57008b5507b6f5b2da68eadcdcf12bad18cd58276308e453fc20b10"
 dependencies = [
  "base64 0.22.1",
- "kobe-primitives",
+ "kobe-primitives 2.0.1",
  "sha2 0.11.0",
  "zeroize",
 ]
@@ -3711,7 +3728,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2abfe7d23cdf476e5776729102647e4dd38972ee23274c83a40cb20be7da637"
 dependencies = [
  "bs58",
- "kobe-primitives",
+ "kobe-primitives 2.0.1",
  "sha3 0.12.0",
 ]
 
@@ -3722,9 +3739,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d447aa50f063aa605c201f051984b79b171d0baf084813d30457d75ce6fc358"
 dependencies = [
  "bs58",
- "kobe-primitives",
+ "kobe-primitives 2.0.1",
  "ripemd 0.2.0",
  "sha2 0.11.0",
+]
+
+[[package]]
+name = "kobe-xrpl"
+version = "3.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f04b970474d86b62fc4285418ea4d319fc0b49927d51b3a6ea6da6ced307958"
+dependencies = [
+ "bs58",
+ "kobe-primitives 3.4.0",
 ]
 
 [[package]]
@@ -4036,7 +4063,7 @@ dependencies = [
  "kobe-svm",
  "kobe-ton",
  "kobe-tron",
- "kobe-xrpl",
+ "kobe-xrpl 3.4.0",
  "owx-vault",
  "reqwest 0.13.4",
  "serde",

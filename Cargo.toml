@@ -30,7 +30,7 @@ kobe-sui = { version = "2", default-features = false, features = ["std"] }
 kobe-svm = { version = "2", default-features = false, features = ["std"] }
 kobe-ton = { version = "2", default-features = false, features = ["std"] }
 kobe-tron = { version = "2", default-features = false, features = ["std"] }
-kobe-xrpl = { version = "2", default-features = false, features = ["std"] }
+kobe-xrpl = { version = "3", default-features = false, features = ["std"] }
 
 # Signing (umbrella)
 signer = { version = "2", default-features = false, features = [
